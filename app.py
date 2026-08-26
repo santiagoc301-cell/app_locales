@@ -9,7 +9,7 @@ import json
 st.set_page_config(page_title="Sistema de Asistencia", page_icon="⏱️", layout="wide")
 
 # ==========================================
-# 1. ARCHIVOS DE BASE DE DATOS
+# 1. ARCHIVOS DE BASE DE DATOS Y CONFIG
 # ==========================================
 ARCHIVO_EMPLEADOS = "empleados.json"
 ARCHIVO_DISPOSITIVOS = "dispositivos.json"
@@ -20,13 +20,19 @@ RADIO_MAXIMO_METROS = 50
 
 # --- Cargar o crear Configuración (Admin) ---
 if not os.path.exists(ARCHIVO_CONFIG):
-    config_inicial = {"admin_password": "1234", "admin_email": "josegarcia0187@gmail.com"}
+    config_inicial = {"admin_password": "1234", "admin_email": "josegarcia0187@gmail.com", "hora_limite": "09:15:00"}
     with open(ARCHIVO_CONFIG, 'w') as f:
         json.dump(config_inicial, f)
 with open(ARCHIVO_CONFIG, 'r') as f:
     config_app = json.load(f)
 
-# --- Cargar Empleados (Lista simple) ---
+# Parche por si venimos de una versión anterior que no tenía hora límite
+if "hora_limite" not in config_app:
+    config_app["hora_limite"] = "09:15:00"
+    with open(ARCHIVO_CONFIG, 'w') as f:
+        json.dump(config_app, f)
+
+# --- Cargar Empleados ---
 if not os.path.exists(ARCHIVO_EMPLEADOS):
     empleados_iniciales = [
         "Abril", "Agustina", "Alejandro", "Camila", "Claudia", "Daniela", 
@@ -39,7 +45,7 @@ with open(ARCHIVO_EMPLEADOS, 'r') as f:
 if isinstance(lista_empleados, dict):
     lista_empleados = list(lista_empleados.keys())
 
-# --- Cargar Dispositivos Vinculados ---
+# --- Cargar Dispositivos ---
 if not os.path.exists(ARCHIVO_DISPOSITIVOS):
     with open(ARCHIVO_DISPOSITIVOS, 'w') as f:
         json.dump({}, f)
@@ -59,7 +65,7 @@ with open(ARCHIVO_LOCALES, 'r') as f:
     lista_locales = json.load(f)
 
 # ==========================================
-# 2. OBTENER IDENTIFICADOR ÚNICO DEL CELULAR
+# 2. OBTENER ID DEL CELULAR
 # ==========================================
 js_get_device = """
 (function() {
@@ -80,7 +86,7 @@ st.sidebar.title("Navegación")
 pestaña = st.sidebar.radio("Ir a:", ["⏱️ Marcar Asistencia", "⚙️ Panel de Administrador"])
 
 # ==========================================
-# 4. PANTALLA: MARCAR ASISTENCIA (Protegida por Celular)
+# 4. PANTALLA: MARCAR ASISTENCIA
 # ==========================================
 if pestaña == "⏱️ Marcar Asistencia":
     st.title("⏱️ Registro Diario de Asistencia")
@@ -88,14 +94,12 @@ if pestaña == "⏱️ Marcar Asistencia":
     if not device_id:
         st.info("🔄 Reconociendo dispositivo...")
     else:
-        # Buscar si este celular ya está vinculado a un empleado
         empleado_en_celu = None
         for emp, dev in dispositivos_vinculados.items():
             if dev == device_id:
                 empleado_en_celu = emp
                 break
         
-        # CASO A: El celular YA está vinculado a un empleado
         if empleado_en_celu:
             st.success(f"📱 Dispositivo reconocido. Bienvenido/a, **{empleado_en_celu}**.")
             
@@ -126,35 +130,43 @@ if pestaña == "⏱️ Marcar Asistencia":
                                 fecha = ahora.strftime("%Y-%m-%d")
                                 hora = ahora.strftime("%H:%M:%S")
                                 
+                                # Lógica de llegada tarde
+                                hora_limite_dt = datetime.datetime.strptime(config_app["hora_limite"], "%H:%M:%S").time()
+                                es_tarde = ahora.time() > hora_limite_dt
+                                estado_llegada = "Tarde" if es_tarde else "A tiempo"
+                                
                                 registro = {
                                     "Fecha": [fecha],
                                     "Hora": [hora],
                                     "Empleado": [empleado_en_celu],
                                     "Sucursal": [local_seleccionado],
-                                    "Distancia_Fichaje_m": [round(distancia, 1)]
+                                    "Distancia_Fichaje_m": [round(distancia, 1)],
+                                    "Estado": [estado_llegada]
                                 }
                                 df_nuevo = pd.DataFrame(registro)
+                                
+                                # Guardar unificando datos viejos y nuevos
                                 if not os.path.exists(ARCHIVO_ASISTENCIA):
                                     df_nuevo.to_csv(ARCHIVO_ASISTENCIA, index=False)
                                 else:
-                                    df_nuevo.to_csv(ARCHIVO_ASISTENCIA, mode='a', header=False, index=False)
+                                    df_existente = pd.read_csv(ARCHIVO_ASISTENCIA)
+                                    df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
+                                    df_final.to_csv(ARCHIVO_ASISTENCIA, index=False)
                                     
                                 st.balloons()
                                 st.success(f"¡Listo {empleado_en_celu}! Asistencia registrada a las {hora}.")
+                                
+                                if es_tarde:
+                                    st.warning(f"⚠️ ATENCIÓN: Marcaste entrada fuera del horario límite ({config_app['hora_limite']}). Tu ingreso quedó registrado como 'Tarde'.")
                     else:
                         st.error(f"❌ No estás en el local. Estás a {distancia:.1f} metros de distancia.")
                 else:
                     st.warning("⚠️ Esperando señal GPS del celular...")
-
-        # CASO B: El celular NO está vinculado (Primera vez en este teléfono)
         else:
             st.warning("⚠️ **Este celular aún no está registrado.** Por seguridad, vinculalo a tu cuenta personal por única vez.")
-            
             empleados_disponibles = [e for e in sorted(lista_empleados) if e not in dispositivos_vinculados.keys()]
-            
             if empleados_disponibles:
                 empleado_a_vincular = st.selectbox("👤 Seleccioná tu nombre:", ["Seleccionar..."] + empleados_disponibles)
-                
                 if st.button("🔗 Vincular este Celular a mi Cuenta"):
                     if empleado_a_vincular != "Seleccionar...":
                         dispositivos_vinculados[empleado_a_vincular] = device_id
@@ -179,47 +191,56 @@ elif pestaña == "⚙️ Panel de Administrador":
         st.success("¡Acceso autorizado!")
         st.markdown("---")
         
-        # ==========================================
-        # 📊 HISTORIAL CON CALENDARIO SEPARADO POR SUCURSAL
-        # ==========================================
-        st.header("📊 Historial de Asistencia por Sucursal y Fecha")
-        
+        # 1. VISUALIZACIÓN RÁPIDA POR DÍA
+        st.header("👀 Ver Registros en Pantalla (Día por Día)")
         if os.path.exists(ARCHIVO_ASISTENCIA):
             df_asistencia = pd.read_csv(ARCHIVO_ASISTENCIA)
-            
-            fecha_seleccionada = st.date_input("📅 Seleccioná la fecha a consultar:", datetime.date.today())
+            fecha_seleccionada = st.date_input("📅 Seleccioná la fecha a consultar:", datetime.date.today(), key="vista_dia")
             fecha_str = fecha_seleccionada.strftime("%Y-%m-%d")
-            
-            st.markdown(f"### Registros para el día: **{fecha_str}**")
-            st.markdown("---")
             
             for sucursal_nombre in lista_locales.keys():
                 st.markdown(f"#### 📍 {sucursal_nombre}")
-                
                 df_filtrado = df_asistencia[(df_asistencia["Sucursal"] == sucursal_nombre) & (df_asistencia["Fecha"] == fecha_str)]
-                
                 if not df_filtrado.empty:
                     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
                 else:
                     st.info(f"Sin registros para el {fecha_str} en {sucursal_nombre}.")
-                
                 st.markdown("---")
-            
-            with open(ARCHIVO_ASISTENCIA, "rb") as file:
-                st.download_button(
-                    label="📥 Descargar planilla general completa (CSV)",
-                    data=file,
-                    file_name="Reporte_General_Asistencia.csv",
-                    mime="text/csv",
-                )
         else:
             st.info("Todavía no hay registros de asistencia guardados.")
             
-        st.markdown("---")
+        # 2. DESCARGA POR RANGO DE FECHAS
+        st.header("📥 Descargar Reporte (Por Rango de Fechas)")
+        if os.path.exists(ARCHIVO_ASISTENCIA):
+            rango_fechas = st.date_input("Seleccioná Desde y Hasta:", 
+                                         value=(datetime.date.today(), datetime.date.today()),
+                                         max_value=datetime.date.today())
+            
+            if len(rango_fechas) == 2:
+                f_inicio, f_fin = rango_fechas
+                df_asistencia_full = pd.read_csv(ARCHIVO_ASISTENCIA)
+                
+                # Filtrar el CSV original
+                df_descarga = df_asistencia_full.copy()
+                df_descarga['Fecha_Temp'] = pd.to_datetime(df_descarga['Fecha']).dt.date
+                df_descarga = df_descarga[(df_descarga['Fecha_Temp'] >= f_inicio) & (df_descarga['Fecha_Temp'] <= f_fin)]
+                df_descarga = df_descarga.drop(columns=['Fecha_Temp'])
+                
+                if not df_descarga.empty:
+                    csv_data = df_descarga.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label=f"📊 Descargar Excel CSV ({f_inicio.strftime('%d/%m/%Y')} al {f_fin.strftime('%d/%m/%Y')})",
+                        data=csv_data,
+                        file_name=f"Reporte_Asistencia_{f_inicio}_al_{f_fin}.csv",
+                        mime="text/csv",
+                    )
+                else:
+                    st.warning("No hay registros en el rango de fechas seleccionado.")
         
+        st.markdown("---")
         col_adm1, col_adm2 = st.columns(2)
         
-        # 👥 GESTIÓN DE EMPLEADOS Y DISPOSITIVOS
+        # 3. EMPLEADOS Y DISPOSITIVOS
         with col_adm1:
             st.subheader("👥 Empleados y Celulares Vinculados")
             for emp in sorted(lista_empleados):
@@ -227,14 +248,13 @@ elif pestaña == "⚙️ Panel de Administrador":
                 st.write(f"- **{emp}** ({estado_vinculo})")
                 
             st.markdown("---")
-            st.write("**Desvincular celular de un empleado (Ej: cambio de celu):**")
-            emp_a_desv = st.selectbox("Elegir empleado a desvincular:", ["Seleccionar..."] + [e for e in dispositivos_vinculados.keys()])
+            emp_a_desv = st.selectbox("Desvincular celular de:", ["Seleccionar..."] + [e for e in dispositivos_vinculados.keys()])
             if st.button("🔓 Desvincular Dispositivo"):
                 if emp_a_desv != "Seleccionar...":
                     del dispositivos_vinculados[emp_a_desv]
                     with open(ARCHIVO_DISPOSITIVOS, 'w') as f:
                         json.dump(dispositivos_vinculados, f)
-                    st.success(f"Dispositivo de {emp_a_desv} desvinculado.")
+                    st.success(f"Dispositivo desvinculado.")
                     st.rerun()
 
             st.markdown("---")
@@ -244,7 +264,7 @@ elif pestaña == "⚙️ Panel de Administrador":
                     lista_empleados.append(nuevo_empleado)
                     with open(ARCHIVO_EMPLEADOS, 'w') as f:
                         json.dump(lista_empleados, f)
-                    st.success(f"Empleado {nuevo_empleado} agregado.")
+                    st.success(f"Empleado agregado.")
                     st.rerun()
                     
             borrar_empleado = st.selectbox("Eliminar empleado:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -256,14 +276,13 @@ elif pestaña == "⚙️ Panel de Administrador":
                     st.success(f"{borrar_empleado} eliminado.")
                     st.rerun()
 
-        # 📍 GESTIÓN DE SUCURSALES
+        # 4. SUCURSALES
         with col_adm2:
             st.subheader("📍 Gestión de Sucursales")
             for loc in lista_locales.keys():
                 st.write(f"- {loc}")
                 
             st.markdown("---")
-            st.write("**Agregar Nueva Sucursal:**")
             nombre_loc = st.text_input("Nombre del Local (ej: Local 4):")
             lat_loc = st.number_input("Latitud:", format="%.6f")
             lon_loc = st.number_input("Longitud:", format="%.6f")
@@ -272,7 +291,7 @@ elif pestaña == "⚙️ Panel de Administrador":
                     lista_locales[nombre_loc] = {"lat": lat_loc, "lon": lon_loc}
                     with open(ARCHIVO_LOCALES, 'w') as f:
                         json.dump(lista_locales, f)
-                    st.success(f"Local {nombre_loc} agregado.")
+                    st.success(f"Local agregado.")
                     st.rerun()
                     
             borrar_loc = st.selectbox("Eliminar sucursal:", ["Seleccionar..."] + list(lista_locales.keys()))
@@ -286,18 +305,35 @@ elif pestaña == "⚙️ Panel de Administrador":
                     
         st.markdown("---")
         
-        # 🔑 CAMBIAR CONTRASEÑA ADMIN
-        st.subheader("🔑 Cambiar Contraseña de Administrador")
-        nc = st.text_input("Nueva contraseña:", type="password")
-        rc = st.text_input("Repetir contraseña:", type="password")
-        if st.button("Actualizar Contraseña Admin"):
-            if nc and nc == rc:
-                config_app["admin_password"] = nc
+        # 5. AJUSTES (HORARIO Y CONTRASEÑA)
+        col_ajustes1, col_ajustes2 = st.columns(2)
+        
+        with col_ajustes1:
+            st.subheader("⏱️ Configurar Horario Límite")
+            try:
+                hora_actual_limite = datetime.datetime.strptime(config_app["hora_limite"], "%H:%M:%S").time()
+            except:
+                hora_actual_limite = datetime.time(9, 15)
+                
+            nuevo_limite = st.time_input("Horario máximo para marcar entrada a tiempo:", hora_actual_limite)
+            if st.button("Guardar Horario Límite"):
+                config_app["hora_limite"] = nuevo_limite.strftime("%H:%M:%S")
                 with open(ARCHIVO_CONFIG, 'w') as f:
                     json.dump(config_app, f)
-                st.success("¡Contraseña de administrador actualizada con éxito!")
-            else:
-                st.error("Las contraseñas no coinciden o están vacías.")
+                st.success(f"¡Horario límite actualizado a las {config_app['hora_limite']}!")
+                
+        with col_ajustes2:
+            st.subheader("🔑 Cambiar Contraseña")
+            nc = st.text_input("Nueva contraseña:", type="password")
+            rc = st.text_input("Repetir contraseña:", type="password")
+            if st.button("Actualizar Contraseña Admin"):
+                if nc and nc == rc:
+                    config_app["admin_password"] = nc
+                    with open(ARCHIVO_CONFIG, 'w') as f:
+                        json.dump(config_app, f)
+                    st.success("¡Contraseña actualizada con éxito!")
+                else:
+                    st.error("Las contraseñas no coinciden.")
                 
     elif password_ingresada == "":
         st.info("🔒 Ingresá la contraseña para acceder al panel (Clave por defecto: 1234).")
