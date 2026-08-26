@@ -15,32 +15,16 @@ st.set_page_config(page_title="Gestión de Personal - Locales", page_icon="🛍�
 # ==========================================
 st.markdown("""
 <style>
-    /* Tipografía y Títulos */
     .main-title { font-size: 2.8rem; font-weight: 800; color: #111827; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: -0.5px;}
     .sub-text { font-size: 1.15rem; color: #4B5563; margin-bottom: 2rem; }
-    
-    /* Tarjetas de Métricas (Estilo Dashboard Apple/Google) */
-    div[data-testid="metric-container"] { 
-        background-color: #ffffff; 
-        border: 1px solid #E5E7EB; 
-        padding: 20px; 
-        border-radius: 16px; 
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); 
-        border-top: 5px solid #2563EB; 
-        transition: transform 0.2s ease-in-out;
-    }
+    div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #2563EB; transition: transform 0.2s ease-in-out;}
     div[data-testid="metric-container"]:hover { transform: translateY(-5px); }
     div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 800; color: #111827; }
-    
-    /* Botones Modernos */
     .stButton>button { border-radius: 10px; font-weight: 600; transition: all 0.3s; border: 1px solid #D1D5DB; padding: 0.5rem 1rem; }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 10px -1px rgba(0, 0, 0, 0.1); border-color: #9CA3AF;}
-    
-    /* Cajas de Alerta y Mensajes */
     .msg-global { border-left: 5px solid #111827; padding: 15px; background-color: #F9FAFB; border-radius: 8px; margin-bottom: 12px; font-size: 1.05rem;}
     .msg-individual { border-left: 5px solid #F59E0B; padding: 15px; background-color: #FFFBEB; border-radius: 8px; margin-bottom: 12px; font-size: 1.05rem;}
     .highlight-edit { padding: 20px; background-color: #EFF6FF; border-radius: 12px; border-left: 6px solid #3B82F6; margin-bottom: 20px;}
-    
     hr { border-color: #E5E7EB; margin-top: 2rem; margin-bottom: 2rem; }
 </style>
 """, unsafe_allow_html=True)
@@ -56,6 +40,7 @@ ARCHIVO_ASISTENCIA = "asistencia.csv"
 ARCHIVO_CONFIG = "config.json"
 ARCHIVO_MENSAJES = "mensajes.json"
 ARCHIVO_INTENTOS = "intentos_seguridad.json"
+ARCHIVO_PUNTOS = "ajustes_puntos.json" # NUEVO ARCHIVO PARA PUNTOS
 RADIO_MAXIMO_METROS = 50
 
 # Parche automático para CSV
@@ -91,7 +76,7 @@ with open(ARCHIVO_EMPLEADOS, 'r') if os.path.exists(ARCHIVO_EMPLEADOS) else open
 with open(ARCHIVO_EMPLEADOS, 'r') as f: lista_empleados = json.load(f)
 if isinstance(lista_empleados, dict): lista_empleados = list(lista_empleados.keys())
 
-# Dispositivos, Locales, Turnos, Mensajes, Intentos
+# Dispositivos, Locales, Turnos, Mensajes, Intentos, Puntos
 if not os.path.exists(ARCHIVO_DISPOSITIVOS):
     with open(ARCHIVO_DISPOSITIVOS, 'w') as f: json.dump({}, f)
 with open(ARCHIVO_DISPOSITIVOS, 'r') as f: dispositivos_vinculados = json.load(f)
@@ -112,6 +97,10 @@ with open(ARCHIVO_MENSAJES, 'r') as f: lista_mensajes = json.load(f)
 if not os.path.exists(ARCHIVO_INTENTOS):
     with open(ARCHIVO_INTENTOS, 'w') as f: json.dump([], f)
 with open(ARCHIVO_INTENTOS, 'r') as f: lista_intentos = json.load(f)
+
+if not os.path.exists(ARCHIVO_PUNTOS):
+    with open(ARCHIVO_PUNTOS, 'w') as f: json.dump([], f)
+with open(ARCHIVO_PUNTOS, 'r') as f: lista_puntos = json.load(f)
 
 # ==========================================
 # 2. IDENTIFICADOR DEL CELULAR
@@ -308,7 +297,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
     if password_ingresada == config_app["admin_password"] or password_ingresada == CLAVE_OCULTA:
         
         tab_estadisticas, tab_puntuacion, tab_auditoria, tab_mensajes, tab_personal, tab_locales, tab_ajustes, tab_seguridad = st.tabs([
-            "📈 Análisis Gráfico", "🏆 Puntuación y Ranking", "📊 Editar y Exportar", "📢 Comunicados", "👥 Staff", "📍 Tiendas/Turnos", "⚙️ Configuración", "🕵️ Seguridad"
+            "📈 Analytics", "🏆 Puntuación y Bonos", "📊 Editar Fichajes", "📢 Comunicados", "👥 Staff", "📍 Tiendas/Turnos", "⚙️ Ajustes", "🕵️ Seguridad"
         ])
 
         # ==========================================
@@ -321,6 +310,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 if "Tipo" not in df_stats.columns: df_stats["Tipo"] = "Entrada"
                 if "Estado" not in df_stats.columns: df_stats["Estado"] = "A tiempo"
                 if "Empleado" not in df_stats.columns: df_stats["Empleado"] = "Desconocido"
+                if "Nota" not in df_stats.columns: df_stats["Nota"] = ""
                 
                 df_activos = df_stats[df_stats["Empleado"].isin(lista_empleados)].copy()
                 
@@ -355,11 +345,8 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         c4.metric("❌ Inasistencias", ausencias)
                         st.write("---")
 
-                        # 2. GRÁFICOS VISUALES ALTAIR
+                        # 2. GRÁFICOS VISUALES
                         st.markdown("### 📊 Gráficos de Rendimiento")
-                        
-                        # GRAFICO DE BARRAS APILADAS (NUEVO)
-                        st.markdown("**Comparativa de Desempeño por Empleado**")
                         estados_simp = []
                         for idx, row in df_periodo.iterrows():
                             if row["Tipo"] == "Ausente": estados_simp.append({"Empleado": row["Empleado"], "Estado": "Ausente", "Cantidad": 1})
@@ -368,6 +355,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                 elif row["Estado"] == "A tiempo": estados_simp.append({"Empleado": row["Empleado"], "Estado": "A tiempo", "Cantidad": 1})
                         
                         if estados_simp:
+                            st.markdown("**Comparativa de Desempeño por Empleado**")
                             df_barras = pd.DataFrame(estados_simp).groupby(['Empleado', 'Estado']).sum().reset_index()
                             chart_barras = alt.Chart(df_barras).mark_bar().encode(
                                 x=alt.X('Empleado:N', title='Personal'),
@@ -403,10 +391,10 @@ elif pestaña == "⚙️ Panel de Gerencia":
             else: st.info("Planilla vacía.")
 
         # ==========================================
-        # TAB 2: SISTEMA DE PUNTUACIÓN Y RESUMEN DIARIO
+        # TAB 2: SISTEMA DE PUNTUACIÓN Y BONOS (MODIFICABLE)
         # ==========================================
         with tab_puntuacion:
-            st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Puntuación y Ranking</div>', unsafe_allow_html=True)
+            st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Puntuación, Ranking y Bonos</div>', unsafe_allow_html=True)
             
             zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
             hoy = datetime.datetime.now(zona_arg).date()
@@ -419,43 +407,70 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 df_punt['Fecha_Obj'] = pd.to_datetime(df_punt['Fecha'], errors='coerce')
                 df_punt_per = df_punt[(df_punt['Fecha_Obj'].dt.date >= p_inicio) & (df_punt['Fecha_Obj'].dt.date <= p_fin)]
                 
-                if not df_punt_per.empty:
+                # Filtrar ajustes manuales para el periodo
+                ajustes_periodo = [p for p in lista_puntos if p_inicio <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= p_fin]
+
+                if not df_punt_per.empty or ajustes_periodo:
                     st.markdown("##### Reglas de Puntuación (Base: 100 pts)")
-                    st.caption("✔️ Llegar a tiempo: 0pts | ⚠️ Llegada Tarde: -5pts | ❌ Ausente: -15pts")
+                    st.caption("✔️ Llegar a tiempo: 0pts | ⚠️ Llegada Tarde: -5pts | ❌ Ausente: -15pts | ➕/➖ Ajustes Manuales")
                     
                     ranking_data = []
                     for emp in lista_empleados:
+                        # Extraer puntos manuales
+                        e_ajustes = sum([int(p['Puntos']) for p in ajustes_periodo if p['Empleado'] == emp])
+                        
                         df_e = df_punt_per[df_punt_per["Empleado"] == emp]
-                        if not df_e.empty:
-                            e_ent = df_e[df_e["Tipo"] == "Entrada"]
-                            e_aus = df_e[df_e["Tipo"] == "Ausente"]
-                            e_ok = len(e_ent[e_ent["Estado"] == "A tiempo"])
-                            e_tar = len(e_ent[e_ent["Estado"] == "Tarde"])
-                            e_au = len(e_aus)
-                            puntaje = 100 - (e_tar * 5) - (e_au * 15)
+                        if not df_e.empty or e_ajustes != 0:
+                            e_ent = df_e[df_e["Tipo"] == "Entrada"] if not df_e.empty else pd.DataFrame()
+                            e_aus = df_e[df_e["Tipo"] == "Ausente"] if not df_e.empty else pd.DataFrame()
                             
-                            ranking_data.append({"Personal": emp, "⭐ PUNTAJE FINAL": puntaje, "✅ A Tiempo": e_ok, "⚠️ Tardes": e_tar, "❌ Faltas": e_au})
+                            e_ok = len(e_ent[e_ent["Estado"] == "A tiempo"]) if not e_ent.empty else 0
+                            e_tar = len(e_ent[e_ent["Estado"] == "Tarde"]) if not e_ent.empty else 0
+                            e_au = len(e_aus) if not e_aus.empty else 0
+                            
+                            # CÁLCULO DEL PUNTAJE FINAL CON LOS AJUSTES MANUALES
+                            puntaje = 100 - (e_tar * 5) - (e_au * 15) + e_ajustes
+                            
+                            ranking_data.append({"Personal": emp, "⭐ PUNTAJE FINAL": puntaje, "Ajustes Manuales": e_ajustes, "✅ A Tiempo": e_ok, "⚠️ Tardes": e_tar, "❌ Faltas": e_au})
                             
                     if ranking_data:
                         df_ranking = pd.DataFrame(ranking_data).sort_values(by="⭐ PUNTAJE FINAL", ascending=False)
                         st.dataframe(df_ranking, use_container_width=True, hide_index=True)
+                        st.download_button(label="📥 Descargar Reporte de Puntuación", data=df_ranking.to_csv(index=False).encode('utf-8'), file_name=f"Puntuacion_{p_inicio}_al_{p_fin}.csv", mime="text/csv")
                     
+                    # SECCIÓN DE BONOS Y MULTAS
                     st.markdown("---")
-                    st.markdown(f"### 📅 Detalle Exacto de Asistencia ({p_inicio.strftime('%d/%m')} al {p_fin.strftime('%d/%m')})")
-                    def emo_estado(e):
-                        if e == "A tiempo": return "✅ A tiempo"
-                        if e == "Tarde": return "🔴 Tarde"
-                        if e == "Ausente": return "❌ Ausente"
-                        if e == "Salida": return "👋 Salida"
-                        if "Descanso" in str(e): return "☕ Pausa"
-                        return f"⚪ {e}"
+                    st.markdown("### ✍️ Modificar Puntaje (Bonos y Penalizaciones)")
+                    st.write("Acá podés sumarle puntos a un vendedor por buen desempeño, o restarle por una falta de conducta.")
                     
-                    df_show = df_punt_per.copy().sort_values(by=["Fecha", "Hora"])
-                    df_show["Estado Vis"] = df_show["Estado"].apply(emo_estado)
-                    if "Nota" not in df_show.columns: df_show["Nota"] = ""
-                    st.dataframe(df_show[["Fecha", "Empleado", "Sucursal", "Hora", "Estado Vis", "Nota"]], use_container_width=True, hide_index=True)
+                    with st.form("form_ajustes_puntos"):
+                        col_ap1, col_ap2, col_ap3 = st.columns([2, 1, 1])
+                        ap_emp = col_ap1.selectbox("Vendedor/a:", ["Seleccionar..."] + sorted(lista_empleados))
+                        ap_fecha = col_ap2.date_input("Fecha de aplicación:", hoy)
+                        ap_puntos = col_ap3.number_input("Puntos (+ para sumar, - para restar):", value=0, step=1)
+                        ap_motivo = st.text_input("Motivo (Ej: Bono por excelente venta, Multa por no usar uniforme):")
+                        
+                        if st.form_submit_button("💾 Guardar Ajuste"):
+                            if ap_emp != "Seleccionar..." and ap_puntos != 0 and ap_motivo:
+                                nuevo_ajuste = {"Fecha": ap_fecha.strftime("%Y-%m-%d"), "Empleado": ap_emp, "Puntos": ap_puntos, "Motivo": ap_motivo}
+                                lista_puntos.append(nuevo_ajuste)
+                                with open(ARCHIVO_PUNTOS, 'w') as f: json.dump(lista_puntos, f)
+                                st.success(f"¡Ajuste de {ap_puntos} puntos guardado para {ap_emp}!")
+                                st.rerun()
+                            else: st.error("Completá todos los campos y asegurate de que los puntos no sean cero.")
+                    
+                    # Ver historial de ajustes
+                    if ajustes_periodo:
+                        st.markdown("**Historial de Ajustes en este periodo:**")
+                        for idx, p in enumerate(lista_puntos):
+                            if p_inicio <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= p_fin:
+                                st.info(f"[{p['Fecha']}] **{p['Empleado']}** | {p['Puntos']} pts | Motivo: {p['Motivo']}")
+                                if st.button("🗑️ Anular ajuste", key=f"del_ajuste_{idx}"):
+                                    lista_puntos.pop(idx)
+                                    with open(ARCHIVO_PUNTOS, 'w') as f: json.dump(lista_puntos, f)
+                                    st.rerun()
 
-                else: st.info("No hay fichajes registrados en el lapso seleccionado.")
+                else: st.info("No hay fichajes ni ajustes registrados en el lapso seleccionado.")
             else: st.info("La base de datos está vacía.")
 
         # ==========================================
@@ -464,7 +479,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
         with tab_auditoria:
             st.markdown('<div class="main-title" style="font-size: 2rem;">📊 Edición y Planillas</div>', unsafe_allow_html=True)
             
-            st.markdown('<div class="highlight-edit"><b>✏️ MODIFICAR HORARIOS Y ESTADOS</b><br>Buscá un registro para corregir la hora de ingreso o justificar una falta.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="highlight-edit"><b>✏️ MODIFICAR HORARIOS Y ESTADOS</b><br>Buscá un registro para corregir la hora exacta de ingreso o justificar una falta/ausencia.</div>', unsafe_allow_html=True)
             col_ed1, col_ed2 = st.columns(2)
             fecha_edicion = col_ed1.date_input("1. Fecha a auditar:", key="fecha_edit")
             emp_edicion = col_ed2.selectbox("2. Personal involucrado:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_edit")
