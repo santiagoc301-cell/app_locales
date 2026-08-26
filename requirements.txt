@@ -2,3 +2,5 @@ streamlit
 geopy
 streamlit-js-eval
 pandas
+altair
+supabase
