@@ -407,6 +407,26 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         datos_horas.append({"Personal": emp, "Rol": roles_empleados.get(emp, ""), "⏱️ Horas Computadas": round(horas_totales, 2)})
                         
                     if datos_horas: st.dataframe(pd.DataFrame(datos_horas).sort_values(by="⏱️ Horas Computadas", ascending=False), use_container_width=True, hide_index=True)
+                    
+                    # --- NUEVO BOTÓN DE DESCARGA ---
+                    st.write("---")
+                    st.subheader("📥 Exportar Planilla de Asistencia")
+                    col_dl1, col_dl2 = st.columns([1,2])
+                    local_descarga = col_dl1.selectbox("Filtrar por Local:", ["Todos los locales"] + list(lista_locales.keys()), key="dl_local")
+                    
+                    df_dl = df_per.copy()
+                    if local_descarga != "Todos los locales":
+                        df_dl = df_dl[df_dl["Sucursal"] == local_descarga]
+                    
+                    if not df_dl.empty:
+                        # Ordenamos el excel para que quede prolijo
+                        df_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]].sort_values(by=["Fecha", "Hora"])
+                        csv = df_dl.to_csv(index=False).encode('utf-8')
+                        col_dl2.write("") # Espacio para alinear
+                        col_dl2.write("") # Espacio para alinear
+                        col_dl2.download_button(label=f"⬇️ Descargar Archivo Excel/CSV ({local_descarga})", data=csv, file_name=f"Reporte_Asistencia_{fecha_hoy}.csv", mime="text/csv")
+                    else:
+                        st.info("No hay datos de asistencia para el local seleccionado en estas fechas.")
 
         with tab_puntos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Ranking de Puntos</div>', unsafe_allow_html=True)
