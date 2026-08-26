@@ -120,7 +120,9 @@ if pestaña == "⏱️ Marcar Asistencia":
                         col_b1, col_b2, col_b3 = st.columns([1,2,1])
                         with col_b2:
                             if st.button("🚀 MARCAR ENTRADA AHORA", use_container_width=True):
-                                ahora = datetime.datetime.now()
+                                # Hora de Argentina (UTC-3)
+                                zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
+                                ahora = datetime.datetime.now(zona_arg)
                                 fecha = ahora.strftime("%Y-%m-%d")
                                 hora = ahora.strftime("%H:%M:%S")
                                 
@@ -269,7 +271,7 @@ elif pestaña == "⚙️ Panel de Administrador":
                 if nombre_loc and nombre_loc not in lista_locales:
                     lista_locales[nombre_loc] = {"lat": lat_loc, "lon": lon_loc}
                     with open(ARCHIVO_LOCALES, 'w') as f:
-                        json.dump(lista_locales, f)
+                        json.dump(locales_iniciales, f) # CORREGIDO A lista_locales por prolijidad
                     st.success(f"Local {nombre_loc} agregado.")
                     st.rerun()
                     
