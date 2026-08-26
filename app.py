@@ -42,6 +42,7 @@ st.markdown("""
 # 1. RUTINAS DE DATOS "ANTI-ERRORES"
 # ==========================================
 ARCHIVO_EMPLEADOS = "empleados.json"
+ARCHIVO_PASSWORDS = "passwords.json"
 ARCHIVO_LISTA_ROLES = "lista_roles.json"
 ARCHIVO_ROLES = "roles.json"
 ARCHIVO_TAREAS_ROLES = "tareas_roles.json"
@@ -54,6 +55,7 @@ ARCHIVO_TURNOS = "turnos.json"
 ARCHIVO_ASISTENCIA = "asistencia.csv"
 ARCHIVO_CONFIG = "config.json"
 ARCHIVO_MENSAJES = "mensajes.json"
+ARCHIVO_ALERTAS_INGRESO = "alertas_ingreso.json" # NUEVO: Mensajes al fichar
 ARCHIVO_INTENTOS = "intentos_seguridad.json"
 ARCHIVO_PUNTOS = "ajustes_puntos.json"
 RADIO_MAXIMO_METROS = 50
@@ -121,6 +123,11 @@ lista_roles_disponibles = load_json(ARCHIVO_LISTA_ROLES, ["Vendedor", "Cajero", 
 lista_empleados = load_json(ARCHIVO_EMPLEADOS, ["Abril Gonzalez", "Agustina Lopez", "Daniela Perez", "Macarena Silva"])
 if isinstance(lista_empleados, dict): lista_empleados = list(lista_empleados.keys())
 
+passwords_empleados = load_json(ARCHIVO_PASSWORDS, {e: "1234" for e in lista_empleados})
+for emp in lista_empleados:
+    if emp not in passwords_empleados: passwords_empleados[emp] = "1234"
+save_json(ARCHIVO_PASSWORDS, passwords_empleados)
+
 roles_empleados = load_json(ARCHIVO_ROLES, {e: "Vendedor" for e in lista_empleados})
 tareas_roles = load_json(ARCHIVO_TAREAS_ROLES, {"Vendedor": [{"tarea": "Acomodar Sector", "puntos": 5}]})
 tareas_individuales = load_json(ARCHIVO_TAREAS_INDIVIDUALES, {e: [] for e in lista_empleados})
@@ -128,20 +135,10 @@ dispositivos_vinculados = load_json(ARCHIVO_DISPOSITIVOS, {})
 lista_locales = load_json(ARCHIVO_LOCALES, {"Local 1 - Centro": {"lat": -24.788296, "lon": -65.409429}})
 lista_turnos = {k: {"ingreso": v, "salida": "11:59 PM"} if isinstance(v, str) else v for k, v in load_json(ARCHIVO_TURNOS, {"Apertura": {"ingreso": "09:00 AM", "salida": "05:00 PM"}}).items()}
 lista_mensajes = load_json(ARCHIVO_MENSAJES, [])
+alertas_ingreso = load_json(ARCHIVO_ALERTAS_INGRESO, [])
 lista_intentos = load_json(ARCHIVO_INTENTOS, [])
 lista_puntos = load_json(ARCHIVO_PUNTOS, [])
 reportes_log = load_json(ARCHIVO_REPORTES, [])
-
-# Normalizar estructura de puntos pasados (para compatibilidad)
-puntos_modificados = False
-for p in lista_puntos:
-    if "Estado" not in p:
-        p["Estado"] = "Aprobada"
-        puntos_modificados = True
-    if "Autor" not in p:
-        p["Autor"] = "Gerencia"
-        puntos_modificados = True
-if puntos_modificados: save_json(ARCHIVO_PUNTOS, lista_puntos)
 
 ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A"]
 
@@ -187,7 +184,7 @@ st.sidebar.title("🛍️ Menú Principal")
 pestaña = st.sidebar.radio("Navegar a:", ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia"])
 
 # ==========================================
-# 4. PANTALLA: PORTAL DEL EMPLEADO
+# 4. PANTALLA: PORTAL DEL EMPLEADO (CON PASSWORD)
 # ==========================================
 if pestaña == "⏱️ Portal del Empleado":
     st.markdown('<div class="main-title">⏱️ Portal del Equipo</div>', unsafe_allow_html=True)
@@ -199,192 +196,224 @@ if pestaña == "⏱️ Portal del Empleado":
         st.info("🔄 Autenticando tu equipo...")
     else:
         if empleado_en_celu:
-            # --- CÁLCULO DE PUNTOS (SOLO APROBADOS) ---
-            puntos_actuales = config_app["reglas_puntos"]["base"]
-            try:
-                df_punt = pd.read_csv(ARCHIVO_ASISTENCIA)
-                df_e = df_punt[df_punt["Empleado"] == empleado_en_celu]
-                if not df_e.empty:
-                    puntos_actuales += (len(df_e[df_e["Estado"] == "Tarde"]) * config_app["reglas_puntos"]["Tarde"]) + (len(df_e[df_e["Tipo"] == "Ausente"]) * config_app["reglas_puntos"]["Ausente"])
-            except: pass
-            
-            try:
-                df_tl = pd.read_csv(ARCHIVO_TAREAS_LOG)
-                if not df_tl.empty: 
-                    puntos_actuales += df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Estado"] == "Aprobada")]["Puntos"].astype(int).sum()
-            except: pass
-            
-            puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada"])
-            rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
-            
-            st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
+            # --- SISTEMA DE LOGIN DE EMPLEADO ---
+            if 'auth_emp' not in st.session_state:
+                st.session_state['auth_emp'] = False
 
-            # --- PANEL DE RESPONSABLE DE TURNO (CAJEROS/ENCARGADOS) ---
-            if rol_empleado in ["Cajero", "Encargado"]:
-                with st.expander("👑 Panel de Responsable de Turno", expanded=False):
-                    st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés asignar bonos o multas a otros compañeros. Esto requiere la autorización final de Gerencia.</div>", unsafe_allow_html=True)
-                    with st.form("form_sup_puntos"):
-                        s_emp = st.selectbox("Compañero a evaluar:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
-                        s_pts = st.number_input("Puntos (+ para premio, - para multa):", value=0, step=1)
-                        s_mot = st.text_input("Motivo de la evaluación:")
-                        if st.form_submit_button("Enviar Evaluación a Gerencia"):
-                            if s_emp != "Seleccionar..." and s_pts != 0 and s_mot:
-                                lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot, "Autor": empleado_en_celu, "Estado": "Pendiente"})
-                                save_json(ARCHIVO_PUNTOS, lista_puntos)
-                                st.success("Evaluación enviada. Impactará cuando Gerencia la apruebe.")
-                            else:
-                                st.error("Completá todos los campos (Puntos no puede ser 0).")
+            if not st.session_state['auth_emp']:
+                st.markdown(f"### Hola **{empleado_en_celu}** 👋")
+                st.write("Por seguridad, ingresá tu contraseña para acceder al portal.")
+                pwd_emp = st.text_input("Contraseña:", type="password")
+                if st.button("🔓 Ingresar"):
+                    if pwd_emp == passwords_empleados.get(empleado_en_celu, "1234"):
+                        st.session_state['auth_emp'] = True
+                        st.rerun()
+                    else:
+                        st.error("❌ Contraseña incorrecta.")
+            else:
+                # --- PORTAL AUTENTICADO ---
+                col_cab1, col_cab2 = st.columns([3, 1])
+                if col_cab2.button("🚪 Cerrar Sesión Segura"):
+                    st.session_state['auth_emp'] = False
+                    st.rerun()
 
-            mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu]]
-            if mensajes_usuario:
-                for m in mensajes_usuario:
-                    if m['destinatario'] == 'Todos': st.markdown(f"<div class='msg-global'>🏷️ <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
-                    else: st.markdown(f"<div class='msg-individual'>📩 <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                # --- MOSTRAR MENSAJE DE ÉXITO FIJO (POST-RECARGA) ---
+                if 'fichaje_exitoso' in st.session_state:
+                    if "⚠️" in st.session_state['fichaje_exitoso'] or "❌" in st.session_state['fichaje_exitoso']:
+                        st.warning(st.session_state['fichaje_exitoso'])
+                    else:
+                        st.success(st.session_state['fichaje_exitoso'])
+                        st.balloons()
+                    del st.session_state['fichaje_exitoso']
 
-            # --- REGISTRO DE ASISTENCIA ---
-            with st.expander("📍 Registrar Asistencia de Hoy", expanded=True):
-                col_sel1, col_sel2 = st.columns(2)
-                with col_sel1: local_seleccionado = st.selectbox("Tienda actual:", ["Seleccionar..."] + list(lista_locales.keys()))
-                with col_sel2: turno_seleccionado = st.selectbox("Horario:", ["Seleccionar..."] + list(lista_turnos.keys()))
-                nota_empleado = st.text_input("📝 Dejar justificación / novedad (Opcional):")
+                puntos_actuales = config_app["reglas_puntos"]["base"]
+                try:
+                    df_punt = pd.read_csv(ARCHIVO_ASISTENCIA)
+                    df_e = df_punt[df_punt["Empleado"] == empleado_en_celu]
+                    if not df_e.empty:
+                        puntos_actuales += (len(df_e[df_e["Estado"] == "Tarde"]) * config_app["reglas_puntos"]["Tarde"]) + (len(df_e[df_e["Tipo"] == "Ausente"]) * config_app["reglas_puntos"]["Ausente"])
+                except: pass
+                
+                try:
+                    df_tl = pd.read_csv(ARCHIVO_TAREAS_LOG)
+                    if not df_tl.empty: 
+                        puntos_actuales += df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Estado"] == "Aprobada")]["Puntos"].astype(int).sum()
+                except: pass
+                
+                puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada"])
+                rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
+                
+                st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
 
-                if local_seleccionado != "Seleccionar..." and turno_seleccionado != "Seleccionar...":
-                    en_rango = True
-                    wifi_aprobado = True
-                    distancia_real = 0.0
-                    radio_permitido = int(config_app.get("radio_metros", 50))
+                # --- PANEL DE RESPONSABLE DE TURNO ---
+                if rol_empleado in ["Cajero", "Encargado"]:
+                    with st.expander("👑 Panel de Responsable de Turno", expanded=False):
+                        st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés asignar bonos o multas a otros compañeros. Esto requiere la autorización final de Gerencia.</div>", unsafe_allow_html=True)
+                        with st.form("form_sup_puntos"):
+                            s_emp = st.selectbox("Compañero a evaluar:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
+                            s_pts = st.number_input("Puntos (+ para premio, - para multa):", value=0, step=1)
+                            s_mot = st.text_input("Motivo de la evaluación:")
+                            if st.form_submit_button("Enviar Evaluación a Gerencia"):
+                                if s_emp != "Seleccionar..." and s_pts != 0 and s_mot:
+                                    lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot, "Autor": empleado_en_celu, "Estado": "Pendiente"})
+                                    save_json(ARCHIVO_PUNTOS, lista_puntos)
+                                    st.success("Evaluación enviada. Impactará cuando Gerencia la apruebe.")
+                                else:
+                                    st.error("Completá todos los campos (Puntos no puede ser 0).")
 
-                    st.markdown("### 🛡️ Proceso de Validación")
-                    if config_app.get("verificar_gps", True):
-                        ubicacion = get_geolocation()
-                        if ubicacion:
-                            coord_usuario = (ubicacion['coords']['latitude'], ubicacion['coords']['longitude'])
-                            coord_local = (lista_locales[local_seleccionado]["lat"], lista_locales[local_seleccionado]["lon"])
-                            distancia_real = geodesic(coord_usuario, coord_local).meters
-                            if distancia_real <= radio_permitido:
-                                st.markdown(f"<div class='validation-box'>✅ <b>GPS Aprobado:</b> Estás en el local ({distancia_real:.1f} m).</div>", unsafe_allow_html=True)
+                # --- REGISTRO DE ASISTENCIA ---
+                with st.expander("📍 Registrar Asistencia de Hoy", expanded=True):
+                    col_sel1, col_sel2 = st.columns(2)
+                    with col_sel1: local_seleccionado = st.selectbox("Tienda actual:", ["Seleccionar..."] + list(lista_locales.keys()))
+                    with col_sel2: turno_seleccionado = st.selectbox("Horario:", ["Seleccionar..."] + list(lista_turnos.keys()))
+                    nota_empleado = st.text_input("📝 Dejar justificación / novedad (Opcional):")
+
+                    if local_seleccionado != "Seleccionar..." and turno_seleccionado != "Seleccionar...":
+                        en_rango = True
+                        wifi_aprobado = True
+                        distancia_real = 0.0
+                        radio_permitido = int(config_app.get("radio_metros", 50))
+
+                        st.markdown("### 🛡️ Proceso de Validación")
+                        if config_app.get("verificar_gps", True):
+                            ubicacion = get_geolocation()
+                            if ubicacion:
+                                coord_usuario = (ubicacion['coords']['latitude'], ubicacion['coords']['longitude'])
+                                coord_local = (lista_locales[local_seleccionado]["lat"], lista_locales[local_seleccionado]["lon"])
+                                distancia_real = geodesic(coord_usuario, coord_local).meters
+                                if distancia_real <= radio_permitido:
+                                    st.markdown(f"<div class='validation-box'>✅ <b>GPS Aprobado:</b> Estás en el local ({distancia_real:.1f} m).</div>", unsafe_allow_html=True)
+                                else:
+                                    en_rango = False
+                                    st.markdown(f"<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⚠️ <b>Fuera del local:</b> Estás a {distancia_real:.1f} m. (Límite: {radio_permitido}m). <b>Solo podés registrar Salida.</b></div>", unsafe_allow_html=True)
                             else:
                                 en_rango = False
-                                st.markdown(f"<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⚠️ <b>Fuera del local:</b> Estás a {distancia_real:.1f} m. (Límite: {radio_permitido}m). <b>Solo podés registrar Salida.</b></div>", unsafe_allow_html=True)
-                        else:
-                            en_rango = False
-                            st.markdown("<div class='validation-box'>⏳ <b>Obteniendo tu ubicación GPS...</b></div>", unsafe_allow_html=True)
+                                st.markdown("<div class='validation-box'>⏳ <b>Obteniendo tu ubicación GPS...</b></div>", unsafe_allow_html=True)
 
-                    if config_app.get("verificar_wifi", False):
-                        ip_tienda = lista_locales[local_seleccionado].get("ip", "").strip()
-                        if not ip_tienda:
-                            wifi_aprobado = False
-                            st.markdown("<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Red Denegada:</b> Esta tienda no tiene IP configurada.</div>", unsafe_allow_html=True)
-                        elif client_ip:
-                            if client_ip == ip_tienda:
-                                st.markdown("<div class='validation-box'>✅ <b>Red Aprobada:</b> Conectado al Wi-Fi del local.</div>", unsafe_allow_html=True)
+                        if config_app.get("verificar_wifi", False):
+                            ip_tienda = lista_locales[local_seleccionado].get("ip", "").strip()
+                            if not ip_tienda:
+                                wifi_aprobado = False
+                                st.markdown("<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Red Denegada:</b> Esta tienda no tiene IP configurada.</div>", unsafe_allow_html=True)
+                            elif client_ip:
+                                if client_ip == ip_tienda:
+                                    st.markdown("<div class='validation-box'>✅ <b>Red Aprobada:</b> Conectado al Wi-Fi del local.</div>", unsafe_allow_html=True)
+                                else:
+                                    wifi_aprobado = False
+                                    st.markdown(f"<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Red Denegada:</b> Tu conexión ({client_ip}) no coincide con el local.</div>", unsafe_allow_html=True)
                             else:
                                 wifi_aprobado = False
-                                st.markdown(f"<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Red Denegada:</b> Tu conexión ({client_ip}) no coincide con el local.</div>", unsafe_allow_html=True)
-                        else:
-                            wifi_aprobado = False
-                            st.markdown("<div class='validation-box'>⏳ <b>Verificando tu conexión de red...</b></div>", unsafe_allow_html=True)
+                                st.markdown("<div class='validation-box'>⏳ <b>Verificando tu conexión de red...</b></div>", unsafe_allow_html=True)
 
-                    puede_fichar = True
-                    if config_app.get("verificar_wifi", False) and not wifi_aprobado: puede_fichar = False
+                        puede_fichar = True
+                        if config_app.get("verificar_wifi", False) and not wifi_aprobado: puede_fichar = False
 
-                    if puede_fichar:
-                        ya_ficho_entrada = False
-                        try:
-                            df_temp = pd.read_csv(ARCHIVO_ASISTENCIA)
-                            filtro = df_temp[(df_temp["Empleado"] == empleado_en_celu) & (df_temp["Fecha"] == fecha_hoy) & (df_temp["Turno"] == turno_seleccionado) & (df_temp["Tipo"] == "Entrada")]
-                            if not filtro.empty: ya_ficho_entrada = True
-                        except: pass
+                        if puede_fichar:
+                            ya_ficho_entrada = False
+                            try:
+                                df_temp = pd.read_csv(ARCHIVO_ASISTENCIA)
+                                filtro = df_temp[(df_temp["Empleado"] == empleado_en_celu) & (df_temp["Fecha"] == fecha_hoy) & (df_temp["Turno"] == turno_seleccionado) & (df_temp["Tipo"] == "Entrada")]
+                                if not filtro.empty: ya_ficho_entrada = True
+                            except: pass
 
-                        marcar, tipo_fichaje = False, ""
-                        st.write("---")
-                        col_b1, col_b2 = st.columns(2)
-                        with col_b1:
-                            if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
-                                if not en_rango: st.error("❌ No podés registrar Entrada estando fuera del perímetro.")
-                                elif ya_ficho_entrada: st.error("⚠️ Ya marcaste el ingreso para este turno.")
-                                else: marcar, tipo_fichaje = True, "Entrada"
-                        with col_b2:
-                            if config_app.get("requiere_salida", True):
-                                if st.button("🔴 REGISTRAR SALIDA", use_container_width=True): marcar, tipo_fichaje = True, "Salida"
+                            marcar, tipo_fichaje = False, ""
+                            st.write("---")
+                            col_b1, col_b2 = st.columns(2)
+                            with col_b1:
+                                if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
+                                    if not en_rango: st.error("❌ No podés registrar Entrada estando fuera del perímetro.")
+                                    elif ya_ficho_entrada: st.error("⚠️ Ya marcaste el ingreso para este turno.")
+                                    else: marcar, tipo_fichaje = True, "Entrada"
+                            with col_b2:
+                                if config_app.get("requiere_salida", True):
+                                    if st.button("🔴 REGISTRAR SALIDA", use_container_width=True): marcar, tipo_fichaje = True, "Salida"
 
-                        if marcar:
-                            estado_llegada = "N/A"
-                            if tipo_fichaje == "Entrada":
-                                hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
-                                hora_t_obj = pd.to_datetime(hora_t_str).time()
-                                dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                                estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
-                            elif tipo_fichaje == "Salida":
-                                estado_llegada = "Salida (Fuera de Rango)" if not en_rango else "Salida"
+                            if marcar:
+                                estado_llegada = "N/A"
+                                if tipo_fichaje == "Entrada":
+                                    hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
+                                    hora_t_obj = pd.to_datetime(hora_t_str).time()
+                                    dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                    estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
+                                elif tipo_fichaje == "Salida":
+                                    estado_llegada = "Salida (Fuera de Rango)" if not en_rango else "Salida"
 
-                            reg = {"Fecha": [fecha_hoy], "Hora": [hora_hoy], "Empleado": [empleado_en_celu], "Sucursal": [local_seleccionado], "Turno": [turno_seleccionado], "Tipo": [tipo_fichaje], "Estado": [estado_llegada], "Distancia_m": [round(distancia_real, 1)], "Nota": [nota_empleado]}
-                            pd.concat([pd.read_csv(ARCHIVO_ASISTENCIA), pd.DataFrame(reg)], ignore_index=True).to_csv(ARCHIVO_ASISTENCIA, index=False)
-                            
-                            if tipo_fichaje == "Entrada":
-                                st.success(f"¡Entrada registrada a las {hora_hoy}!")
-                                if estado_llegada == "Tarde": st.error(config_app.get('mensaje_llegada_tarde'))
-                            else:
-                                if not en_rango: st.warning(config_app.get("mensaje_salida_lejos", "⚠️ Salida marcada fuera del local."))
-                                else: st.success(f"¡Salida registrada a las {hora_hoy}! Buen descanso.")
-                            st.rerun() 
-                else: st.info("Elegí tu tienda y turno para habilitar la validación.")
+                                reg = {"Fecha": [fecha_hoy], "Hora": [hora_hoy], "Empleado": [empleado_en_celu], "Sucursal": [local_seleccionado], "Turno": [turno_seleccionado], "Tipo": [tipo_fichaje], "Estado": [estado_llegada], "Distancia_m": [round(distancia_real, 1)], "Nota": [nota_empleado]}
+                                pd.concat([pd.read_csv(ARCHIVO_ASISTENCIA), pd.DataFrame(reg)], ignore_index=True).to_csv(ARCHIVO_ASISTENCIA, index=False)
+                                
+                                # LÓGICA DE MENSAJE FIJO Y ALERTAS DE INGRESO
+                                if tipo_fichaje == "Entrada":
+                                    msg_final = f"¡Entrada registrada a las {hora_hoy}!"
+                                    if estado_llegada == "Tarde":
+                                        msg_final += f"\n\n🔴 {config_app.get('mensaje_llegada_tarde')}"
+                                    
+                                    for a in alertas_ingreso:
+                                        if a['destinatario'] in ['Todos', empleado_en_celu]:
+                                            msg_final += f"\n\n📩 **Mensaje Automático de Gerencia:**\n{a['texto']}"
+                                            
+                                    st.session_state['fichaje_exitoso'] = msg_final
+                                else:
+                                    if not en_rango: st.session_state['fichaje_exitoso'] = config_app.get("mensaje_salida_lejos", "⚠️ Salida marcada fuera del local.")
+                                    else: st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
+                                
+                                st.rerun() 
+                    else: st.info("Elegí tu tienda y turno para habilitar la validación.")
 
-            # --- BUZON CONFIDENCIAL ---
-            with st.expander("🛑 Buzón de Reportes Confidenciales", expanded=False):
-                st.write("Reportá problemas de forma privada directo a Gerencia.")
-                tipo_rep = st.selectbox("Tipo de situación:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
-                implicado = "N/A"
-                if tipo_rep == "Incumplimiento de un compañero":
-                    implicado = st.selectbox("Compañero implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
-                detalle_rep = st.text_area("Detalle (Sé específico):")
-                
-                if st.button("📤 Enviar a Gerencia"):
-                    if detalle_rep:
-                        reportes_log.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Emisor": empleado_en_celu, "Tipo": tipo_rep, "Implicado": implicado, "Detalle": detalle_rep, "Estado": "Pendiente de lectura"})
-                        save_json(ARCHIVO_REPORTES, reportes_log)
-                        st.success("¡Reporte enviado de forma confidencial!")
-                    else: st.error("Por favor, escribí un detalle.")
-
-            # --- TAREAS Y HISTORIAL ---
-            t_rol = tareas_roles.get(rol_empleado, [])
-            t_indiv = tareas_individuales.get(empleado_en_celu, [])
-            tareas_totales = t_rol + t_indiv
-            
-            if tareas_totales:
-                with st.expander("📋 Mis Tareas del Día", expanded=True):
-                    try:
-                        df_tl = pd.read_csv(ARCHIVO_TAREAS_LOG)
-                        tareas_hoy_df = df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Fecha"] == fecha_hoy)]
-                    except: tareas_hoy_df = pd.DataFrame()
+                # --- BUZON CONFIDENCIAL ---
+                with st.expander("🛑 Buzón de Reportes Confidenciales", expanded=False):
+                    st.write("Reportá problemas de forma privada directo a Gerencia.")
+                    tipo_rep = st.selectbox("Tipo de situación:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
+                    implicado = "N/A"
+                    if tipo_rep == "Incumplimiento de un compañero":
+                        implicado = st.selectbox("Compañero implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
+                    detalle_rep = st.text_area("Detalle (Sé específico):")
                     
-                    for t in tareas_totales:
-                        t_nombre = t.get('tarea')
-                        t_puntos = t.get('puntos')
-                        t_reg = tareas_hoy_df[tareas_hoy_df["Tarea"] == t_nombre] if not tareas_hoy_df.empty else pd.DataFrame()
-                        
-                        if not t_reg.empty:
-                            est_t = t_reg.iloc[-1]["Estado"]
-                            if est_t == "Aprobada": st.markdown(f"<div class='task-box'>✅ <b>{t_nombre}</b> (+{t_puntos} pts) - <b>Aprobada</b></div>", unsafe_allow_html=True)
-                            elif est_t == "Rechazada": st.markdown(f"<div class='task-rej'>❌ <b>{t_nombre}</b> - Rechazada por Gerencia</div>", unsafe_allow_html=True)
-                            else: st.markdown(f"<div class='task-pend'>⏳ <b>{t_nombre}</b> - Esperando auditoría...</div>", unsafe_allow_html=True)
-                        else:
-                            c_t1, c_t2 = st.columns([3, 1])
-                            c_t1.write(f"🔸 {t_nombre} (+{t_puntos} pts)")
-                            if c_t2.button("✔️ Reportar Lista", key=f"btn_t_{t_nombre}"):
-                                reg_t = {"Fecha": [fecha_hoy], "Hora": [hora_hoy], "Empleado": [empleado_en_celu], "Tarea": [t_nombre], "Puntos": [t_puntos], "Estado": ["Pendiente"]}
-                                pd.concat([pd.read_csv(ARCHIVO_TAREAS_LOG), pd.DataFrame(reg_t)], ignore_index=True).to_csv(ARCHIVO_TAREAS_LOG, index=False)
-                                st.rerun()
+                    if st.button("📤 Enviar a Gerencia"):
+                        if detalle_rep:
+                            reportes_log.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Emisor": empleado_en_celu, "Tipo": tipo_rep, "Implicado": implicado, "Detalle": detalle_rep, "Estado": "Pendiente de lectura"})
+                            save_json(ARCHIVO_REPORTES, reportes_log)
+                            st.success("¡Reporte enviado de forma confidencial!")
+                        else: st.error("Por favor, escribí un detalle.")
 
-            with st.expander("📜 Mi historial reciente"):
-                try:
-                    df_h = pd.read_csv(ARCHIVO_ASISTENCIA)
-                    if not df_h.empty:
-                        df_h['F_Obj'] = pd.to_datetime(df_h['Fecha'], errors='coerce').dt.date
-                        df_emp = df_h[(df_h["Empleado"] == empleado_en_celu) & (df_h["F_Obj"] >= (ahora.date() - datetime.timedelta(days=7)))].sort_values(by=["Fecha", "Hora"], ascending=[False, False])
-                        if not df_emp.empty: st.dataframe(df_emp[["Fecha", "Hora", "Tipo", "Estado", "Nota"]], hide_index=True, use_container_width=True)
-                        else: st.write("Sin fichajes recientes.")
-                except: st.write("Aún no hay registros.")
+                # --- TAREAS Y HISTORIAL ---
+                t_rol = tareas_roles.get(rol_empleado, [])
+                t_indiv = tareas_individuales.get(empleado_en_celu, [])
+                tareas_totales = t_rol + t_indiv
+                
+                if tareas_totales:
+                    with st.expander("📋 Mis Tareas del Día", expanded=True):
+                        try:
+                            df_tl = pd.read_csv(ARCHIVO_TAREAS_LOG)
+                            tareas_hoy_df = df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Fecha"] == fecha_hoy)]
+                        except: tareas_hoy_df = pd.DataFrame()
+                        
+                        for t in tareas_totales:
+                            t_nombre = t.get('tarea')
+                            t_puntos = t.get('puntos')
+                            t_reg = tareas_hoy_df[tareas_hoy_df["Tarea"] == t_nombre] if not tareas_hoy_df.empty else pd.DataFrame()
+                            
+                            if not t_reg.empty:
+                                est_t = t_reg.iloc[-1]["Estado"]
+                                if est_t == "Aprobada": st.markdown(f"<div class='task-box'>✅ <b>{t_nombre}</b> (+{t_puntos} pts) - <b>Aprobada</b></div>", unsafe_allow_html=True)
+                                elif est_t == "Rechazada": st.markdown(f"<div class='task-rej'>❌ <b>{t_nombre}</b> - Rechazada por Gerencia</div>", unsafe_allow_html=True)
+                                else: st.markdown(f"<div class='task-pend'>⏳ <b>{t_nombre}</b> - Esperando auditoría...</div>", unsafe_allow_html=True)
+                            else:
+                                c_t1, c_t2 = st.columns([3, 1])
+                                c_t1.write(f"🔸 {t_nombre} (+{t_puntos} pts)")
+                                if c_t2.button("✔️ Reportar Lista", key=f"btn_t_{t_nombre}"):
+                                    reg_t = {"Fecha": [fecha_hoy], "Hora": [hora_hoy], "Empleado": [empleado_en_celu], "Tarea": [t_nombre], "Puntos": [t_puntos], "Estado": ["Pendiente"]}
+                                    pd.concat([pd.read_csv(ARCHIVO_TAREAS_LOG), pd.DataFrame(reg_t)], ignore_index=True).to_csv(ARCHIVO_TAREAS_LOG, index=False)
+                                    st.rerun()
+
+                with st.expander("📜 Mi historial reciente"):
+                    try:
+                        df_h = pd.read_csv(ARCHIVO_ASISTENCIA)
+                        if not df_h.empty:
+                            df_h['F_Obj'] = pd.to_datetime(df_h['Fecha'], errors='coerce').dt.date
+                            df_emp = df_h[(df_h["Empleado"] == empleado_en_celu) & (df_h["F_Obj"] >= (ahora.date() - datetime.timedelta(days=7)))].sort_values(by=["Fecha", "Hora"], ascending=[False, False])
+                            if not df_emp.empty: st.dataframe(df_emp[["Fecha", "Hora", "Tipo", "Estado", "Nota"]], hide_index=True, use_container_width=True)
+                            else: st.write("Sin fichajes recientes.")
+                    except: st.write("Aún no hay registros.")
         else:
             st.warning("⚠️ **Equipo no autorizado.**")
             emp_vincular = st.selectbox("Identificate:", ["Seleccionar..."] + [e for e in sorted(lista_empleados) if e not in dispositivos_vinculados.keys()])
@@ -401,16 +430,19 @@ elif pestaña == "⚙️ Panel de Gerencia":
     password_ingresada = st.text_input("Clave de acceso:", type="password")
     CLAVE_OCULTA = "doremifasol"
 
+    # --- REGISTRO MODO ESPÍA ---
     if password_ingresada and password_ingresada != CLAVE_OCULTA:
         if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
             st.session_state['last_pw_attempt'] = password_ingresada
-            lista_intentos.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Usuario": empleado_en_celu if empleado_en_celu else "Desconocido", "Clave Probada": password_ingresada, "Resultado": "🟢 Acceso Permitido" if password_ingresada == config_app.get("admin_password", "1234") else "🔴 Acceso Denegado"})
+            quien_intenta = empleado_en_celu if empleado_en_celu else "Dispositivo Desconocido"
+            resultado = "🟢 Acceso Permitido" if password_ingresada == config_app.get("admin_password", "1234") else "🔴 Acceso Denegado"
+            lista_intentos.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Usuario": quien_intenta, "Clave Probada": password_ingresada, "Resultado": resultado})
             save_json(ARCHIVO_INTENTOS, lista_intentos)
 
     if password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == CLAVE_OCULTA:
         
-        tab_analytics, tab_puntos, tab_auditoria_tareas, tab_auditoria_horas, tab_staff, tab_tiendas, tab_ajustes = st.tabs([
-            "📈 Analytics & Horas", "🏆 Puntos y Ranking", "📋 Auditoría de Reportes", "📝 Auditoría de Horarios", "👥 Staff y Roles", "📍 Tiendas y Red", "⚙️ Configuración"
+        tab_analytics, tab_puntos, tab_auditoria, tab_horarios, tab_staff, tab_comunicados, tab_tiendas, tab_espia = st.tabs([
+            "📈 Analytics & Horas", "🏆 Puntos", "📋 Reportes/Tareas", "📝 Horarios", "👥 Staff", "📢 Comunicados", "⚙️ Tiendas & Ajustes", "🕵️ Modo Espía"
         ])
 
         # ==========================================
@@ -511,7 +543,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     
                     ranking_data = []
                     for emp in lista_empleados:
-                        # SOLO SUMA LOS AJUSTES APROBADOS
                         e_aj = sum([int(p.get('Puntos', 0)) for p in ajustes_per if p.get('Empleado') == emp and p.get('Estado', 'Aprobada') == 'Aprobada'])
                         e_tp = df_t[(df_t["Empleado"] == emp) & (df_t["Estado"] == "Aprobada")]["Puntos"].astype(int).sum() if not df_t.empty else 0
                         df_e = df_p[df_p["Empleado"] == emp]
@@ -579,7 +610,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
             st.markdown('<div class="main-title" style="font-size: 2rem;">📋 Auditoría de Tareas y Reportes</div>', unsafe_allow_html=True)
             
             st.subheader("🛡️ Tareas y Puntos Pendientes de Aprobación")
-            st.write("Aprobá el trabajo reportado o los puntos sugeridos por los Responsables de Turno.")
             
             try:
                 df_tl_all = pd.read_csv(ARCHIVO_TAREAS_LOG)
@@ -688,7 +718,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 c_f1, c_f2, c_f3 = st.columns(3)
                 fm_emp = c_f1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
                 fm_fecha = c_f2.date_input("Fecha:", ahora.date())
-                
                 fm_hora_cruda = c_f3.time_input("Hora exacta:", ahora.time())
                 fm_hora_str = fm_hora_cruda.strftime("%I:%M:%S %p")
                 
@@ -720,18 +749,22 @@ elif pestaña == "⚙️ Panel de Gerencia":
             col_s1, col_s2 = st.columns(2)
             
             with col_s1:
-                st.subheader("👥 Gestión de Personal y Roles")
-                nuevo_emp = st.text_input("Alta Empleado (Nombre):")
-                rol_asignar = st.selectbox("Rol (Puesto/Cargo):", lista_roles_disponibles)
-                if st.button("➕ Agregar Personal") and nuevo_emp:
-                    if nuevo_emp not in lista_empleados:
-                        lista_empleados.append(nuevo_emp)
-                        roles_empleados[nuevo_emp] = rol_asignar
-                        tareas_individuales[nuevo_emp] = []
-                        save_json(ARCHIVO_EMPLEADOS, lista_empleados)
-                        save_json(ARCHIVO_ROLES, roles_empleados)
-                        save_json(ARCHIVO_TAREAS_INDIVIDUALES, tareas_individuales)
-                        st.rerun()
+                st.subheader("👥 Gestión de Personal y Accesos")
+                with st.form("form_alta_emp"):
+                    nuevo_emp = st.text_input("Alta Empleado (Nombre y Apellido):")
+                    rol_asignar = st.selectbox("Rol (Puesto/Cargo):", lista_roles_disponibles)
+                    pass_asignar = st.text_input("Crear Contraseña para su Portal:", value="1234")
+                    if st.form_submit_button("➕ Agregar Personal") and nuevo_emp:
+                        if nuevo_emp not in lista_empleados:
+                            lista_empleados.append(nuevo_emp)
+                            roles_empleados[nuevo_emp] = rol_asignar
+                            tareas_individuales[nuevo_emp] = []
+                            passwords_empleados[nuevo_emp] = pass_asignar
+                            save_json(ARCHIVO_EMPLEADOS, lista_empleados)
+                            save_json(ARCHIVO_ROLES, roles_empleados)
+                            save_json(ARCHIVO_TAREAS_INDIVIDUALES, tareas_individuales)
+                            save_json(ARCHIVO_PASSWORDS, passwords_empleados)
+                            st.rerun()
                 
                 st.write("---")
                 st.write("**Nómina Actual y Modificaciones:**")
@@ -739,12 +772,15 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     emp_mod = st.selectbox("Seleccionar para editar/borrar:", sorted(lista_empleados))
                     rol_actual = roles_empleados.get(emp_mod, lista_roles_disponibles[0])
                     nuevo_rol = st.selectbox("Cambiar Rol a:", lista_roles_disponibles, index=lista_roles_disponibles.index(rol_actual) if rol_actual in lista_roles_disponibles else 0)
+                    nueva_pass = st.text_input("Cambiar Contraseña:", value=passwords_empleados.get(emp_mod, "1234"))
                     
                     c_mod1, c_mod2, c_mod3 = st.columns(3)
-                    if c_mod1.button("✏️ Guardar Rol"):
+                    if c_mod1.button("✏️ Guardar Rol/Pass"):
                         roles_empleados[emp_mod] = nuevo_rol
+                        passwords_empleados[emp_mod] = nueva_pass
                         save_json(ARCHIVO_ROLES, roles_empleados)
-                        st.rerun()
+                        save_json(ARCHIVO_PASSWORDS, passwords_empleados)
+                        st.success("Actualizado.")
                     if c_mod2.button("📱 Liberar Celular"):
                         if emp_mod in dispositivos_vinculados:
                             del dispositivos_vinculados[emp_mod]
@@ -755,27 +791,12 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         roles_empleados.pop(emp_mod, None)
                         tareas_individuales.pop(emp_mod, None)
                         dispositivos_vinculados.pop(emp_mod, None)
+                        passwords_empleados.pop(emp_mod, None)
                         save_json(ARCHIVO_EMPLEADOS, lista_empleados)
                         save_json(ARCHIVO_ROLES, roles_empleados)
                         save_json(ARCHIVO_TAREAS_INDIVIDUALES, tareas_individuales)
                         save_json(ARCHIVO_DISPOSITIVOS, dispositivos_vinculados)
-                        st.rerun()
-                        
-                st.write("---")
-                st.subheader("🛠️ Administrar Cargos de la Empresa")
-                c_r_new, c_r_del = st.columns(2)
-                with c_r_new:
-                    nuevo_rol_cat = st.text_input("Crear Nuevo Rol:")
-                    if st.button("➕ Agregar Rol") and nuevo_rol_cat:
-                        if nuevo_rol_cat not in lista_roles_disponibles:
-                            lista_roles_disponibles.append(nuevo_rol_cat)
-                            save_json(ARCHIVO_LISTA_ROLES, lista_roles_disponibles)
-                            st.rerun()
-                with c_r_del:
-                    borrar_rol_cat = st.selectbox("Eliminar Rol:", ["Seleccionar..."] + lista_roles_disponibles)
-                    if st.button("🗑️ Eliminar Rol") and borrar_rol_cat != "Seleccionar...":
-                        lista_roles_disponibles.remove(borrar_rol_cat)
-                        save_json(ARCHIVO_LISTA_ROLES, lista_roles_disponibles)
+                        save_json(ARCHIVO_PASSWORDS, passwords_empleados)
                         st.rerun()
 
             with col_s2:
@@ -822,14 +843,74 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                         st.rerun()
 
         # ==========================================
-        # TAB 6: TIENDAS Y REDES
+        # TAB 6: COMUNICADOS Y ALERTAS AUTOMÁTICAS
+        # ==========================================
+        with tab_comunicados:
+            st.markdown('<div class="main-title" style="font-size: 2rem;">📢 Comunicados y Alertas</div>', unsafe_allow_html=True)
+            col_m1, col_m2 = st.columns(2)
+            
+            with col_m1:
+                st.subheader("📲 Mensaje Automático al Ingresar")
+                st.write("Saltará como alerta en el celular del empleado justo cuando fiche la Entrada.")
+                with st.form("form_alertas_ingreso"):
+                    tipo_dest_ing = st.radio("Destinatario de la alerta:", ["Para todo el Staff", "Para un empleado en particular"])
+                    dest_ing = "Todos"
+                    if tipo_dest_ing == "Para un empleado en particular": dest_ing = st.selectbox("Seleccionar:", ["Seleccionar..."] + sorted(lista_empleados))
+                    txt_alerta = st.text_area("Contenido del mensaje:")
+                    if st.form_submit_button("Crear Alerta de Ingreso"):
+                        if txt_alerta and dest_ing != "Seleccionar...":
+                            alertas_ingreso.append({"destinatario": dest_ing, "texto": txt_alerta})
+                            save_json(ARCHIVO_ALERTAS_INGRESO, alertas_ingreso)
+                            st.success("¡Alerta creada!")
+                            st.rerun()
+                
+                st.markdown("**Alertas de Ingreso Activas:**")
+                for idx, a in enumerate(alertas_ingreso):
+                    with st.expander(f"A {a['destinatario']}: {a['texto'][:20]}..."):
+                        st.write(a['texto'])
+                        if st.button("🗑️ Eliminar Alerta", key=f"del_al_{idx}"):
+                            alertas_ingreso.pop(idx)
+                            save_json(ARCHIVO_ALERTAS_INGRESO, alertas_ingreso)
+                            st.rerun()
+            
+            with col_m2:
+                st.subheader("📌 Mensaje Fijo en el Portal")
+                st.write("Quedará siempre visible en la pantalla principal de los celulares.")
+                with st.form("form_fijo"):
+                    tipo_dest = st.radio("Destinatario del anuncio:", ["Para todo el Staff", "Para un vendedor/a"])
+                    destinatario = "Todos"
+                    if tipo_dest == "Para un vendedor/a": destinatario = st.selectbox("Seleccionar persona:", ["Seleccionar..."] + sorted(lista_empleados))
+                    texto_mensaje = st.text_area("Contenido del anuncio:")
+                    if st.form_submit_button("🚀 Publicar Anuncio Fijo"):
+                        if texto_mensaje and destinatario != "Seleccionar...":
+                            lista_mensajes.append({"destinatario": destinatario, "texto": texto_mensaje})
+                            save_json(ARCHIVO_MENSAJES, lista_mensajes)
+                            st.success("¡Anuncio publicado!")
+                            st.rerun()
+
+                st.markdown("**Anuncios Fijos Activos:**")
+                for idx, m in enumerate(lista_mensajes):
+                    with st.expander(f"A {m['destinatario']}: {m['texto'][:20]}..."):
+                        n_txt = st.text_area("Editar texto:", value=m['texto'], key=f"txt_m_{idx}")
+                        c_me1, c_me2 = st.columns(2)
+                        if c_me1.button("💾 Guardar Cambio", key=f"save_m_{idx}"):
+                            lista_mensajes[idx]['texto'] = n_txt
+                            save_json(ARCHIVO_MENSAJES, lista_mensajes)
+                            st.rerun()
+                        if c_me2.button("🗑️ Eliminar Anuncio", key=f"del_m_{idx}"):
+                            lista_mensajes.pop(idx)
+                            save_json(ARCHIVO_MENSAJES, lista_mensajes)
+                            st.rerun()
+
+        # ==========================================
+        # TAB 7: TIENDAS Y AJUSTES
         # ==========================================
         with tab_tiendas:
-            st.markdown('<div class="main-title" style="font-size: 2rem;">📍 Tiendas, Turnos y Redes</div>', unsafe_allow_html=True)
+            st.markdown('<div class="main-title" style="font-size: 2rem;">⚙️ Tiendas, Redes y Ajustes Generales</div>', unsafe_allow_html=True)
             col_l1, col_l2 = st.columns(2)
             with col_l1:
                 st.subheader("📍 Tiendas Físicas")
-                for loc, d_loc in lista_locales.items(): st.write(f"- **{loc}** | IP Configurada: `{d_loc.get('ip', 'Ninguna')}`")
+                for loc, d_loc in lista_locales.items(): st.write(f"- **{loc}** | IP: `{d_loc.get('ip', 'Ninguna')}`")
                 n_loc = st.text_input("Nueva Tienda:")
                 lat_loc = st.number_input("Latitud:", format="%.6f")
                 lon_loc = st.number_input("Longitud:", format="%.6f")
@@ -845,7 +926,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     st.rerun()
 
             with col_l2:
-                st.subheader("🕒 Turnos / Horarios (Formato AM/PM)")
+                st.subheader("🕒 Turnos / Horarios (AM/PM)")
                 for turno, horas in lista_turnos.items(): st.write(f"- **{turno}** | De {horas.get('ingreso')} a {horas.get('salida')}")
                 n_turno = st.text_input("Nuevo Horario (Nombre):")
                 col_h1, col_h2 = st.columns(2)
@@ -862,27 +943,22 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     st.rerun()
 
             st.markdown("---")
-            st.subheader("🛡️ Seguridad Global (Aplica a todas las tiendas)")
-            with st.form("form_seguridad"):
-                v_gps = st.checkbox("📡 Requerir ubicación GPS", value=config_app.get("verificar_gps", True))
-                radio_m = st.number_input("Perímetro permitido en metros (Ej: 50):", min_value=10, max_value=5000, value=int(config_app.get("radio_metros", 50)))
-                v_wifi = st.checkbox("📶 Requerir conexión Wi-Fi (Debe coincidir con la IP de la tienda creada arriba)", value=config_app.get("verificar_wifi", False))
-                st.caption(f"ℹ️ Si estás en el local ahora mismo, tu IP es: **{client_ip if client_ip else 'Detectando...'}** (Copiá este número al crear la Tienda arriba)")
-                
-                if st.form_submit_button("💾 Guardar Seguridad"):
-                    config_app["verificar_gps"] = v_gps
-                    config_app["verificar_wifi"] = v_wifi
-                    config_app["radio_metros"] = radio_m
-                    save_json(ARCHIVO_CONFIG, config_app)
-                    st.rerun()
-
-        # ==========================================
-        # TAB 7: CONFIGURACIÓN GLOBAL
-        # ==========================================
-        with tab_ajustes:
             col_aj1, col_aj2 = st.columns(2)
             with col_aj1:
-                st.subheader("🏆 Reglas de Asistencia")
+                st.subheader("🛡️ Seguridad Global de Fichaje")
+                with st.form("form_seguridad"):
+                    v_gps = st.checkbox("📡 Requerir ubicación GPS", value=config_app.get("verificar_gps", True))
+                    radio_m = st.number_input("Perímetro permitido en metros:", min_value=10, max_value=5000, value=int(config_app.get("radio_metros", 50)))
+                    v_wifi = st.checkbox("📶 Requerir conexión Wi-Fi", value=config_app.get("verificar_wifi", False))
+                    st.caption(f"ℹ️ Tu IP actual es: **{client_ip if client_ip else 'Detectando...'}**")
+                    if st.form_submit_button("💾 Guardar Seguridad"):
+                        config_app["verificar_gps"] = v_gps
+                        config_app["verificar_wifi"] = v_wifi
+                        config_app["radio_metros"] = radio_m
+                        save_json(ARCHIVO_CONFIG, config_app)
+                        st.rerun()
+            with col_aj2:
+                st.subheader("🏆 Motor de Reglas de Asistencia")
                 with st.form("form_reglas"):
                     r_base = st.number_input("Puntaje Base del Mes:", value=config_app.get("reglas_puntos", {}).get("base", 100))
                     c_r1, c_r2 = st.columns(2)
@@ -894,33 +970,27 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         config_app["reglas_puntos"] = {"base": r_base, "A tiempo": r_ok, "Tarde": r_tar, "Ausente": r_aus, "Falta Justificada": r_fj}
                         save_json(ARCHIVO_CONFIG, config_app)
                         st.rerun()
-                
-                st.markdown("---")
-                st.subheader("📢 Anuncios y Alertas")
-                nuevo_mensaje = st.text_area("Comunicado Fijo (App):", value=config_app.get("mensaje_dia", ""))
-                msg_tarde = st.text_area("Alerta Llegada Tarde:", value=config_app.get("mensaje_llegada_tarde", ""))
-                msg_salida_l = st.text_area("Alerta Salida Lejos:", value=config_app.get("mensaje_salida_lejos", ""))
-                
-                if st.button("💾 Guardar Textos"):
-                    config_app["mensaje_dia"] = nuevo_mensaje
-                    config_app["mensaje_llegada_tarde"] = msg_tarde
-                    config_app["mensaje_salida_lejos"] = msg_salida_l
-                    save_json(ARCHIVO_CONFIG, config_app)
-                    st.rerun()
-
-            with col_aj2:
-                st.subheader("⚙️ Operaciones Generales")
+            
+            st.markdown("---")
+            st.subheader("⚙️ Operaciones y Base de Datos")
+            col_bd1, col_bd2 = st.columns(2)
+            with col_bd1:
+                st.write("**Alertas y Límites:**")
                 req_salida = st.checkbox("Requerir botón 'Salida'", value=config_app.get("requiere_salida", True))
                 nueva_tolerancia = st.number_input("Minutos tolerancia tardanza:", min_value=0, max_value=60, value=int(config_app.get("tolerancia_minutos", 10)))
+                msg_tarde = st.text_area("Alerta Llegada Tarde:", value=config_app.get("mensaje_llegada_tarde", ""))
+                msg_salida_l = st.text_area("Alerta Salida Lejos:", value=config_app.get("mensaje_salida_lejos", ""))
                 if st.button("💾 Guardar Ajustes Operativos"):
                     config_app["requiere_salida"] = req_salida
                     config_app["tolerancia_minutos"] = nueva_tolerancia
+                    config_app["mensaje_llegada_tarde"] = msg_tarde
+                    config_app["mensaje_salida_lejos"] = msg_salida_l
                     save_json(ARCHIVO_CONFIG, config_app)
                     st.success("Configuración actualizada.")
                     st.rerun()
 
-                st.markdown("---")
-                st.write("🔑 **Seguridad Gerencial**")
+            with col_bd2:
+                st.write("🔑 **Cambiar Clave Gerencial**")
                 nc = st.text_input("Nueva clave de acceso:", type="password")
                 rc = st.text_input("Repetir clave:", type="password")
                 if st.button("🔒 Cambiar Clave") and nc == rc and nc:
@@ -928,7 +998,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     save_json(ARCHIVO_CONFIG, config_app)
                     st.success("Clave modificada.")
                 
-                st.markdown("---")
+                st.markdown("<br>", unsafe_allow_html=True)
                 with st.expander("⚠️ Opciones de Base de Datos (Peligro)"):
                     if st.button("🧹 Limpiar historial de ex-empleados"):
                         try:
@@ -941,5 +1011,21 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         init_csv(ARCHIVO_TAREAS_LOG, ["Fecha", "Hora", "Empleado", "Tarea", "Puntos", "Estado"])
                         save_json(ARCHIVO_PUNTOS, [])
                         save_json(ARCHIVO_REPORTES, [])
+                        save_json(ARCHIVO_ALERTAS_INGRESO, [])
                         st.success("Bases de datos reiniciadas.")
                         st.rerun()
+
+        # ==========================================
+        # TAB 8: SEGURIDAD (MODO ESPÍA) 🕵️
+        # ==========================================
+        with tab_espia:
+            st.markdown('<div class="main-title" style="font-size: 2rem;">🕵️ Registro Espía de Accesos</div>', unsafe_allow_html=True)
+            st.write("Acá podés ver quién intentó adivinar la contraseña de Gerencia.")
+            if lista_intentos:
+                df_int = pd.DataFrame(lista_intentos).sort_values(by=["Fecha", "Hora"], ascending=[False, False])
+                st.dataframe(df_int, use_container_width=True, hide_index=True)
+                if st.button("🗑️ Limpiar registro espía"):
+                    save_json(ARCHIVO_INTENTOS, [])
+                    st.rerun()
+            else:
+                st.info("Nadie intentó ingresar al panel por ahora.")
