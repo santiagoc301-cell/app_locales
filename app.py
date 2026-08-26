@@ -215,9 +215,11 @@ if pestaña == "⏱️ Portal del Empleado":
                 datos_turno_activo = {}
                 
                 if not df_hoy.empty:
-                    # CORRECCIÓN DE ORDENAMIENTO (Evita el bug del estado Adentro/Fuera)
-                    df_hoy['Hora_dt'] = pd.to_datetime(df_hoy['Hora'], format='%I:%M:%S %p', errors='coerce')
-                    df_hoy = df_hoy.sort_values(by="Hora_dt")
+                    # CORRECCIÓN DE ESTADO (INFALIBLE)
+                    # En lugar de leer horas como texto, usamos el número de ID único de la base de datos que siempre va hacia adelante.
+                    if 'id' in df_hoy.columns:
+                        df_hoy['id_num'] = pd.to_numeric(df_hoy['id'], errors='coerce')
+                        df_hoy = df_hoy.sort_values(by="id_num")
                     
                     ultimo_reg = df_hoy.iloc[-1]
                     if ultimo_reg["Tipo"] == "Entrada":
@@ -328,8 +330,9 @@ if pestaña == "⏱️ Portal del Empleado":
                 if not df_punt.empty:
                     df_emp = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["F_Obj"] >= (ahora.date() - datetime.timedelta(days=7)))].copy()
                     if not df_emp.empty:
-                        df_emp['Hora_dt'] = pd.to_datetime(df_emp['Hora'], format='%I:%M:%S %p', errors='coerce')
-                        df_emp = df_emp.sort_values(by=["Fecha", "Hora_dt"], ascending=[False, False])
+                        if 'id' in df_emp.columns:
+                            df_emp['id_num'] = pd.to_numeric(df_emp['id'], errors='coerce')
+                            df_emp = df_emp.sort_values(by="id_num", ascending=False)
                         st.dataframe(df_emp[["Fecha", "Hora", "Tipo", "Estado", "Nota"]], hide_index=True, use_container_width=True)
                     else: st.write("Sin fichajes recientes.")
         else:
@@ -404,8 +407,8 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         horas_totales = 0.0
                         for f in df_e["Fecha"].unique():
                             df_ef = df_e[df_e["Fecha"] == f].copy()
-                            # CORRECCIÓN DE CÁLCULO DE HORAS
-                            df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], format='%I:%M:%S %p', errors='coerce')
+                            # CORRECCIÓN DE CÁLCULO DE HORAS TOLERANTE A FORMATOS
+                            df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
                             df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                             ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                             
@@ -419,7 +422,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         
                     if datos_horas: st.dataframe(pd.DataFrame(datos_horas).sort_values(by="⏱️ Horas Computadas", ascending=False), use_container_width=True, hide_index=True)
                     
-                    # --- PANEL DE DESCARGAS PERSONALIZADO ---
                     st.write("---")
                     st.subheader("📥 Exportar Planilla de Asistencia (Excel/CSV)")
                     c_dl1, c_dl2, c_dl3 = st.columns(3)
@@ -434,9 +436,9 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         df_dl = df_dl[df_dl["Sucursal"] == local_descarga]
                     
                     if not df_dl.empty:
-                        df_dl['Hora_dt'] = pd.to_datetime(df_dl['Hora'], format='%I:%M:%S %p', errors='coerce')
+                        df_dl['Hora_dt'] = pd.to_datetime(df_dl['Hora'], errors='coerce')
                         df_dl = df_dl.sort_values(by=["Fecha", "Hora_dt"])
-                        df_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]] # Limpiamos columnas extras
+                        df_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
                         csv = df_dl.to_csv(index=False).encode('utf-8')
                         st.download_button(label="⬇️ Descargar Reporte Generado", data=csv, file_name=f"Reporte_Asistencia_{fecha_in_dl}.csv", mime="text/csv", use_container_width=True)
                     else:
@@ -571,8 +573,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     horas_totales = 0.0
                     for f in df_e_p["Fecha"].unique():
                         df_ef = df_e_p[df_e_p["Fecha"] == f].copy()
-                        # CORRECCIÓN DE CÁLCULO DE HORAS PARA EL PERFIL
-                        df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], format='%I:%M:%S %p', errors='coerce')
+                        df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
                         df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                         ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                         if not ent.empty and not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
@@ -595,8 +596,9 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     c_pf3.metric("⚠️ Tardes", e_tardes)
                     c_pf4.metric("❌ Ausencias", e_ausencias)
                     with st.expander("Ficha Detallada"): 
-                        df_e_p['Hora_dt'] = pd.to_datetime(df_e_p['Hora'], format='%I:%M:%S %p', errors='coerce')
-                        df_e_p = df_e_p.sort_values(by=["Fecha", "Hora_dt"], ascending=[False, False])
+                        if 'id' in df_e_p.columns:
+                            df_e_p['id_num'] = pd.to_numeric(df_e_p['id'], errors='coerce')
+                            df_e_p = df_e_p.sort_values(by="id_num", ascending=False)
                         st.dataframe(df_e_p[["Fecha", "Hora", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]], use_container_width=True, hide_index=True)
 
         with tab_staff:
