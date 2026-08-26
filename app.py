@@ -8,27 +8,40 @@ import json
 import altair as alt
 
 # Configuración inicial de la página
-st.set_page_config(
-    page_title="Gestión de Personal - Locales",
-    page_icon="🛍️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Gestión de Personal - Locales", page_icon="🛍️", layout="wide", initial_sidebar_state="expanded")
 
 # ==========================================
 # 💎 ESTÉTICA PREMIUM COMERCIAL (CSS)
 # ==========================================
 st.markdown("""
 <style>
-    .main-title { font-size: 2.5rem; font-weight: 800; color: #111827; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: -0.5px;}
-    .sub-text { font-size: 1.1rem; color: #4B5563; margin-bottom: 2rem; }
-    div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #E5E7EB; padding: 15px 15px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border-left: 5px solid #111827; }
-    div[data-testid="stMetricValue"] { font-size: 1.8rem; font-weight: 700; color: #111827; }
-    .stButton>button { border-radius: 8px; font-weight: 600; transition: all 0.2s; border: 1px solid #D1D5DB; }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-    hr { border-color: #E5E7EB; margin-top: 1.5rem; margin-bottom: 1.5rem; }
-    .msg-global { border-left: 5px solid #111827; padding: 10px; background-color: #F3F4F6; border-radius: 5px; margin-bottom: 10px; }
-    .msg-individual { border-left: 5px solid #F59E0B; padding: 10px; background-color: #FFFBEB; border-radius: 5px; margin-bottom: 10px; }
+    /* Tipografía y Títulos */
+    .main-title { font-size: 2.8rem; font-weight: 800; color: #111827; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: -0.5px;}
+    .sub-text { font-size: 1.15rem; color: #4B5563; margin-bottom: 2rem; }
+    
+    /* Tarjetas de Métricas (Estilo Dashboard Apple/Google) */
+    div[data-testid="metric-container"] { 
+        background-color: #ffffff; 
+        border: 1px solid #E5E7EB; 
+        padding: 20px; 
+        border-radius: 16px; 
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); 
+        border-top: 5px solid #2563EB; 
+        transition: transform 0.2s ease-in-out;
+    }
+    div[data-testid="metric-container"]:hover { transform: translateY(-5px); }
+    div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 800; color: #111827; }
+    
+    /* Botones Modernos */
+    .stButton>button { border-radius: 10px; font-weight: 600; transition: all 0.3s; border: 1px solid #D1D5DB; padding: 0.5rem 1rem; }
+    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 10px -1px rgba(0, 0, 0, 0.1); border-color: #9CA3AF;}
+    
+    /* Cajas de Alerta y Mensajes */
+    .msg-global { border-left: 5px solid #111827; padding: 15px; background-color: #F9FAFB; border-radius: 8px; margin-bottom: 12px; font-size: 1.05rem;}
+    .msg-individual { border-left: 5px solid #F59E0B; padding: 15px; background-color: #FFFBEB; border-radius: 8px; margin-bottom: 12px; font-size: 1.05rem;}
+    .highlight-edit { padding: 20px; background-color: #EFF6FF; border-radius: 12px; border-left: 6px solid #3B82F6; margin-bottom: 20px;}
+    
+    hr { border-color: #E5E7EB; margin-top: 2rem; margin-bottom: 2rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -49,7 +62,7 @@ RADIO_MAXIMO_METROS = 50
 if os.path.exists(ARCHIVO_ASISTENCIA):
     try:
         df_patch = pd.read_csv(ARCHIVO_ASISTENCIA)
-        columnas_requeridas = ["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Distancia_m"]
+        columnas_requeridas = ["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Distancia_m", "Nota"]
         cambios = False
         for col in columnas_requeridas:
             if col not in df_patch.columns:
@@ -57,6 +70,7 @@ if os.path.exists(ARCHIVO_ASISTENCIA):
                 elif col == "Estado": df_patch[col] = "A tiempo"
                 elif col == "Turno": df_patch[col] = "Horario Comercial"
                 elif col == "Distancia_m": df_patch[col] = 0.0
+                elif col == "Nota": df_patch[col] = ""
                 else: df_patch[col] = "N/A"
                 cambios = True
         if cambios: df_patch.to_csv(ARCHIVO_ASISTENCIA, index=False)
@@ -64,45 +78,33 @@ if os.path.exists(ARCHIVO_ASISTENCIA):
 
 # Configuración Inicial
 if not os.path.exists(ARCHIVO_CONFIG):
-    config_inicial = {"admin_password": "1234", "tolerancia_minutos": 10, "requiere_salida": True, "mensaje_llegada_tarde": "⚠️ Registro de llegada fuera del margen de tolerancia."}
+    config_inicial = {"admin_password": "1234", "tolerancia_minutos": 10, "requiere_salida": True, "habilitar_descansos": False, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia."}
     with open(ARCHIVO_CONFIG, 'w') as f: json.dump(config_inicial, f)
 with open(ARCHIVO_CONFIG, 'r') as f: config_app = json.load(f)
 
-if "tolerancia_minutos" not in config_app: config_app["tolerancia_minutos"] = 10
-if "requiere_salida" not in config_app: config_app["requiere_salida"] = True
-if "mensaje_llegada_tarde" not in config_app: config_app["mensaje_llegada_tarde"] = "⚠️ Registro de llegada fuera del margen de tolerancia."
+for k, v in [("tolerancia_minutos", 10), ("requiere_salida", True), ("habilitar_descansos", False), ("mensaje_llegada_tarde", "⚠️ Llegada fuera del margen de tolerancia.")]:
+    if k not in config_app: config_app[k] = v
 
 # Personal
-if not os.path.exists(ARCHIVO_EMPLEADOS):
-    empleados_iniciales = ["Abril", "Agustina", "Camila", "Daniela", "Macarena", "Nicolás"]
-    with open(ARCHIVO_EMPLEADOS, 'w') as f: json.dump(empleados_iniciales, f)
+with open(ARCHIVO_EMPLEADOS, 'r') if os.path.exists(ARCHIVO_EMPLEADOS) else open(ARCHIVO_EMPLEADOS, 'w') as f:
+    if not os.path.exists(ARCHIVO_EMPLEADOS): json.dump(["Abril Gonzalez", "Agustina Lopez", "Daniela Perez", "Macarena Silva"], f)
 with open(ARCHIVO_EMPLEADOS, 'r') as f: lista_empleados = json.load(f)
 if isinstance(lista_empleados, dict): lista_empleados = list(lista_empleados.keys())
 
-# Dispositivos
+# Dispositivos, Locales, Turnos, Mensajes, Intentos
 if not os.path.exists(ARCHIVO_DISPOSITIVOS):
     with open(ARCHIVO_DISPOSITIVOS, 'w') as f: json.dump({}, f)
 with open(ARCHIVO_DISPOSITIVOS, 'r') as f: dispositivos_vinculados = json.load(f)
 
-# Locales
 if not os.path.exists(ARCHIVO_LOCALES):
-    locales_iniciales = {"Local 1 - Centro": {"lat": -24.788296, "lon": -65.409429}, "Local 2 - Shopping": {"lat": -24.808264, "lon": -65.404947}}
-    with open(ARCHIVO_LOCALES, 'w') as f: json.dump(locales_iniciales, f)
+    with open(ARCHIVO_LOCALES, 'w') as f: json.dump({"Local 1 - Centro": {"lat": -24.788296, "lon": -65.409429}}, f)
 with open(ARCHIVO_LOCALES, 'r') as f: lista_locales = json.load(f)
 
-# Turnos (AHORA CON INGRESO Y SALIDA)
 if not os.path.exists(ARCHIVO_TURNOS):
-    turnos_iniciales = {"Apertura": {"ingreso": "09:00", "salida": "17:00"}, "Turno Tarde": {"ingreso": "17:00", "salida": "22:00"}}
-    with open(ARCHIVO_TURNOS, 'w') as f: json.dump(turnos_iniciales, f)
+    with open(ARCHIVO_TURNOS, 'w') as f: json.dump({"Apertura": {"ingreso": "09:00", "salida": "17:00"}, "Turno Tarde": {"ingreso": "17:00", "salida": "22:00"}}, f)
 with open(ARCHIVO_TURNOS, 'r') as f: 
-    lista_turnos_raw = json.load(f)
-    lista_turnos = {}
-    # Parche automático por si los turnos estaban en formato viejo (solo texto)
-    for k, v in lista_turnos_raw.items():
-        if isinstance(v, str): lista_turnos[k] = {"ingreso": v, "salida": "23:59"}
-        else: lista_turnos[k] = v
+    lista_turnos = {k: {"ingreso": v, "salida": "23:59"} if isinstance(v, str) else v for k, v in json.load(f).items()}
 
-# Mensajes y Seguridad
 if not os.path.exists(ARCHIVO_MENSAJES):
     with open(ARCHIVO_MENSAJES, 'w') as f: json.dump([], f)
 with open(ARCHIVO_MENSAJES, 'r') as f: lista_mensajes = json.load(f)
@@ -117,10 +119,7 @@ with open(ARCHIVO_INTENTOS, 'r') as f: lista_intentos = json.load(f)
 js_get_device = """
 (function() {
     let id = localStorage.getItem('tienda_app_device_id');
-    if (!id) {
-        id = 'dev_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('tienda_app_device_id', id);
-    }
+    if (!id) { id = 'dev_' + Math.random().toString(36).substring(2, 15); localStorage.setItem('tienda_app_device_id', id); }
     return id;
 })();
 """
@@ -133,14 +132,20 @@ if device_id:
             empleado_en_celu = emp
             break
 
+def procesar_rango_fechas(rango):
+    if isinstance(rango, tuple) or isinstance(rango, list):
+        if len(rango) == 2: return rango[0], rango[1]
+        elif len(rango) == 1: return rango[0], rango[0]
+    return rango, rango
+
 # ==========================================
-# 3. NAVEGACIÓN
+# 3. INTERFAZ PRINCIPAL
 # ==========================================
 st.sidebar.title("🛍️ Menú Principal")
 pestaña = st.sidebar.radio("Navegar a:", ["⏱️ Fichar Asistencia", "⚙️ Panel de Gerencia"])
 
 # ==========================================
-# 4. PANTALLA: MARCAR ASISTENCIA
+# 4. PANTALLA: FICHAR ASISTENCIA (VENDEDOR)
 # ==========================================
 if pestaña == "⏱️ Fichar Asistencia":
     st.markdown('<div class="main-title">⏱️ Portal de Asistencia</div>', unsafe_allow_html=True)
@@ -166,6 +171,8 @@ if pestaña == "⏱️ Fichar Asistencia":
             col_sel1, col_sel2 = st.columns(2)
             with col_sel1: local_seleccionado = st.selectbox("📍 Tienda actual:", ["Seleccionar..."] + list(lista_locales.keys()))
             with col_sel2: turno_seleccionado = st.selectbox("🕒 Horario:", ["Seleccionar..."] + list(lista_turnos.keys()))
+
+            nota_empleado = st.text_input("📝 ¿Necesitás dejar un aviso? (Opcional)", placeholder="Ej: Llego tarde por demora en el transporte...")
 
             if turno_seleccionado != "Seleccionar...":
                 horarios = lista_turnos[turno_seleccionado]
@@ -196,21 +203,25 @@ if pestaña == "⏱️ Fichar Asistencia":
 
                         marcar, tipo_fichaje = False, ""
 
-                        if config_app.get("requiere_salida", True):
-                            col_b1, col_b2 = st.columns(2)
-                            with col_b1:
-                                if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
-                                    if ya_ficho_entrada: st.error("⚠️ Ya marcaste el ingreso para este turno.")
-                                    else: marcar, tipo_fichaje = True, "Entrada"
-                            with col_b2:
+                        col_b1, col_b2 = st.columns(2)
+                        with col_b1:
+                            if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
+                                if ya_ficho_entrada: st.error("⚠️ Ya marcaste el ingreso para este turno.")
+                                else: marcar, tipo_fichaje = True, "Entrada"
+                        with col_b2:
+                            if config_app.get("requiere_salida", True):
                                 if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
                                     marcar, tipo_fichaje = True, "Salida"
-                        else:
-                            col_centrada, _, _ = st.columns([2, 1, 1])
-                            with col_centrada:
-                                if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
-                                    if ya_ficho_entrada: st.error("⚠️ Ya marcaste el ingreso para este turno.")
-                                    else: marcar, tipo_fichaje = True, "Entrada"
+                        
+                        if config_app.get("habilitar_descansos", False):
+                            st.write("") 
+                            col_d1, col_d2 = st.columns(2)
+                            with col_d1:
+                                if st.button("☕ INICIO DE PAUSA", use_container_width=True):
+                                    marcar, tipo_fichaje = True, "Inicio Descanso"
+                            with col_d2:
+                                if st.button("🔙 FIN DE PAUSA", use_container_width=True):
+                                    marcar, tipo_fichaje = True, "Fin Descanso"
 
                         if marcar:
                             hora = ahora.strftime("%H:%M:%S")
@@ -220,10 +231,10 @@ if pestaña == "⏱️ Fichar Asistencia":
                                 dt_turno = datetime.datetime.combine(ahora.date(), hora_turno_obj).replace(tzinfo=zona_arg)
                                 dt_limite = dt_turno + datetime.timedelta(minutes=int(config_app["tolerancia_minutos"]))
                                 estado_llegada = "Tarde" if ahora > dt_limite else "A tiempo"
-                            elif tipo_fichaje == "Salida":
-                                estado_llegada = "Salida"
+                            elif tipo_fichaje == "Salida": estado_llegada = "Salida"
+                            else: estado_llegada = "Pausa"
 
-                            registro = {"Fecha": [fecha_hoy], "Hora": [hora], "Empleado": [empleado_en_celu], "Sucursal": [local_seleccionado], "Turno": [turno_seleccionado], "Tipo": [tipo_fichaje], "Estado": [estado_llegada], "Distancia_m": [round(distancia, 1)]}
+                            registro = {"Fecha": [fecha_hoy], "Hora": [hora], "Empleado": [empleado_en_celu], "Sucursal": [local_seleccionado], "Turno": [turno_seleccionado], "Tipo": [tipo_fichaje], "Estado": [estado_llegada], "Distancia_m": [round(distancia, 1)], "Nota": [nota_empleado]}
                             df_nuevo = pd.DataFrame(registro)
 
                             if not os.path.exists(ARCHIVO_ASISTENCIA): df_nuevo.to_csv(ARCHIVO_ASISTENCIA, index=False)
@@ -236,6 +247,8 @@ if pestaña == "⏱️ Fichar Asistencia":
                                 st.success(f"¡Entrada comercial registrada a las {hora}!")
                             elif estado_llegada == "Tarde":
                                 st.error(f"🔴 {config_app.get('mensaje_llegada_tarde', 'Llegada Tarde')} (Registrado: {hora})")
+                            elif "Descanso" in tipo_fichaje:
+                                st.info(f"⏳ {tipo_fichaje} registrado a las {hora}.")
                             else:
                                 st.success(f"¡Salida registrada a las {hora}! Buen descanso.")
                     else: st.error(f"❌ Estás fuera del radio de la tienda (Distancia: {distancia:.1f} m).")
@@ -243,13 +256,18 @@ if pestaña == "⏱️ Fichar Asistencia":
             else: st.info("👆 Por favor, elegí la tienda y tu horario.")
 
             st.markdown("---")
-            st.subheader("📜 Tus movimientos de hoy")
-            if os.path.exists(ARCHIVO_ASISTENCIA):
-                zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
-                df_hist = pd.read_csv(ARCHIVO_ASISTENCIA)
-                df_emp = df_hist[(df_hist["Empleado"] == empleado_en_celu) & (df_hist["Fecha"] == datetime.datetime.now(zona_arg).strftime("%Y-%m-%d"))]
-                if not df_emp.empty: st.dataframe(df_emp[["Hora", "Sucursal", "Turno", "Tipo", "Estado"]], hide_index=True, use_container_width=True)
-                else: st.write("No tenés fichajes en el día de la fecha.")
+            with st.expander("📜 Ver mi historial de los últimos 7 días"):
+                if os.path.exists(ARCHIVO_ASISTENCIA):
+                    zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
+                    hoy = datetime.datetime.now(zona_arg).date()
+                    hace_7 = hoy - datetime.timedelta(days=7)
+                    
+                    df_hist = pd.read_csv(ARCHIVO_ASISTENCIA)
+                    df_hist['Fecha_Obj'] = pd.to_datetime(df_hist['Fecha'], errors='coerce').dt.date
+                    df_emp = df_hist[(df_hist["Empleado"] == empleado_en_celu) & (df_hist["Fecha_Obj"] >= hace_7)].sort_values(by=["Fecha", "Hora"], ascending=[False, False])
+                    
+                    if not df_emp.empty: st.dataframe(df_emp[["Fecha", "Hora", "Tipo", "Estado", "Nota"]], hide_index=True, use_container_width=True)
+                    else: st.write("No tenés fichajes recientes.")
         else:
             st.warning("⚠️ **Equipo no autorizado.**")
             empleados_disponibles = [e for e in sorted(lista_empleados) if e not in dispositivos_vinculados.keys()]
@@ -279,30 +297,25 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 st.session_state['last_pw_attempt'] = password_ingresada
                 zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
                 ahora = datetime.datetime.now(zona_arg)
-                
                 quien_intenta = empleado_en_celu if empleado_en_celu else "Desconocido (No vinculado)"
                 es_correcto = password_ingresada == config_app["admin_password"]
                 estado_intento = "🟢 Acceso Permitido" if es_correcto else "🔴 Acceso Denegado"
                 
-                nuevo_intento = {
-                    "Fecha": ahora.strftime("%Y-%m-%d"),
-                    "Hora": ahora.strftime("%H:%M:%S"),
-                    "Usuario": quien_intenta,
-                    "Clave Probada": password_ingresada,
-                    "Resultado": estado_intento
-                }
+                nuevo_intento = {"Fecha": ahora.strftime("%Y-%m-%d"), "Hora": ahora.strftime("%H:%M:%S"), "Usuario": quien_intenta, "Clave Probada": password_ingresada, "Resultado": estado_intento}
                 lista_intentos.append(nuevo_intento)
                 with open(ARCHIVO_INTENTOS, 'w') as f: json.dump(lista_intentos, f)
 
     if password_ingresada == config_app["admin_password"] or password_ingresada == CLAVE_OCULTA:
         
-        tab_estadisticas, tab_auditoria, tab_mensajes, tab_personal, tab_locales, tab_ajustes, tab_seguridad = st.tabs([
-            "📈 Analytics & Gráficos", "📊 Reportes y Edición", "📢 Comunicados", "👥 Staff", "📍 Tiendas/Turnos", "⚙️ Sistema", "🕵️ Seguridad"
+        tab_estadisticas, tab_puntuacion, tab_auditoria, tab_mensajes, tab_personal, tab_locales, tab_ajustes, tab_seguridad = st.tabs([
+            "📈 Análisis Gráfico", "🏆 Puntuación y Ranking", "📊 Editar y Exportar", "📢 Comunicados", "👥 Staff", "📍 Tiendas/Turnos", "⚙️ Configuración", "🕵️ Seguridad"
         ])
 
-        # TAB 1: ANALYTICS Y GRÁFICOS (NUEVO DASHBOARD PROFESIONAL)
+        # ==========================================
+        # TAB 1: DASHBOARD ANALYTICS (VISUAL)
+        # ==========================================
         with tab_estadisticas:
-            st.subheader("📈 Análisis Estratégico de Presentismo")
+            st.markdown('<div class="main-title" style="font-size: 2rem;">📈 Centro de Mando Analítico</div>', unsafe_allow_html=True)
             if os.path.exists(ARCHIVO_ASISTENCIA):
                 df_stats = pd.read_csv(ARCHIVO_ASISTENCIA)
                 if "Tipo" not in df_stats.columns: df_stats["Tipo"] = "Entrada"
@@ -317,86 +330,197 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     hoy = datetime.datetime.now(zona_arg).date()
                     hace_30_dias = hoy - datetime.timedelta(days=30)
                     
-                    st.markdown("### 🔎 Filtrar Análisis")
-                    rango_stats = st.date_input("Seleccionar periodo de análisis (Desde - Hasta):", value=(hace_30_dias, hoy), key="calendario_stats")
+                    st.write("Seleccioná un día específico o un rango arrastrando en el calendario:")
+                    rango_stats = st.date_input("🗓️ Periodo de análisis:", value=(hace_30_dias, hoy), key="calendario_stats")
+                    s_inicio, s_fin = procesar_rango_fechas(rango_stats)
                     
-                    if len(rango_stats) == 2:
-                        s_inicio, s_fin = rango_stats
-                        datos_pers = df_activos[(df_activos['Fecha_Obj'].dt.date >= s_inicio) & (df_activos['Fecha_Obj'].dt.date <= s_fin)]
+                    df_periodo = df_activos[(df_activos['Fecha_Obj'].dt.date >= s_inicio) & (df_activos['Fecha_Obj'].dt.date <= s_fin)]
+                    
+                    if not df_periodo.empty:
+                        df_entradas = df_periodo[df_periodo["Tipo"] == "Entrada"]
+                        df_ausencias = df_periodo[df_periodo["Tipo"] == "Ausente"]
                         
-                        if not datos_pers.empty:
-                            # 1. KPIs Rápidos
-                            c1, c2, c3, c4 = st.columns(4)
-                            entradas = datos_pers[datos_pers["Tipo"] == "Entrada"]
-                            ausencias = datos_pers[datos_pers["Tipo"] == "Ausente"]
-                            a_tiempo = len(entradas[entradas["Estado"] == "A tiempo"])
-                            tardes = len(entradas[entradas["Estado"] == "Tarde"])
-                            
-                            c1.metric("Ingresos Totales", len(entradas))
-                            c2.metric("✅ Puntualidad", a_tiempo)
-                            c3.metric("⚠️ Tardanzas", tardes)
-                            c4.metric("❌ Inasistencias", len(ausencias))
-                            
-                            st.write("---")
-                            
-                            # GRÁFICOS VISUALES
-                            graf_col1, graf_col2 = st.columns([2, 1])
-                            
-                            # Gráfico 1: Evolución Diaria
-                            with graf_col1:
-                                st.markdown("**Evolución de Fichajes por Día**")
-                                df_tendencia = entradas.groupby('Fecha').size().reset_index(name='Ingresos')
-                                chart_tendencia = alt.Chart(df_tendencia).mark_line(point=True, color="#3b82f6", strokeWidth=3).encode(
-                                    x=alt.X('Fecha:T', title='Fecha'),
-                                    y=alt.Y('Ingresos:Q', title='Cantidad de Ingresos'),
-                                    tooltip=['Fecha', 'Ingresos']
+                        tot_ingresos = len(df_entradas)
+                        atiempo = len(df_entradas[df_entradas["Estado"] == "A tiempo"])
+                        tardes = len(df_entradas[df_entradas["Estado"] == "Tarde"])
+                        ausencias = len(df_ausencias)
+
+                        # 1. RESUMEN EJECUTIVO
+                        punt_grupal = round((atiempo / tot_ingresos) * 100, 1) if tot_ingresos > 0 else 0
+                        st.markdown(f"### 🏢 Resumen Ejecutivo del {s_inicio.strftime('%d/%m/%Y')} al {s_fin.strftime('%d/%m/%Y')}")
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("🎯 Puntualidad Global", f"{punt_grupal}%")
+                        c2.metric("✅ Llegadas a Tiempo", atiempo)
+                        c3.metric("⚠️ Llegadas Tarde", tardes)
+                        c4.metric("❌ Inasistencias", ausencias)
+                        st.write("---")
+
+                        # 2. GRÁFICOS VISUALES ALTAIR
+                        st.markdown("### 📊 Gráficos de Rendimiento")
+                        
+                        # GRAFICO DE BARRAS APILADAS (NUEVO)
+                        st.markdown("**Comparativa de Desempeño por Empleado**")
+                        estados_simp = []
+                        for idx, row in df_periodo.iterrows():
+                            if row["Tipo"] == "Ausente": estados_simp.append({"Empleado": row["Empleado"], "Estado": "Ausente", "Cantidad": 1})
+                            elif row["Tipo"] == "Entrada":
+                                if row["Estado"] == "Tarde": estados_simp.append({"Empleado": row["Empleado"], "Estado": "Tarde", "Cantidad": 1})
+                                elif row["Estado"] == "A tiempo": estados_simp.append({"Empleado": row["Empleado"], "Estado": "A tiempo", "Cantidad": 1})
+                        
+                        if estados_simp:
+                            df_barras = pd.DataFrame(estados_simp).groupby(['Empleado', 'Estado']).sum().reset_index()
+                            chart_barras = alt.Chart(df_barras).mark_bar().encode(
+                                x=alt.X('Empleado:N', title='Personal'),
+                                y=alt.Y('Cantidad:Q', title='Días'),
+                                color=alt.Color('Estado:N', scale=alt.Scale(domain=['A tiempo', 'Tarde', 'Ausente'], range=['#10b981', '#f59e0b', '#ef4444'])),
+                                tooltip=['Empleado', 'Estado', 'Cantidad']
+                            ).properties(height=350)
+                            st.altair_chart(chart_barras, use_container_width=True)
+
+                        graf_col1, graf_col2 = st.columns([2, 1])
+                        with graf_col1:
+                            st.markdown("**Evolución Diaria de Asistencia**")
+                            df_tendencia = df_entradas.groupby('Fecha').size().reset_index(name='Ingresos')
+                            if not df_tendencia.empty:
+                                chart_tendencia = alt.Chart(df_tendencia).mark_line(point=True, color="#2563EB", strokeWidth=4).encode(
+                                    x=alt.X('Fecha:T', title='Fecha'), y=alt.Y('Ingresos:Q', title='Cantidad de Fichajes'), tooltip=['Fecha', 'Ingresos']
                                 ).properties(height=300)
                                 st.altair_chart(chart_tendencia, use_container_width=True)
-                                
-                            # Gráfico 2: Torta de Estados
-                            with graf_col2:
-                                st.markdown("**Distribución de Puntualidad**")
-                                # Juntar Entradas (A tiempo, Tarde) y Ausencias
-                                estados_simplificados = []
-                                for index, row in datos_pers.iterrows():
-                                    if row["Tipo"] == "Ausente": estados_simplificados.append("Ausente")
-                                    elif row["Tipo"] == "Entrada" and row["Estado"] == "Tarde": estados_simplificados.append("Llegada Tarde")
-                                    elif row["Tipo"] == "Entrada" and row["Estado"] == "A tiempo": estados_simplificados.append("A Tiempo")
-                                
-                                df_torta = pd.DataFrame(estados_simplificados, columns=["Estado"]).value_counts().reset_index(name='Total')
-                                chart_estado = alt.Chart(df_torta).mark_arc(innerRadius=50).encode(
-                                    theta=alt.Theta(field="Total", type="quantitative"),
-                                    color=alt.Color(field="Estado", type="nominal", scale=alt.Scale(domain=['A Tiempo', 'Llegada Tarde', 'Ausente'], range=['#10b981', '#f59e0b', '#ef4444'])),
-                                    tooltip=['Estado', 'Total']
+
+                        with graf_col2:
+                            st.markdown("**Distribución General**")
+                            df_torta = pd.DataFrame(estados_simp).groupby('Estado').sum().reset_index()
+                            if not df_torta.empty:
+                                chart_estado = alt.Chart(df_torta).mark_arc(innerRadius=60).encode(
+                                    theta=alt.Theta(field="Cantidad", type="quantitative"),
+                                    color=alt.Color(field="Estado", type="nominal", scale=alt.Scale(domain=['A tiempo', 'Tarde', 'Ausente'], range=['#10b981', '#f59e0b', '#ef4444'])),
+                                    tooltip=['Estado', 'Cantidad']
                                 ).properties(height=300)
                                 st.altair_chart(chart_estado, use_container_width=True)
-                            
-                            st.write("---")
-                            # Gráfico 3: Ranking por Empleado
-                            st.markdown("**Rendimiento Individual del Personal**")
-                            # Filtramos solo Entradas y Ausencias para no ensuciar con Salidas
-                            df_emp = datos_pers[datos_pers["Tipo"].isin(["Entrada", "Ausente"])].copy()
-                            df_emp["Estado_Calc"] = df_emp.apply(lambda x: "Ausente" if x["Tipo"] == "Ausente" else x["Estado"], axis=1)
-                            df_ranking = df_emp.groupby(['Empleado', 'Estado_Calc']).size().reset_index(name='Cantidad')
-                            
-                            chart_ranking = alt.Chart(df_ranking).mark_bar().encode(
-                                x=alt.X('Empleado:N', sort='-y', title='Staff'),
-                                y=alt.Y('Cantidad:Q', title='Cantidad Registrada'),
-                                color=alt.Color('Estado_Calc:N', title='Estado', scale=alt.Scale(domain=['A tiempo', 'Tarde', 'Ausente'], range=['#10b981', '#f59e0b', '#ef4444'])),
-                                tooltip=['Empleado', 'Estado_Calc', 'Cantidad']
-                            ).properties(height=350)
-                            st.altair_chart(chart_ranking, use_container_width=True)
 
-                        else:
-                            st.warning("No hay registros comerciales en el periodo seleccionado para graficar.")
-                    else:
-                        st.info("Seleccioná un periodo de fechas válido.")
-                else: st.info("No hay datos de presentismo del staff para analizar.")
+                    else: st.warning("No hay registros en el periodo seleccionado para graficar.")
+                else: st.info("No hay datos de presentismo del staff activo para analizar.")
             else: st.info("Planilla vacía.")
 
-        # TAB 3: AUDITORÍA Y FICHAJES (REPORTES + MANUAL)
+        # ==========================================
+        # TAB 2: SISTEMA DE PUNTUACIÓN Y RESUMEN DIARIO
+        # ==========================================
+        with tab_puntuacion:
+            st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Puntuación y Ranking</div>', unsafe_allow_html=True)
+            
+            zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
+            hoy = datetime.datetime.now(zona_arg).date()
+            
+            rango_punt = st.date_input("🗓️ Elegí el periodo para calcular los puntos:", value=(hoy, hoy), key="calendario_puntos")
+            p_inicio, p_fin = procesar_rango_fechas(rango_punt)
+            
+            if os.path.exists(ARCHIVO_ASISTENCIA):
+                df_punt = pd.read_csv(ARCHIVO_ASISTENCIA)
+                df_punt['Fecha_Obj'] = pd.to_datetime(df_punt['Fecha'], errors='coerce')
+                df_punt_per = df_punt[(df_punt['Fecha_Obj'].dt.date >= p_inicio) & (df_punt['Fecha_Obj'].dt.date <= p_fin)]
+                
+                if not df_punt_per.empty:
+                    st.markdown("##### Reglas de Puntuación (Base: 100 pts)")
+                    st.caption("✔️ Llegar a tiempo: 0pts | ⚠️ Llegada Tarde: -5pts | ❌ Ausente: -15pts")
+                    
+                    ranking_data = []
+                    for emp in lista_empleados:
+                        df_e = df_punt_per[df_punt_per["Empleado"] == emp]
+                        if not df_e.empty:
+                            e_ent = df_e[df_e["Tipo"] == "Entrada"]
+                            e_aus = df_e[df_e["Tipo"] == "Ausente"]
+                            e_ok = len(e_ent[e_ent["Estado"] == "A tiempo"])
+                            e_tar = len(e_ent[e_ent["Estado"] == "Tarde"])
+                            e_au = len(e_aus)
+                            puntaje = 100 - (e_tar * 5) - (e_au * 15)
+                            
+                            ranking_data.append({"Personal": emp, "⭐ PUNTAJE FINAL": puntaje, "✅ A Tiempo": e_ok, "⚠️ Tardes": e_tar, "❌ Faltas": e_au})
+                            
+                    if ranking_data:
+                        df_ranking = pd.DataFrame(ranking_data).sort_values(by="⭐ PUNTAJE FINAL", ascending=False)
+                        st.dataframe(df_ranking, use_container_width=True, hide_index=True)
+                    
+                    st.markdown("---")
+                    st.markdown(f"### 📅 Detalle Exacto de Asistencia ({p_inicio.strftime('%d/%m')} al {p_fin.strftime('%d/%m')})")
+                    def emo_estado(e):
+                        if e == "A tiempo": return "✅ A tiempo"
+                        if e == "Tarde": return "🔴 Tarde"
+                        if e == "Ausente": return "❌ Ausente"
+                        if e == "Salida": return "👋 Salida"
+                        if "Descanso" in str(e): return "☕ Pausa"
+                        return f"⚪ {e}"
+                    
+                    df_show = df_punt_per.copy().sort_values(by=["Fecha", "Hora"])
+                    df_show["Estado Vis"] = df_show["Estado"].apply(emo_estado)
+                    if "Nota" not in df_show.columns: df_show["Nota"] = ""
+                    st.dataframe(df_show[["Fecha", "Empleado", "Sucursal", "Hora", "Estado Vis", "Nota"]], use_container_width=True, hide_index=True)
+
+                else: st.info("No hay fichajes registrados en el lapso seleccionado.")
+            else: st.info("La base de datos está vacía.")
+
+        # ==========================================
+        # TAB 3: AUDITORÍA (EDITAR HORARIOS Y EXPORTAR)
+        # ==========================================
         with tab_auditoria:
-            st.subheader("✍️ Carga Manual de Fichaje o Inasistencia")
+            st.markdown('<div class="main-title" style="font-size: 2rem;">📊 Edición y Planillas</div>', unsafe_allow_html=True)
+            
+            st.markdown('<div class="highlight-edit"><b>✏️ MODIFICAR HORARIOS Y ESTADOS</b><br>Buscá un registro para corregir la hora de ingreso o justificar una falta.</div>', unsafe_allow_html=True)
+            col_ed1, col_ed2 = st.columns(2)
+            fecha_edicion = col_ed1.date_input("1. Fecha a auditar:", key="fecha_edit")
+            emp_edicion = col_ed2.selectbox("2. Personal involucrado:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_edit")
+            
+            if emp_edicion != "Seleccionar...":
+                if os.path.exists(ARCHIVO_ASISTENCIA):
+                    df_edicion = pd.read_csv(ARCHIVO_ASISTENCIA)
+                    fecha_str = fecha_edicion.strftime("%Y-%m-%d")
+                    if "Fecha" in df_edicion.columns and "Empleado" in df_edicion.columns:
+                        indices_afectados = df_edicion.index[(df_edicion["Fecha"] == fecha_str) & (df_edicion["Empleado"] == emp_edicion)].tolist()
+                        if not indices_afectados: st.warning("Sin movimientos para esta persona en la fecha seleccionada.")
+                        else:
+                            for idx in indices_afectados:
+                                row = df_edicion.loc[idx]
+                                with st.container():
+                                    c1, c2, c3, c4 = st.columns([2,2,2,1])
+                                    tipos_posibles = ["Entrada", "Salida", "Inicio Descanso", "Fin Descanso", "Ausente"]
+                                    tipo_actual = row.get('Tipo', 'Entrada')
+                                    idx_tipo = tipos_posibles.index(tipo_actual) if tipo_actual in tipos_posibles else 0
+                                    nuevo_tipo = c1.selectbox(f"Tipo ({row.get('Turno','N/A')})", tipos_posibles, index=idx_tipo, key=f"t_{idx}")
+                                    
+                                    nueva_hora = c2.text_input("Hora (HH:MM:SS)", value=row.get('Hora', ''), key=f"h_{idx}")
+                                    
+                                    estados_posibles = ["A tiempo", "Tarde", "Salida", "Ausente", "Falta Justificada", "Pausa", "N/A"]
+                                    estado_actual = row.get('Estado', 'N/A')
+                                    idx_estado = estados_posibles.index(estado_actual) if estado_actual in estados_posibles else 6
+                                    nuevo_estado = c3.selectbox("Estado", estados_posibles, index=idx_estado, key=f"e_{idx}")
+                                    
+                                    if c4.button("💾 GUARDAR", key=f"btn_{idx}"):
+                                        df_edicion.at[idx, 'Tipo'] = nuevo_tipo
+                                        df_edicion.at[idx, 'Hora'] = nueva_hora
+                                        df_edicion.at[idx, 'Estado'] = nuevo_estado
+                                        df_edicion.to_csv(ARCHIVO_ASISTENCIA, index=False)
+                                        st.success("¡Horario actualizado en la base de datos!")
+                                        st.rerun()
+                            st.write("---")
+                            if st.button("🗑️ Borrar toda la actividad de este empleado en esta fecha"):
+                                df_limpio = df_edicion.drop(indices_afectados)
+                                df_limpio.to_csv(ARCHIVO_ASISTENCIA, index=False)
+                                st.success("¡Registros borrados!")
+                                st.rerun()
+
+            st.markdown("---")
+            st.subheader("📥 Exportar Planillas a Excel / CSV")
+            if os.path.exists(ARCHIVO_ASISTENCIA):
+                rango_descarga = st.date_input("Seleccionar rango de fechas a descargar:", value=(datetime.date.today(), datetime.date.today()), key="descarga_csv")
+                d_inicio, d_fin = procesar_rango_fechas(rango_descarga)
+                df_full = pd.read_csv(ARCHIVO_ASISTENCIA)
+                if "Fecha" in df_full.columns:
+                    df_full['Fecha_Temp'] = pd.to_datetime(df_full['Fecha'], errors='coerce').dt.date
+                    df_descarga = df_full[(df_full['Fecha_Temp'] >= d_inicio) & (df_full['Fecha_Temp'] <= d_fin)].drop(columns=['Fecha_Temp'])
+                    if not df_descarga.empty:
+                        st.download_button(label="📥 DESCARGAR PLANILLA DE ASISTENCIA", data=df_descarga.to_csv(index=False).encode('utf-8'), file_name=f"Asistencia_{d_inicio}_al_{d_fin}.csv", mime="text/csv", use_container_width=True)
+
+            st.markdown("---")
+            st.subheader("✍️ Carga Manual de Fichaje o Falta")
             with st.form("form_fichaje_manual"):
                 col_fm1, col_fm2, col_fm3 = st.columns(3)
                 fm_emp = col_fm1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -407,97 +531,26 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
                 fm_hora = col_fm2.time_input("Hora exacta:", datetime.datetime.now(zona_arg).time())
                 
-                fm_tipo = col_fm3.selectbox("Tipo de Movimiento:", ["Entrada", "Salida", "Ausente"])
-                fm_estado = st.selectbox("Estado final para el reporte:", ["A tiempo", "Tarde", "Salida", "Ausente", "Falta Justificada", "N/A"])
+                fm_tipo = col_fm3.selectbox("Tipo de Movimiento:", ["Entrada", "Salida", "Ausente", "Inicio Descanso", "Fin Descanso"])
+                fm_estado = st.selectbox("Estado final para el reporte:", ["A tiempo", "Tarde", "Salida", "Ausente", "Falta Justificada", "Pausa", "N/A"])
+                fm_nota = st.text_input("Nota / Justificación (Opcional):")
                 
-                submit_fm = st.form_submit_button("💾 Guardar Registro Manual")
+                submit_fm = st.form_submit_button("➕ Cargar Movimiento Manual")
                 if submit_fm:
                     if fm_emp != "Seleccionar..." and fm_local != "Seleccionar..." and fm_turno != "Seleccionar...":
                         nuevo_registro = {
                             "Fecha": [fm_fecha.strftime("%Y-%m-%d")], "Hora": [fm_hora.strftime("%H:%M:%S")],
                             "Empleado": [fm_emp], "Sucursal": [fm_local], "Turno": [fm_turno],
-                            "Tipo": [fm_tipo], "Estado": [fm_estado], "Distancia_m": [0.0]
+                            "Tipo": [fm_tipo], "Estado": [fm_estado], "Distancia_m": [0.0], "Nota": [fm_nota]
                         }
                         df_nuevo = pd.DataFrame(nuevo_registro)
                         if not os.path.exists(ARCHIVO_ASISTENCIA): df_nuevo.to_csv(ARCHIVO_ASISTENCIA, index=False)
                         else:
                             df_existente = pd.read_csv(ARCHIVO_ASISTENCIA)
                             pd.concat([df_existente, df_nuevo], ignore_index=True).to_csv(ARCHIVO_ASISTENCIA, index=False)
-                        st.success("¡Registro manual cargado con éxito en el sistema!")
+                        st.success("¡Registro manual ingresado al sistema!")
                         st.rerun()
-                    else: st.error("Completá Personal, Tienda y Turno para poder guardar.")
-
-            st.markdown("---")
-            st.subheader("📥 Generar Archivo Excel/CSV")
-            if os.path.exists(ARCHIVO_ASISTENCIA):
-                rango_fechas = st.date_input("Filtrar descargas por fechas:", value=(datetime.date.today(), datetime.date.today()), key="descarga_csv")
-                if len(rango_fechas) == 2:
-                    f_inicio, f_fin = rango_fechas
-                    df_full = pd.read_csv(ARCHIVO_ASISTENCIA)
-                    if "Fecha" in df_full.columns:
-                        df_full['Fecha_Temp'] = pd.to_datetime(df_full['Fecha'], errors='coerce').dt.date
-                        df_descarga = df_full[(df_full['Fecha_Temp'] >= f_inicio) & (df_full['Fecha_Temp'] <= f_fin)].drop(columns=['Fecha_Temp'])
-                        if not df_descarga.empty:
-                            st.download_button(label="📥 EXPORTAR PLANILLA DE EXCEL", data=df_descarga.to_csv(index=False).encode('utf-8'), file_name=f"Reporte_Tiendas_{f_inicio}_al_{f_fin}.csv", mime="text/csv", use_container_width=True)
-                
-                st.markdown("---")
-                st.subheader("✏️ Corregir Errores del Historial")
-                fecha_edicion = st.date_input("1. Fecha a auditar:", key="fecha_edit")
-                emp_edicion = st.selectbox("2. Personal involucrado:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_edit")
-                
-                if emp_edicion != "Seleccionar...":
-                    df_edicion = pd.read_csv(ARCHIVO_ASISTENCIA)
-                    fecha_str = fecha_edicion.strftime("%Y-%m-%d")
-                    if "Fecha" in df_edicion.columns and "Empleado" in df_edicion.columns:
-                        indices_afectados = df_edicion.index[(df_edicion["Fecha"] == fecha_str) & (df_edicion["Empleado"] == emp_edicion)].tolist()
-                        if not indices_afectados:
-                            st.warning("Sin movimientos para esta persona y fecha.")
-                        else:
-                            st.write("Modificá los detalles de la asistencia:")
-                            for idx in indices_afectados:
-                                row = df_edicion.loc[idx]
-                                with st.container():
-                                    c1, c2, c3, c4 = st.columns([2,2,2,1])
-                                    tipos_posibles = ["Entrada", "Salida", "Ausente"]
-                                    tipo_actual = row.get('Tipo', 'Entrada')
-                                    idx_tipo = tipos_posibles.index(tipo_actual) if tipo_actual in tipos_posibles else 0
-                                    nuevo_tipo = c1.selectbox(f"Mov. ({row.get('Turno','N/A')})", tipos_posibles, index=idx_tipo, key=f"t_{idx}")
-                                    nueva_hora = c2.text_input("Hora (HH:MM:SS)", value=row.get('Hora', ''), key=f"h_{idx}")
-                                    estados_posibles = ["A tiempo", "Tarde", "Salida", "Ausente", "Falta Justificada", "N/A"]
-                                    estado_actual = row.get('Estado', 'N/A')
-                                    idx_estado = estados_posibles.index(estado_actual) if estado_actual in estados_posibles else 5
-                                    nuevo_estado = c3.selectbox("Estado", estados_posibles, index=idx_estado, key=f"e_{idx}")
-                                    if c4.button("💾", key=f"btn_{idx}"):
-                                        df_edicion.at[idx, 'Tipo'] = nuevo_tipo
-                                        df_edicion.at[idx, 'Hora'] = nueva_hora
-                                        df_edicion.at[idx, 'Estado'] = nuevo_estado
-                                        df_edicion.to_csv(ARCHIVO_ASISTENCIA, index=False)
-                                        st.success("¡Registro actualizado!")
-                                        st.rerun()
-                                        
-                            st.write("---")
-                            if st.button("🗑️ Borrar toda la actividad de este empleado en esta fecha"):
-                                df_limpio = df_edicion.drop(indices_afectados)
-                                df_limpio.to_csv(ARCHIVO_ASISTENCIA, index=False)
-                                st.success("¡Registros borrados!")
-                                st.rerun()
-
-                st.markdown("---")
-                with st.expander("⚠️ Mantenimiento de la Base de Datos"):
-                    st.write("**1. Depurar Personal Inactivo**")
-                    if st.button("🧹 Limpiar registros de ex-empleados"):
-                        df_mantenimiento = pd.read_csv(ARCHIVO_ASISTENCIA)
-                        df_limpio = df_mantenimiento[df_mantenimiento["Empleado"].isin(lista_empleados)]
-                        df_limpio.to_csv(ARCHIVO_ASISTENCIA, index=False)
-                        st.success("Planilla depurada.")
-                        st.rerun()
-                    st.write("---")
-                    st.write("**2. Resetear el Sistema**")
-                    if st.button("🚨 VACIAR TODA LA PLANILLA (Empezar de cero)"):
-                        os.remove(ARCHIVO_ASISTENCIA)
-                        st.success("¡Planilla formateada!")
-                        st.rerun()
-            else: st.info("Aún no se generó el archivo de asistencia.")
+                    else: st.error("Faltan datos por seleccionar.")
 
         # TAB 4: COMUNICADOS Y ALERTAS
         with tab_mensajes:
@@ -547,7 +600,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     st.write(f"- **{emp}** | {'📱 Enlazado' if emp in dispositivos_vinculados else '⚠️ Falta enlazar'}")
             with col_p2:
                 st.subheader("Administración")
-                nuevo_emp = st.text_input("Alta de Personal:")
+                nuevo_emp = st.text_input("Alta de Personal (Nombre y Apellido):")
                 if st.button("➕ Ingresar") and nuevo_emp:
                     if nuevo_emp not in lista_empleados:
                         lista_empleados.append(nuevo_emp)
@@ -612,14 +665,29 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 st.markdown("---")
                 st.subheader("⏱️ Reglas de Operación")
                 req_salida = st.checkbox("Requerir botón 'Salida'", value=config_app.get("requiere_salida", True))
+                hab_descansos = st.checkbox("Habilitar botones de 'Pausa / Descanso'", value=config_app.get("habilitar_descansos", False))
                 nueva_tolerancia = st.number_input("Minutos de tolerancia:", min_value=0, max_value=60, value=int(config_app.get("tolerancia_minutos", 10)))
                 if st.button("💾 Guardar Configuración"):
                     config_app["mensaje_dia"] = nuevo_mensaje
                     config_app["requiere_salida"] = req_salida
+                    config_app["habilitar_descansos"] = hab_descansos
                     config_app["tolerancia_minutos"] = nueva_tolerancia
                     with open(ARCHIVO_CONFIG, 'w') as f: json.dump(config_app, f)
                     st.success("Configuración actualizada.")
                     st.rerun()
+                    
+                st.markdown("---")
+                with st.expander("⚠️ Opciones de Base de Datos (Depurar/Eliminar)"):
+                    if st.button("🧹 Limpiar historial de ex-empleados"):
+                        df_mantenimiento = pd.read_csv(ARCHIVO_ASISTENCIA)
+                        df_limpio = df_mantenimiento[df_mantenimiento["Empleado"].isin(lista_empleados)]
+                        df_limpio.to_csv(ARCHIVO_ASISTENCIA, index=False)
+                        st.success("Planilla depurada.")
+                        st.rerun()
+                    if st.button("🚨 VACIAR TODA LA PLANILLA DE ASISTENCIA"):
+                        os.remove(ARCHIVO_ASISTENCIA)
+                        st.success("¡Planilla formateada por completo!")
+                        st.rerun()
 
             with col_aj2:
                 st.subheader("🔑 Seguridad Gerencial")
@@ -632,7 +700,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         st.success("Clave principal modificada con éxito.")
                     else: st.error("Las claves no coinciden.")
 
-        # TAB 8: SEGURIDAD (NUEVO Y OCULTO)
+        # TAB 8: SEGURIDAD (OCULTO)
         with tab_seguridad:
             st.subheader("🕵️ Registro de Auditoría de Accesos")
             st.write("Acá podés auditar quién y con qué clave intentó acceder a este Panel de Gerencia.")
@@ -640,7 +708,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 df_intentos = pd.DataFrame(lista_intentos)
                 df_intentos = df_intentos.sort_values(by=["Fecha", "Hora"], ascending=[False, False])
                 st.dataframe(df_intentos, use_container_width=True, hide_index=True)
-                
                 if st.button("🗑️ Limpiar registro de seguridad"):
                     with open(ARCHIVO_INTENTOS, 'w') as f: json.dump([], f)
                     st.success("Registro formateado.")
