@@ -5,6 +5,7 @@ import datetime
 import pandas as pd
 import os
 import json
+import altair as alt
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -44,7 +45,7 @@ ARCHIVO_MENSAJES = "mensajes.json"
 ARCHIVO_INTENTOS = "intentos_seguridad.json"
 RADIO_MAXIMO_METROS = 50
 
-# Parche automático
+# Parche automático para CSV
 if os.path.exists(ARCHIVO_ASISTENCIA):
     try:
         df_patch = pd.read_csv(ARCHIVO_ASISTENCIA)
@@ -83,23 +84,29 @@ if not os.path.exists(ARCHIVO_DISPOSITIVOS):
     with open(ARCHIVO_DISPOSITIVOS, 'w') as f: json.dump({}, f)
 with open(ARCHIVO_DISPOSITIVOS, 'r') as f: dispositivos_vinculados = json.load(f)
 
-# Locales y Turnos
+# Locales
 if not os.path.exists(ARCHIVO_LOCALES):
     locales_iniciales = {"Local 1 - Centro": {"lat": -24.788296, "lon": -65.409429}, "Local 2 - Shopping": {"lat": -24.808264, "lon": -65.404947}}
     with open(ARCHIVO_LOCALES, 'w') as f: json.dump(locales_iniciales, f)
 with open(ARCHIVO_LOCALES, 'r') as f: lista_locales = json.load(f)
 
+# Turnos (AHORA CON INGRESO Y SALIDA)
 if not os.path.exists(ARCHIVO_TURNOS):
-    turnos_iniciales = {"Apertura": "09:00", "Turno Tarde": "17:00"}
+    turnos_iniciales = {"Apertura": {"ingreso": "09:00", "salida": "17:00"}, "Turno Tarde": {"ingreso": "17:00", "salida": "22:00"}}
     with open(ARCHIVO_TURNOS, 'w') as f: json.dump(turnos_iniciales, f)
-with open(ARCHIVO_TURNOS, 'r') as f: lista_turnos = json.load(f)
+with open(ARCHIVO_TURNOS, 'r') as f: 
+    lista_turnos_raw = json.load(f)
+    lista_turnos = {}
+    # Parche automático por si los turnos estaban en formato viejo (solo texto)
+    for k, v in lista_turnos_raw.items():
+        if isinstance(v, str): lista_turnos[k] = {"ingreso": v, "salida": "23:59"}
+        else: lista_turnos[k] = v
 
-# Mensajes
+# Mensajes y Seguridad
 if not os.path.exists(ARCHIVO_MENSAJES):
     with open(ARCHIVO_MENSAJES, 'w') as f: json.dump([], f)
 with open(ARCHIVO_MENSAJES, 'r') as f: lista_mensajes = json.load(f)
 
-# Rastreo de Seguridad
 if not os.path.exists(ARCHIVO_INTENTOS):
     with open(ARCHIVO_INTENTOS, 'w') as f: json.dump([], f)
 with open(ARCHIVO_INTENTOS, 'r') as f: lista_intentos = json.load(f)
@@ -160,6 +167,10 @@ if pestaña == "⏱️ Fichar Asistencia":
             with col_sel1: local_seleccionado = st.selectbox("📍 Tienda actual:", ["Seleccionar..."] + list(lista_locales.keys()))
             with col_sel2: turno_seleccionado = st.selectbox("🕒 Horario:", ["Seleccionar..."] + list(lista_turnos.keys()))
 
+            if turno_seleccionado != "Seleccionar...":
+                horarios = lista_turnos[turno_seleccionado]
+                st.caption(f"🗓️ Horario oficial asignado: **{horarios['ingreso']} a {horarios['salida']}**")
+
             st.markdown("---")
 
             if local_seleccionado != "Seleccionar..." and turno_seleccionado != "Seleccionar...":
@@ -205,7 +216,7 @@ if pestaña == "⏱️ Fichar Asistencia":
                             hora = ahora.strftime("%H:%M:%S")
                             estado_llegada = "N/A"
                             if tipo_fichaje == "Entrada":
-                                hora_turno_obj = datetime.datetime.strptime(lista_turnos[turno_seleccionado], "%H:%M").time()
+                                hora_turno_obj = datetime.datetime.strptime(lista_turnos[turno_seleccionado]["ingreso"], "%H:%M").time()
                                 dt_turno = datetime.datetime.combine(ahora.date(), hora_turno_obj).replace(tzinfo=zona_arg)
                                 dt_limite = dt_turno + datetime.timedelta(minutes=int(config_app["tolerancia_minutos"]))
                                 estado_llegada = "Tarde" if ahora > dt_limite else "A tiempo"
@@ -261,7 +272,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
     CLAVE_OCULTA = "doremifasol"
 
-    # SISTEMA DE RASTREO SILENCIOSO DE INTENTOS CON CONTRASEÑA EXPLÍCITA
+    # SISTEMA DE RASTREO SILENCIOSO
     if password_ingresada:
         if password_ingresada != CLAVE_OCULTA:
             if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
@@ -277,7 +288,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     "Fecha": ahora.strftime("%Y-%m-%d"),
                     "Hora": ahora.strftime("%H:%M:%S"),
                     "Usuario": quien_intenta,
-                    "Clave Probada": password_ingresada,  # AQUÍ ESTÁ LA COLUMNA EXCLUSIVA
+                    "Clave Probada": password_ingresada,
                     "Resultado": estado_intento
                 }
                 lista_intentos.append(nuevo_intento)
@@ -285,52 +296,13 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
     if password_ingresada == config_app["admin_password"] or password_ingresada == CLAVE_OCULTA:
         
-        tab_mensajes, tab_estadisticas, tab_auditoria, tab_personal, tab_locales, tab_ajustes, tab_seguridad = st.tabs([
-            "📢 Comunicados", "📈 Métricas", "📊 Fichajes (Edición)", "👥 Staff", "📍 Tiendas", "⚙️ Sistema", "🕵️ Seguridad"
+        tab_estadisticas, tab_auditoria, tab_mensajes, tab_personal, tab_locales, tab_ajustes, tab_seguridad = st.tabs([
+            "📈 Analytics & Gráficos", "📊 Reportes y Edición", "📢 Comunicados", "👥 Staff", "📍 Tiendas/Turnos", "⚙️ Sistema", "🕵️ Seguridad"
         ])
 
-        # TAB 1: COMUNICADOS Y ALERTAS
-        with tab_mensajes:
-            st.subheader("⚠️ Configuración de Llegadas Tarde")
-            msg_tarde = st.text_area("Texto de Alerta:", value=config_app.get("mensaje_llegada_tarde", ""))
-            if st.button("💾 Actualizar Alerta"):
-                config_app["mensaje_llegada_tarde"] = msg_tarde
-                with open(ARCHIVO_CONFIG, 'w') as f: json.dump(config_app, f)
-                st.success("Alerta actualizada.")
-                st.rerun()
-
-            st.markdown("---")
-            st.subheader("📬 Bandeja de Comunicados al Staff")
-            col_m1, col_m2 = st.columns(2)
-            with col_m1:
-                tipo_dest = st.radio("Destinatario del anuncio:", ["Para todo el Staff", "Para un vendedor/a"])
-                destinatario = "Todos"
-                if tipo_dest == "Para un vendedor/a": destinatario = st.selectbox("Seleccionar persona:", ["Seleccionar..."] + sorted(lista_empleados))
-                texto_mensaje = st.text_area("Contenido del anuncio:")
-                if st.button("🚀 Publicar Anuncio"):
-                    if texto_mensaje and destinatario != "Seleccionar...":
-                        nuevo_id = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-                        lista_mensajes.append({"id": nuevo_id, "destinatario": destinatario, "texto": texto_mensaje})
-                        with open(ARCHIVO_MENSAJES, 'w') as f: json.dump(lista_mensajes, f)
-                        st.success("¡Anuncio publicado!")
-                        st.rerun()
-            with col_m2:
-                st.write("**Anuncios Activos**")
-                if not lista_mensajes: st.info("Sin comunicados activos.")
-                else:
-                    for idx, m in enumerate(lista_mensajes):
-                        with st.container():
-                            if m['destinatario'] == 'Todos': st.markdown(f"🏷️ **GLOBAL:** {m['texto']}")
-                            else: st.markdown(f"👤 **A {m['destinatario']}:** {m['texto']}")
-                            if st.button("🗑️ Quitar", key=f"del_msg_{idx}"):
-                                lista_mensajes.pop(idx)
-                                with open(ARCHIVO_MENSAJES, 'w') as f: json.dump(lista_mensajes, f)
-                                st.rerun()
-                            st.write("---")
-
-        # TAB 2: MÉTRICAS (ESTADÍSTICAS)
+        # TAB 1: ANALYTICS Y GRÁFICOS (NUEVO DASHBOARD PROFESIONAL)
         with tab_estadisticas:
-            st.subheader("📊 Métricas de Presentismo y Ausencias")
+            st.subheader("📈 Análisis Estratégico de Presentismo")
             if os.path.exists(ARCHIVO_ASISTENCIA):
                 df_stats = pd.read_csv(ARCHIVO_ASISTENCIA)
                 if "Tipo" not in df_stats.columns: df_stats["Tipo"] = "Entrada"
@@ -343,39 +315,83 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     df_activos['Fecha_Obj'] = pd.to_datetime(df_activos['Fecha'], errors='coerce')
                     zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
                     hoy = datetime.datetime.now(zona_arg).date()
+                    hace_30_dias = hoy - datetime.timedelta(days=30)
                     
-                    def mostrar_metricas(titulo, df_filtrado):
-                        st.markdown(f"**{titulo}**")
-                        c1, c2, c3, c4 = st.columns(4)
-                        entradas = df_filtrado[df_filtrado["Tipo"] == "Entrada"]
-                        ausencias = df_filtrado[df_filtrado["Tipo"] == "Ausente"]
-                        a_tiempo = len(entradas[entradas["Estado"] == "A tiempo"])
-                        tardes = len(entradas[entradas["Estado"] == "Tarde"])
-                        
-                        c1.metric("Ingresos Totales", len(entradas))
-                        c2.metric("✅ En Horario", a_tiempo)
-                        c3.metric("⚠️ Tardes", tardes)
-                        c4.metric("❌ Ausencias", len(ausencias))
-                        st.write("---")
-
-                    st.markdown("### 🔎 Buscar por Rango de Fechas")
-                    rango_stats = st.date_input("Analizar periodo (Desde - Hasta):", value=(hoy, hoy), key="calendario_stats")
+                    st.markdown("### 🔎 Filtrar Análisis")
+                    rango_stats = st.date_input("Seleccionar periodo de análisis (Desde - Hasta):", value=(hace_30_dias, hoy), key="calendario_stats")
+                    
                     if len(rango_stats) == 2:
                         s_inicio, s_fin = rango_stats
                         datos_pers = df_activos[(df_activos['Fecha_Obj'].dt.date >= s_inicio) & (df_activos['Fecha_Obj'].dt.date <= s_fin)]
-                        mostrar_metricas(f"Corte del {s_inicio.strftime('%d/%m/%Y')} al {s_fin.strftime('%d/%m/%Y')}", datos_pers)
+                        
+                        if not datos_pers.empty:
+                            # 1. KPIs Rápidos
+                            c1, c2, c3, c4 = st.columns(4)
+                            entradas = datos_pers[datos_pers["Tipo"] == "Entrada"]
+                            ausencias = datos_pers[datos_pers["Tipo"] == "Ausente"]
+                            a_tiempo = len(entradas[entradas["Estado"] == "A tiempo"])
+                            tardes = len(entradas[entradas["Estado"] == "Tarde"])
+                            
+                            c1.metric("Ingresos Totales", len(entradas))
+                            c2.metric("✅ Puntualidad", a_tiempo)
+                            c3.metric("⚠️ Tardanzas", tardes)
+                            c4.metric("❌ Inasistencias", len(ausencias))
+                            
+                            st.write("---")
+                            
+                            # GRÁFICOS VISUALES
+                            graf_col1, graf_col2 = st.columns([2, 1])
+                            
+                            # Gráfico 1: Evolución Diaria
+                            with graf_col1:
+                                st.markdown("**Evolución de Fichajes por Día**")
+                                df_tendencia = entradas.groupby('Fecha').size().reset_index(name='Ingresos')
+                                chart_tendencia = alt.Chart(df_tendencia).mark_line(point=True, color="#3b82f6", strokeWidth=3).encode(
+                                    x=alt.X('Fecha:T', title='Fecha'),
+                                    y=alt.Y('Ingresos:Q', title='Cantidad de Ingresos'),
+                                    tooltip=['Fecha', 'Ingresos']
+                                ).properties(height=300)
+                                st.altair_chart(chart_tendencia, use_container_width=True)
+                                
+                            # Gráfico 2: Torta de Estados
+                            with graf_col2:
+                                st.markdown("**Distribución de Puntualidad**")
+                                # Juntar Entradas (A tiempo, Tarde) y Ausencias
+                                estados_simplificados = []
+                                for index, row in datos_pers.iterrows():
+                                    if row["Tipo"] == "Ausente": estados_simplificados.append("Ausente")
+                                    elif row["Tipo"] == "Entrada" and row["Estado"] == "Tarde": estados_simplificados.append("Llegada Tarde")
+                                    elif row["Tipo"] == "Entrada" and row["Estado"] == "A tiempo": estados_simplificados.append("A Tiempo")
+                                
+                                df_torta = pd.DataFrame(estados_simplificados, columns=["Estado"]).value_counts().reset_index(name='Total')
+                                chart_estado = alt.Chart(df_torta).mark_arc(innerRadius=50).encode(
+                                    theta=alt.Theta(field="Total", type="quantitative"),
+                                    color=alt.Color(field="Estado", type="nominal", scale=alt.Scale(domain=['A Tiempo', 'Llegada Tarde', 'Ausente'], range=['#10b981', '#f59e0b', '#ef4444'])),
+                                    tooltip=['Estado', 'Total']
+                                ).properties(height=300)
+                                st.altair_chart(chart_estado, use_container_width=True)
+                            
+                            st.write("---")
+                            # Gráfico 3: Ranking por Empleado
+                            st.markdown("**Rendimiento Individual del Personal**")
+                            # Filtramos solo Entradas y Ausencias para no ensuciar con Salidas
+                            df_emp = datos_pers[datos_pers["Tipo"].isin(["Entrada", "Ausente"])].copy()
+                            df_emp["Estado_Calc"] = df_emp.apply(lambda x: "Ausente" if x["Tipo"] == "Ausente" else x["Estado"], axis=1)
+                            df_ranking = df_emp.groupby(['Empleado', 'Estado_Calc']).size().reset_index(name='Cantidad')
+                            
+                            chart_ranking = alt.Chart(df_ranking).mark_bar().encode(
+                                x=alt.X('Empleado:N', sort='-y', title='Staff'),
+                                y=alt.Y('Cantidad:Q', title='Cantidad Registrada'),
+                                color=alt.Color('Estado_Calc:N', title='Estado', scale=alt.Scale(domain=['A tiempo', 'Tarde', 'Ausente'], range=['#10b981', '#f59e0b', '#ef4444'])),
+                                tooltip=['Empleado', 'Estado_Calc', 'Cantidad']
+                            ).properties(height=350)
+                            st.altair_chart(chart_ranking, use_container_width=True)
 
-                    st.markdown("### 📌 Indicadores Rápidos")
-                    datos_hoy = df_activos[df_activos['Fecha_Obj'].dt.date == hoy]
-                    hace_7_dias = hoy - datetime.timedelta(days=7)
-                    datos_semana = df_activos[df_activos['Fecha_Obj'].dt.date >= hace_7_dias]
-                    datos_mes = df_activos[(df_activos['Fecha_Obj'].dt.month == hoy.month) & (df_activos['Fecha_Obj'].dt.year == hoy.year)]
-
-                    mostrar_metricas("📅 HOY", datos_hoy)
-                    with st.expander("Ver histórico (Semana y Mes)"):
-                        mostrar_metricas("🗓️ ÚLTIMOS 7 DÍAS", datos_semana)
-                        mostrar_metricas("📆 ESTE MES", datos_mes)
-                else: st.info("No hay datos de presentismo del staff activo para analizar.")
+                        else:
+                            st.warning("No hay registros comerciales en el periodo seleccionado para graficar.")
+                    else:
+                        st.info("Seleccioná un periodo de fechas válido.")
+                else: st.info("No hay datos de presentismo del staff para analizar.")
             else: st.info("Planilla vacía.")
 
         # TAB 3: AUDITORÍA Y FICHAJES (REPORTES + MANUAL)
@@ -414,7 +430,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
             st.markdown("---")
             st.subheader("📥 Generar Archivo Excel/CSV")
             if os.path.exists(ARCHIVO_ASISTENCIA):
-                rango_fechas = st.date_input("Filtrar descargas por fechas:", value=(datetime.date.today(), datetime.date.today()))
+                rango_fechas = st.date_input("Filtrar descargas por fechas:", value=(datetime.date.today(), datetime.date.today()), key="descarga_csv")
                 if len(rango_fechas) == 2:
                     f_inicio, f_fin = rango_fechas
                     df_full = pd.read_csv(ARCHIVO_ASISTENCIA)
@@ -422,12 +438,12 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         df_full['Fecha_Temp'] = pd.to_datetime(df_full['Fecha'], errors='coerce').dt.date
                         df_descarga = df_full[(df_full['Fecha_Temp'] >= f_inicio) & (df_full['Fecha_Temp'] <= f_fin)].drop(columns=['Fecha_Temp'])
                         if not df_descarga.empty:
-                            st.download_button(label="📥 EXPORTAR PLANILLA", data=df_descarga.to_csv(index=False).encode('utf-8'), file_name=f"Reporte_Tiendas_{f_inicio}_al_{f_fin}.csv", mime="text/csv", use_container_width=True)
+                            st.download_button(label="📥 EXPORTAR PLANILLA DE EXCEL", data=df_descarga.to_csv(index=False).encode('utf-8'), file_name=f"Reporte_Tiendas_{f_inicio}_al_{f_fin}.csv", mime="text/csv", use_container_width=True)
                 
                 st.markdown("---")
                 st.subheader("✏️ Corregir Errores del Historial")
-                fecha_edicion = st.date_input("1. Fecha a auditar:")
-                emp_edicion = st.selectbox("2. Personal involucrado:", ["Seleccionar..."] + sorted(lista_empleados))
+                fecha_edicion = st.date_input("1. Fecha a auditar:", key="fecha_edit")
+                emp_edicion = st.selectbox("2. Personal involucrado:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_edit")
                 
                 if emp_edicion != "Seleccionar...":
                     df_edicion = pd.read_csv(ARCHIVO_ASISTENCIA)
@@ -483,7 +499,46 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         st.rerun()
             else: st.info("Aún no se generó el archivo de asistencia.")
 
-        # TAB 4: PERSONAL (STAFF)
+        # TAB 4: COMUNICADOS Y ALERTAS
+        with tab_mensajes:
+            st.subheader("⚠️ Configuración de Llegadas Tarde")
+            msg_tarde = st.text_area("Texto de Alerta:", value=config_app.get("mensaje_llegada_tarde", ""))
+            if st.button("💾 Actualizar Alerta"):
+                config_app["mensaje_llegada_tarde"] = msg_tarde
+                with open(ARCHIVO_CONFIG, 'w') as f: json.dump(config_app, f)
+                st.success("Alerta actualizada.")
+                st.rerun()
+
+            st.markdown("---")
+            st.subheader("📬 Bandeja de Comunicados al Staff")
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                tipo_dest = st.radio("Destinatario del anuncio:", ["Para todo el Staff", "Para un vendedor/a"])
+                destinatario = "Todos"
+                if tipo_dest == "Para un vendedor/a": destinatario = st.selectbox("Seleccionar persona:", ["Seleccionar..."] + sorted(lista_empleados))
+                texto_mensaje = st.text_area("Contenido del anuncio:")
+                if st.button("🚀 Publicar Anuncio"):
+                    if texto_mensaje and destinatario != "Seleccionar...":
+                        nuevo_id = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                        lista_mensajes.append({"id": nuevo_id, "destinatario": destinatario, "texto": texto_mensaje})
+                        with open(ARCHIVO_MENSAJES, 'w') as f: json.dump(lista_mensajes, f)
+                        st.success("¡Anuncio publicado!")
+                        st.rerun()
+            with col_m2:
+                st.write("**Anuncios Activos**")
+                if not lista_mensajes: st.info("Sin comunicados activos.")
+                else:
+                    for idx, m in enumerate(lista_mensajes):
+                        with st.container():
+                            if m['destinatario'] == 'Todos': st.markdown(f"🏷️ **GLOBAL:** {m['texto']}")
+                            else: st.markdown(f"👤 **A {m['destinatario']}:** {m['texto']}")
+                            if st.button("🗑️ Quitar", key=f"del_msg_{idx}"):
+                                lista_mensajes.pop(idx)
+                                with open(ARCHIVO_MENSAJES, 'w') as f: json.dump(lista_mensajes, f)
+                                st.rerun()
+                            st.write("---")
+
+        # TAB 5: PERSONAL (STAFF)
         with tab_personal:
             col_p1, col_p2 = st.columns(2)
             with col_p1:
@@ -512,7 +567,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     with open(ARCHIVO_EMPLEADOS, 'w') as f: json.dump(lista_empleados, f)
                     st.rerun()
 
-        # TAB 5: LOCALES Y TURNOS
+        # TAB 6: LOCALES Y TURNOS
         with tab_locales:
             col_l1, col_l2 = st.columns(2)
             with col_l1:
@@ -525,17 +580,30 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     lista_locales[n_loc] = {"lat": lat_loc, "lon": lon_loc}
                     with open(ARCHIVO_LOCALES, 'w') as f: json.dump(lista_locales, f)
                     st.rerun()
+                borrar_loc = st.selectbox("Eliminar Tienda:", ["Seleccionar..."] + list(lista_locales.keys()))
+                if st.button("🗑️ Eliminar Tienda") and borrar_loc != "Seleccionar...":
+                    del lista_locales[borrar_loc]
+                    with open(ARCHIVO_LOCALES, 'w') as f: json.dump(lista_locales, f)
+                    st.rerun()
+
             with col_l2:
                 st.subheader("🕒 Turnos / Horarios")
-                for turno, hora in lista_turnos.items(): st.write(f"- **{turno}** | {hora}")
-                n_turno = st.text_input("Nuevo Horario:")
-                h_turno = st.time_input("Hora de Ingreso:")
+                for turno, horas in lista_turnos.items(): st.write(f"- **{turno}** | De {horas['ingreso']} a {horas['salida']}")
+                n_turno = st.text_input("Nuevo Horario (Nombre):")
+                col_h1, col_h2 = st.columns(2)
+                h_ingreso = col_h1.time_input("Hora de Ingreso:")
+                h_salida = col_h2.time_input("Hora de Salida:")
                 if st.button("➕ Crear Horario") and n_turno:
-                    lista_turnos[n_turno] = h_turno.strftime("%H:%M")
+                    lista_turnos[n_turno] = {"ingreso": h_ingreso.strftime("%H:%M"), "salida": h_salida.strftime("%H:%M")}
+                    with open(ARCHIVO_TURNOS, 'w') as f: json.dump(lista_turnos, f)
+                    st.rerun()
+                borrar_turno = st.selectbox("Eliminar Turno:", ["Seleccionar..."] + list(lista_turnos.keys()))
+                if st.button("🗑️ Eliminar Turno") and borrar_turno != "Seleccionar...":
+                    del lista_turnos[borrar_turno]
                     with open(ARCHIVO_TURNOS, 'w') as f: json.dump(lista_turnos, f)
                     st.rerun()
 
-        # TAB 6: AJUSTES GLOBALES
+        # TAB 7: AJUSTES GLOBALES
         with tab_ajustes:
             col_aj1, col_aj2 = st.columns(2)
             with col_aj1:
@@ -557,23 +625,20 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 st.subheader("🔑 Seguridad Gerencial")
                 nc = st.text_input("Nueva clave de acceso:", type="password")
                 rc = st.text_input("Repetir clave:", type="password")
-                if st.button("🔒 Cambiar Clave"):
+                if st.button("🔒 Cambiar Clave Principal"):
                     if nc == rc and nc:
                         config_app["admin_password"] = nc
                         with open(ARCHIVO_CONFIG, 'w') as f: json.dump(config_app, f)
-                        st.success("Clave modificada con éxito.")
+                        st.success("Clave principal modificada con éxito.")
                     else: st.error("Las claves no coinciden.")
 
-        # TAB 7: SEGURIDAD (NUEVO Y OCULTO)
+        # TAB 8: SEGURIDAD (NUEVO Y OCULTO)
         with tab_seguridad:
             st.subheader("🕵️ Registro de Auditoría de Accesos")
             st.write("Acá podés auditar quién y con qué clave intentó acceder a este Panel de Gerencia.")
             if lista_intentos:
                 df_intentos = pd.DataFrame(lista_intentos)
-                # Ordenar para que los más recientes salgan arriba
                 df_intentos = df_intentos.sort_values(by=["Fecha", "Hora"], ascending=[False, False])
-                
-                # Mostrar el DataFrame de forma estilizada
                 st.dataframe(df_intentos, use_container_width=True, hide_index=True)
                 
                 if st.button("🗑️ Limpiar registro de seguridad"):
