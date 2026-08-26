@@ -271,7 +271,7 @@ elif pestaña == "⚙️ Panel de Administrador":
                 if nombre_loc and nombre_loc not in lista_locales:
                     lista_locales[nombre_loc] = {"lat": lat_loc, "lon": lon_loc}
                     with open(ARCHIVO_LOCALES, 'w') as f:
-                        json.dump(locales_iniciales, f) # CORREGIDO A lista_locales por prolijidad
+                        json.dump(lista_locales, f)
                     st.success(f"Local {nombre_loc} agregado.")
                     st.rerun()
                     
