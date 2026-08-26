@@ -41,6 +41,7 @@ ARCHIVO_TURNOS = "turnos.json"
 ARCHIVO_ASISTENCIA = "asistencia.csv"
 ARCHIVO_CONFIG = "config.json"
 ARCHIVO_MENSAJES = "mensajes.json"
+ARCHIVO_INTENTOS = "intentos_seguridad.json"
 RADIO_MAXIMO_METROS = 50
 
 # Parche automático
@@ -98,6 +99,11 @@ if not os.path.exists(ARCHIVO_MENSAJES):
     with open(ARCHIVO_MENSAJES, 'w') as f: json.dump([], f)
 with open(ARCHIVO_MENSAJES, 'r') as f: lista_mensajes = json.load(f)
 
+# Rastreo de Seguridad
+if not os.path.exists(ARCHIVO_INTENTOS):
+    with open(ARCHIVO_INTENTOS, 'w') as f: json.dump([], f)
+with open(ARCHIVO_INTENTOS, 'r') as f: lista_intentos = json.load(f)
+
 # ==========================================
 # 2. IDENTIFICADOR DEL CELULAR
 # ==========================================
@@ -112,6 +118,14 @@ js_get_device = """
 })();
 """
 device_id = streamlit_js_eval(js_expressions=js_get_device, want_output=True, key="get_dev_id")
+
+# Identificar de quién es este celular (para todo el sistema)
+empleado_en_celu = None
+if device_id:
+    for emp, dev in dispositivos_vinculados.items():
+        if dev == device_id:
+            empleado_en_celu = emp
+            break
 
 # ==========================================
 # 3. NAVEGACIÓN
@@ -133,12 +147,6 @@ if pestaña == "⏱️ Fichar Asistencia":
     if not device_id:
         st.info("🔄 Verificando dispositivo...")
     else:
-        empleado_en_celu = None
-        for emp, dev in dispositivos_vinculados.items():
-            if dev == device_id:
-                empleado_en_celu = emp
-                break
-
         if empleado_en_celu:
             mensajes_usuario = [m for m in lista_mensajes if m['destinatario'] in ['Todos', empleado_en_celu]]
             if mensajes_usuario:
@@ -252,10 +260,29 @@ elif pestaña == "⚙️ Panel de Gerencia":
     st.markdown('<div class="main-title">⚙️ Panel de Gerencia</div>', unsafe_allow_html=True)
     password_ingresada = st.text_input("Clave de acceso gerencial:", type="password")
 
+    # SISTEMA DE RASTREO SILENCIOSO DE INTENTOS
+    if password_ingresada:
+        if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
+            st.session_state['last_pw_attempt'] = password_ingresada
+            zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
+            ahora = datetime.datetime.now(zona_arg)
+            
+            quien_intenta = empleado_en_celu if empleado_en_celu else "Desconocido (No vinculado)"
+            estado_intento = "Exitoso" if password_ingresada == config_app["admin_password"] else f"Fallido (Probó con: {password_ingresada})"
+            
+            nuevo_intento = {
+                "Fecha": ahora.strftime("%Y-%m-%d"),
+                "Hora": ahora.strftime("%H:%M:%S"),
+                "Usuario": quien_intenta,
+                "Resultado": estado_intento
+            }
+            lista_intentos.append(nuevo_intento)
+            with open(ARCHIVO_INTENTOS, 'w') as f: json.dump(lista_intentos, f)
+
     if password_ingresada == config_app["admin_password"]:
         
-        tab_mensajes, tab_estadisticas, tab_auditoria, tab_personal, tab_locales, tab_ajustes = st.tabs([
-            "📢 Comunicados", "📈 Métricas", "📊 Auditoría y Fichajes", "👥 Staff", "📍 Tiendas", "⚙️ Sistema"
+        tab_mensajes, tab_estadisticas, tab_auditoria, tab_personal, tab_locales, tab_ajustes, tab_seguridad = st.tabs([
+            "📢 Comunicados", "📈 Métricas", "📊 Fichajes (Edición)", "👥 Staff", "📍 Tiendas", "⚙️ Sistema", "🕵️ Seguridad"
         ])
 
         # TAB 1: COMUNICADOS Y ALERTAS
@@ -318,7 +345,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         c1, c2, c3, c4 = st.columns(4)
                         entradas = df_filtrado[df_filtrado["Tipo"] == "Entrada"]
                         ausencias = df_filtrado[df_filtrado["Tipo"] == "Ausente"]
-                        
                         a_tiempo = len(entradas[entradas["Estado"] == "A tiempo"])
                         tardes = len(entradas[entradas["Estado"] == "Tarde"])
                         
@@ -330,7 +356,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
                     st.markdown("### 🔎 Buscar por Rango de Fechas")
                     rango_stats = st.date_input("Analizar periodo (Desde - Hasta):", value=(hoy, hoy), key="calendario_stats")
-                    
                     if len(rango_stats) == 2:
                         s_inicio, s_fin = rango_stats
                         datos_pers = df_activos[(df_activos['Fecha_Obj'].dt.date >= s_inicio) & (df_activos['Fecha_Obj'].dt.date <= s_fin)]
@@ -351,9 +376,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
         # TAB 3: AUDITORÍA Y FICHAJES (REPORTES + MANUAL)
         with tab_auditoria:
-            # 1. CARGA MANUAL DE FICHAJE / AUSENCIA
             st.subheader("✍️ Carga Manual de Fichaje o Inasistencia")
-            st.write("Usá esto si un empleado se olvidó el celular, si se quedó sin batería, o para cargar que **faltó al trabajo**.")
             with st.form("form_fichaje_manual"):
                 col_fm1, col_fm2, col_fm3 = st.columns(3)
                 fm_emp = col_fm1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -385,7 +408,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     else: st.error("Completá Personal, Tienda y Turno para poder guardar.")
 
             st.markdown("---")
-            # 2. DESCARGAS
             st.subheader("📥 Generar Archivo Excel/CSV")
             if os.path.exists(ARCHIVO_ASISTENCIA):
                 rango_fechas = st.date_input("Filtrar descargas por fechas:", value=(datetime.date.today(), datetime.date.today()))
@@ -399,7 +421,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                             st.download_button(label="📥 EXPORTAR PLANILLA", data=df_descarga.to_csv(index=False).encode('utf-8'), file_name=f"Reporte_Tiendas_{f_inicio}_al_{f_fin}.csv", mime="text/csv", use_container_width=True)
                 
                 st.markdown("---")
-                # 3. EDICIÓN DE ERRORES
                 st.subheader("✏️ Corregir Errores del Historial")
                 fecha_edicion = st.date_input("1. Fecha a auditar:")
                 emp_edicion = st.selectbox("2. Personal involucrado:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -417,19 +438,15 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                 row = df_edicion.loc[idx]
                                 with st.container():
                                     c1, c2, c3, c4 = st.columns([2,2,2,1])
-                                    
                                     tipos_posibles = ["Entrada", "Salida", "Ausente"]
                                     tipo_actual = row.get('Tipo', 'Entrada')
                                     idx_tipo = tipos_posibles.index(tipo_actual) if tipo_actual in tipos_posibles else 0
                                     nuevo_tipo = c1.selectbox(f"Mov. ({row.get('Turno','N/A')})", tipos_posibles, index=idx_tipo, key=f"t_{idx}")
-                                    
                                     nueva_hora = c2.text_input("Hora (HH:MM:SS)", value=row.get('Hora', ''), key=f"h_{idx}")
-                                    
                                     estados_posibles = ["A tiempo", "Tarde", "Salida", "Ausente", "Falta Justificada", "N/A"]
                                     estado_actual = row.get('Estado', 'N/A')
                                     idx_estado = estados_posibles.index(estado_actual) if estado_actual in estados_posibles else 5
                                     nuevo_estado = c3.selectbox("Estado", estados_posibles, index=idx_estado, key=f"e_{idx}")
-                                    
                                     if c4.button("💾", key=f"btn_{idx}"):
                                         df_edicion.at[idx, 'Tipo'] = nuevo_tipo
                                         df_edicion.at[idx, 'Hora'] = nueva_hora
@@ -446,7 +463,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                 st.rerun()
 
                 st.markdown("---")
-                # 4. LIMPIEZA
                 with st.expander("⚠️ Mantenimiento de la Base de Datos"):
                     st.write("**1. Depurar Personal Inactivo**")
                     if st.button("🧹 Limpiar registros de ex-empleados"):
@@ -521,12 +537,10 @@ elif pestaña == "⚙️ Panel de Gerencia":
             with col_aj1:
                 st.subheader("📢 Anuncio General")
                 nuevo_mensaje = st.text_area("Comunicado Corporativo:", value=config_app.get("mensaje_dia", ""))
-                
                 st.markdown("---")
                 st.subheader("⏱️ Reglas de Operación")
                 req_salida = st.checkbox("Requerir botón 'Salida'", value=config_app.get("requiere_salida", True))
                 nueva_tolerancia = st.number_input("Minutos de tolerancia:", min_value=0, max_value=60, value=int(config_app.get("tolerancia_minutos", 10)))
-
                 if st.button("💾 Guardar Configuración"):
                     config_app["mensaje_dia"] = nuevo_mensaje
                     config_app["requiere_salida"] = req_salida
@@ -545,3 +559,19 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         with open(ARCHIVO_CONFIG, 'w') as f: json.dump(config_app, f)
                         st.success("Clave modificada con éxito.")
                     else: st.error("Las claves no coinciden.")
+
+        # TAB 7: SEGURIDAD (NUEVO Y OCULTO AL PÚBLICO)
+        with tab_seguridad:
+            st.subheader("🕵️ Registro de Auditoría de Accesos")
+            st.write("Acá podés ver quién intentó acceder a este Panel de Gerencia (y qué contraseña escribió si se equivocó).")
+            if lista_intentos:
+                df_intentos = pd.DataFrame(lista_intentos)
+                df_intentos = df_intentos.sort_values(by=["Fecha", "Hora"], ascending=[False, False])
+                st.dataframe(df_intentos, use_container_width=True, hide_index=True)
+                
+                if st.button("🗑️ Limpiar registro de seguridad"):
+                    with open(ARCHIVO_INTENTOS, 'w') as f: json.dump([], f)
+                    st.success("Registro formateado.")
+                    st.rerun()
+            else:
+                st.info("No hay ingresos ni intentos sospechosos registrados todavía.")
