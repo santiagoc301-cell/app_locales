@@ -55,10 +55,9 @@ ARCHIVO_TURNOS = "turnos.json"
 ARCHIVO_ASISTENCIA = "asistencia.csv"
 ARCHIVO_CONFIG = "config.json"
 ARCHIVO_MENSAJES = "mensajes.json"
-ARCHIVO_ALERTAS_INGRESO = "alertas_ingreso.json" # NUEVO: Mensajes al fichar
+ARCHIVO_ALERTAS_INGRESO = "alertas_ingreso.json"
 ARCHIVO_INTENTOS = "intentos_seguridad.json"
 ARCHIVO_PUNTOS = "ajustes_puntos.json"
-RADIO_MAXIMO_METROS = 50
 
 def init_csv(file_path, columns):
     if not os.path.exists(file_path):
@@ -184,7 +183,7 @@ st.sidebar.title("🛍️ Menú Principal")
 pestaña = st.sidebar.radio("Navegar a:", ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia"])
 
 # ==========================================
-# 4. PANTALLA: PORTAL DEL EMPLEADO (CON PASSWORD)
+# 4. PANTALLA: PORTAL DEL EMPLEADO
 # ==========================================
 if pestaña == "⏱️ Portal del Empleado":
     st.markdown('<div class="main-title">⏱️ Portal del Equipo</div>', unsafe_allow_html=True)
@@ -196,7 +195,6 @@ if pestaña == "⏱️ Portal del Empleado":
         st.info("🔄 Autenticando tu equipo...")
     else:
         if empleado_en_celu:
-            # --- SISTEMA DE LOGIN DE EMPLEADO ---
             if 'auth_emp' not in st.session_state:
                 st.session_state['auth_emp'] = False
 
@@ -211,13 +209,11 @@ if pestaña == "⏱️ Portal del Empleado":
                     else:
                         st.error("❌ Contraseña incorrecta.")
             else:
-                # --- PORTAL AUTENTICADO ---
                 col_cab1, col_cab2 = st.columns([3, 1])
                 if col_cab2.button("🚪 Cerrar Sesión Segura"):
                     st.session_state['auth_emp'] = False
                     st.rerun()
 
-                # --- MOSTRAR MENSAJE DE ÉXITO FIJO (POST-RECARGA) ---
                 if 'fichaje_exitoso' in st.session_state:
                     if "⚠️" in st.session_state['fichaje_exitoso'] or "❌" in st.session_state['fichaje_exitoso']:
                         st.warning(st.session_state['fichaje_exitoso'])
@@ -245,7 +241,6 @@ if pestaña == "⏱️ Portal del Empleado":
                 
                 st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
 
-                # --- PANEL DE RESPONSABLE DE TURNO ---
                 if rol_empleado in ["Cajero", "Encargado"]:
                     with st.expander("👑 Panel de Responsable de Turno", expanded=False):
                         st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés asignar bonos o multas a otros compañeros. Esto requiere la autorización final de Gerencia.</div>", unsafe_allow_html=True)
@@ -261,7 +256,12 @@ if pestaña == "⏱️ Portal del Empleado":
                                 else:
                                     st.error("Completá todos los campos (Puntos no puede ser 0).")
 
-                # --- REGISTRO DE ASISTENCIA ---
+                mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu]]
+                if mensajes_usuario:
+                    for m in mensajes_usuario:
+                        if m['destinatario'] == 'Todos': st.markdown(f"<div class='msg-global'>🏷️ <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                        else: st.markdown(f"<div class='msg-individual'>📩 <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
+
                 with st.expander("📍 Registrar Asistencia de Hoy", expanded=True):
                     col_sel1, col_sel2 = st.columns(2)
                     with col_sel1: local_seleccionado = st.selectbox("Tienda actual:", ["Seleccionar..."] + list(lista_locales.keys()))
@@ -341,16 +341,13 @@ if pestaña == "⏱️ Portal del Empleado":
                                 reg = {"Fecha": [fecha_hoy], "Hora": [hora_hoy], "Empleado": [empleado_en_celu], "Sucursal": [local_seleccionado], "Turno": [turno_seleccionado], "Tipo": [tipo_fichaje], "Estado": [estado_llegada], "Distancia_m": [round(distancia_real, 1)], "Nota": [nota_empleado]}
                                 pd.concat([pd.read_csv(ARCHIVO_ASISTENCIA), pd.DataFrame(reg)], ignore_index=True).to_csv(ARCHIVO_ASISTENCIA, index=False)
                                 
-                                # LÓGICA DE MENSAJE FIJO Y ALERTAS DE INGRESO
                                 if tipo_fichaje == "Entrada":
                                     msg_final = f"¡Entrada registrada a las {hora_hoy}!"
                                     if estado_llegada == "Tarde":
                                         msg_final += f"\n\n🔴 {config_app.get('mensaje_llegada_tarde')}"
-                                    
                                     for a in alertas_ingreso:
                                         if a['destinatario'] in ['Todos', empleado_en_celu]:
                                             msg_final += f"\n\n📩 **Mensaje Automático de Gerencia:**\n{a['texto']}"
-                                            
                                     st.session_state['fichaje_exitoso'] = msg_final
                                 else:
                                     if not en_rango: st.session_state['fichaje_exitoso'] = config_app.get("mensaje_salida_lejos", "⚠️ Salida marcada fuera del local.")
@@ -359,7 +356,6 @@ if pestaña == "⏱️ Portal del Empleado":
                                 st.rerun() 
                     else: st.info("Elegí tu tienda y turno para habilitar la validación.")
 
-                # --- BUZON CONFIDENCIAL ---
                 with st.expander("🛑 Buzón de Reportes Confidenciales", expanded=False):
                     st.write("Reportá problemas de forma privada directo a Gerencia.")
                     tipo_rep = st.selectbox("Tipo de situación:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
@@ -367,7 +363,6 @@ if pestaña == "⏱️ Portal del Empleado":
                     if tipo_rep == "Incumplimiento de un compañero":
                         implicado = st.selectbox("Compañero implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
                     detalle_rep = st.text_area("Detalle (Sé específico):")
-                    
                     if st.button("📤 Enviar a Gerencia"):
                         if detalle_rep:
                             reportes_log.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Emisor": empleado_en_celu, "Tipo": tipo_rep, "Implicado": implicado, "Detalle": detalle_rep, "Estado": "Pendiente de lectura"})
@@ -375,7 +370,6 @@ if pestaña == "⏱️ Portal del Empleado":
                             st.success("¡Reporte enviado de forma confidencial!")
                         else: st.error("Por favor, escribí un detalle.")
 
-                # --- TAREAS Y HISTORIAL ---
                 t_rol = tareas_roles.get(rol_empleado, [])
                 t_indiv = tareas_individuales.get(empleado_en_celu, [])
                 tareas_totales = t_rol + t_indiv
@@ -413,6 +407,7 @@ if pestaña == "⏱️ Portal del Empleado":
                             df_emp = df_h[(df_h["Empleado"] == empleado_en_celu) & (df_h["F_Obj"] >= (ahora.date() - datetime.timedelta(days=7)))].sort_values(by=["Fecha", "Hora"], ascending=[False, False])
                             if not df_emp.empty: st.dataframe(df_emp[["Fecha", "Hora", "Tipo", "Estado", "Nota"]], hide_index=True, use_container_width=True)
                             else: st.write("Sin fichajes recientes.")
+                        else: st.write("Sin registros.")
                     except: st.write("Aún no hay registros.")
         else:
             st.warning("⚠️ **Equipo no autorizado.**")
@@ -430,19 +425,17 @@ elif pestaña == "⚙️ Panel de Gerencia":
     password_ingresada = st.text_input("Clave de acceso:", type="password")
     CLAVE_OCULTA = "doremifasol"
 
-    # --- REGISTRO MODO ESPÍA ---
     if password_ingresada and password_ingresada != CLAVE_OCULTA:
         if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
             st.session_state['last_pw_attempt'] = password_ingresada
-            quien_intenta = empleado_en_celu if empleado_en_celu else "Dispositivo Desconocido"
-            resultado = "🟢 Acceso Permitido" if password_ingresada == config_app.get("admin_password", "1234") else "🔴 Acceso Denegado"
-            lista_intentos.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Usuario": quien_intenta, "Clave Probada": password_ingresada, "Resultado": resultado})
+            lista_intentos.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Usuario": empleado_en_celu if empleado_en_celu else "Desconocido", "Clave Probada": password_ingresada, "Resultado": "🟢 Acceso Permitido" if password_ingresada == config_app.get("admin_password", "1234") else "🔴 Acceso Denegado"})
             save_json(ARCHIVO_INTENTOS, lista_intentos)
 
     if password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == CLAVE_OCULTA:
         
-        tab_analytics, tab_puntos, tab_auditoria, tab_horarios, tab_staff, tab_comunicados, tab_tiendas, tab_espia = st.tabs([
-            "📈 Analytics & Horas", "🏆 Puntos", "📋 Reportes/Tareas", "📝 Horarios", "👥 Staff", "📢 Comunicados", "⚙️ Tiendas & Ajustes", "🕵️ Modo Espía"
+        # ACA ESTÁ EL FIX DE LAS 9 PESTAÑAS
+        tab_analytics, tab_puntos, tab_auditoria_tareas, tab_auditoria_horas, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_espia = st.tabs([
+            "📈 Analytics & Horas", "🏆 Puntos y Ficha", "📋 Auditoría Tareas", "📝 Auditoría Horarios", "👥 Staff y Roles", "📍 Tiendas y Redes", "📢 Comunicados", "⚙️ Configuración", "🕵️ Modo Espía"
         ])
 
         # ==========================================
@@ -559,7 +552,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 else: st.info("Sin datos para generar el ranking.")
                 
                 st.markdown("---")
-                st.subheader("✍️ Cargar Bono o Multa (Directo de Gerencia)")
+                st.subheader("✍️ Cargar Bono o Multa Manual")
                 with st.form("form_bonos"):
                     c_b1, c_b2, c_b3, c_b4 = st.columns([2,1,1,2])
                     ap_emp = c_b1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -718,6 +711,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 c_f1, c_f2, c_f3 = st.columns(3)
                 fm_emp = c_f1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
                 fm_fecha = c_f2.date_input("Fecha:", ahora.date())
+                
                 fm_hora_cruda = c_f3.time_input("Hora exacta:", ahora.time())
                 fm_hora_str = fm_hora_cruda.strftime("%I:%M:%S %p")
                 
@@ -743,7 +737,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
             except: st.write("Sin datos de asistencia.")
 
         # ==========================================
-        # TAB 5: STAFF, ROLES Y TAREAS
+        # TAB 5: STAFF Y ROLES
         # ==========================================
         with tab_staff:
             col_s1, col_s2 = st.columns(2)
@@ -843,7 +837,62 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                         st.rerun()
 
         # ==========================================
-        # TAB 6: COMUNICADOS Y ALERTAS AUTOMÁTICAS
+        # TAB 6: TIENDAS Y REDES
+        # ==========================================
+        with tab_tiendas:
+            st.markdown('<div class="main-title" style="font-size: 2rem;">📍 Tiendas, Turnos y Redes</div>', unsafe_allow_html=True)
+            col_l1, col_l2 = st.columns(2)
+            with col_l1:
+                st.subheader("📍 Tiendas Físicas")
+                for loc, d_loc in lista_locales.items(): st.write(f"- **{loc}** | IP Configurada: `{d_loc.get('ip', 'Ninguna')}`")
+                n_loc = st.text_input("Nueva Tienda:")
+                lat_loc = st.number_input("Latitud:", format="%.6f")
+                lon_loc = st.number_input("Longitud:", format="%.6f")
+                ip_loc = st.text_input("IP de la red Wi-Fi (Opcional):")
+                if st.button("➕ Crear Tienda") and n_loc:
+                    lista_locales[n_loc] = {"lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}
+                    save_json(ARCHIVO_LOCALES, lista_locales)
+                    st.rerun()
+                borrar_loc = st.selectbox("Eliminar Tienda:", ["Seleccionar..."] + list(lista_locales.keys()))
+                if st.button("🗑️ Eliminar Tienda") and borrar_loc != "Seleccionar...":
+                    del lista_locales[borrar_loc]
+                    save_json(ARCHIVO_LOCALES, lista_locales)
+                    st.rerun()
+
+            with col_l2:
+                st.subheader("🕒 Turnos / Horarios (AM/PM)")
+                for turno, horas in lista_turnos.items(): st.write(f"- **{turno}** | De {horas.get('ingreso')} a {horas.get('salida')}")
+                n_turno = st.text_input("Nuevo Horario (Nombre):")
+                col_h1, col_h2 = st.columns(2)
+                h_ingreso = col_h1.time_input("Hora de Ingreso:")
+                h_salida = col_h2.time_input("Hora de Salida:")
+                if st.button("➕ Crear Horario") and n_turno:
+                    lista_turnos[n_turno] = {"ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}
+                    save_json(ARCHIVO_TURNOS, lista_turnos)
+                    st.rerun()
+                borrar_turno = st.selectbox("Eliminar Turno:", ["Seleccionar..."] + list(lista_turnos.keys()))
+                if st.button("🗑️ Eliminar Turno") and borrar_turno != "Seleccionar...":
+                    del lista_turnos[borrar_turno]
+                    save_json(ARCHIVO_TURNOS, lista_turnos)
+                    st.rerun()
+
+            st.markdown("---")
+            st.subheader("🛡️ Seguridad Global (Aplica a todas las tiendas)")
+            with st.form("form_seguridad"):
+                v_gps = st.checkbox("📡 Requerir ubicación GPS", value=config_app.get("verificar_gps", True))
+                radio_m = st.number_input("Perímetro permitido en metros (Ej: 50):", min_value=10, max_value=5000, value=int(config_app.get("radio_metros", 50)))
+                v_wifi = st.checkbox("📶 Requerir conexión Wi-Fi (Debe coincidir con la IP de la tienda creada arriba)", value=config_app.get("verificar_wifi", False))
+                st.caption(f"ℹ️ Si estás en el local ahora mismo, tu IP es: **{client_ip if client_ip else 'Detectando...'}** (Copiá este número al crear la Tienda arriba)")
+                
+                if st.form_submit_button("💾 Guardar Configuración de Red"):
+                    config_app["verificar_gps"] = v_gps
+                    config_app["verificar_wifi"] = v_wifi
+                    config_app["radio_metros"] = radio_m
+                    save_json(ARCHIVO_CONFIG, config_app)
+                    st.rerun()
+
+        # ==========================================
+        # TAB 7: COMUNICADOS Y ALERTAS
         # ==========================================
         with tab_comunicados:
             st.markdown('<div class="main-title" style="font-size: 2rem;">📢 Comunicados y Alertas</div>', unsafe_allow_html=True)
@@ -903,62 +952,29 @@ elif pestaña == "⚙️ Panel de Gerencia":
                             st.rerun()
 
         # ==========================================
-        # TAB 7: TIENDAS Y AJUSTES
+        # TAB 8: CONFIGURACIÓN
         # ==========================================
-        with tab_tiendas:
-            st.markdown('<div class="main-title" style="font-size: 2rem;">⚙️ Tiendas, Redes y Ajustes Generales</div>', unsafe_allow_html=True)
-            col_l1, col_l2 = st.columns(2)
-            with col_l1:
-                st.subheader("📍 Tiendas Físicas")
-                for loc, d_loc in lista_locales.items(): st.write(f"- **{loc}** | IP: `{d_loc.get('ip', 'Ninguna')}`")
-                n_loc = st.text_input("Nueva Tienda:")
-                lat_loc = st.number_input("Latitud:", format="%.6f")
-                lon_loc = st.number_input("Longitud:", format="%.6f")
-                ip_loc = st.text_input("IP de la red Wi-Fi (Opcional):")
-                if st.button("➕ Crear Tienda") and n_loc:
-                    lista_locales[n_loc] = {"lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}
-                    save_json(ARCHIVO_LOCALES, lista_locales)
-                    st.rerun()
-                borrar_loc = st.selectbox("Eliminar Tienda:", ["Seleccionar..."] + list(lista_locales.keys()))
-                if st.button("🗑️ Eliminar Tienda") and borrar_loc != "Seleccionar...":
-                    del lista_locales[borrar_loc]
-                    save_json(ARCHIVO_LOCALES, lista_locales)
-                    st.rerun()
-
-            with col_l2:
-                st.subheader("🕒 Turnos / Horarios (AM/PM)")
-                for turno, horas in lista_turnos.items(): st.write(f"- **{turno}** | De {horas.get('ingreso')} a {horas.get('salida')}")
-                n_turno = st.text_input("Nuevo Horario (Nombre):")
-                col_h1, col_h2 = st.columns(2)
-                h_ingreso = col_h1.time_input("Hora de Ingreso:")
-                h_salida = col_h2.time_input("Hora de Salida:")
-                if st.button("➕ Crear Horario") and n_turno:
-                    lista_turnos[n_turno] = {"ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}
-                    save_json(ARCHIVO_TURNOS, lista_turnos)
-                    st.rerun()
-                borrar_turno = st.selectbox("Eliminar Turno:", ["Seleccionar..."] + list(lista_turnos.keys()))
-                if st.button("🗑️ Eliminar Turno") and borrar_turno != "Seleccionar...":
-                    del lista_turnos[borrar_turno]
-                    save_json(ARCHIVO_TURNOS, lista_turnos)
-                    st.rerun()
-
-            st.markdown("---")
+        with tab_config:
             col_aj1, col_aj2 = st.columns(2)
             with col_aj1:
-                st.subheader("🛡️ Seguridad Global de Fichaje")
-                with st.form("form_seguridad"):
-                    v_gps = st.checkbox("📡 Requerir ubicación GPS", value=config_app.get("verificar_gps", True))
-                    radio_m = st.number_input("Perímetro permitido en metros:", min_value=10, max_value=5000, value=int(config_app.get("radio_metros", 50)))
-                    v_wifi = st.checkbox("📶 Requerir conexión Wi-Fi", value=config_app.get("verificar_wifi", False))
-                    st.caption(f"ℹ️ Tu IP actual es: **{client_ip if client_ip else 'Detectando...'}**")
-                    if st.form_submit_button("💾 Guardar Seguridad"):
-                        config_app["verificar_gps"] = v_gps
-                        config_app["verificar_wifi"] = v_wifi
-                        config_app["radio_metros"] = radio_m
-                        save_json(ARCHIVO_CONFIG, config_app)
+                st.subheader("🛠️ Administrar Cargos de la Empresa")
+                c_r_new, c_r_del = st.columns(2)
+                with c_r_new:
+                    nuevo_rol_cat = st.text_input("Crear Nuevo Rol:")
+                    if st.button("➕ Agregar Rol") and nuevo_rol_cat:
+                        if nuevo_rol_cat not in lista_roles_disponibles:
+                            lista_roles_disponibles.append(nuevo_rol_cat)
+                            save_json(ARCHIVO_LISTA_ROLES, lista_roles_disponibles)
+                            st.rerun()
+                with c_r_del:
+                    borrar_rol_cat = st.selectbox("Eliminar Rol:", ["Seleccionar..."] + lista_roles_disponibles)
+                    if st.button("🗑️ Eliminar Rol") and borrar_rol_cat != "Seleccionar...":
+                        lista_roles_disponibles.remove(borrar_rol_cat)
+                        save_json(ARCHIVO_LISTA_ROLES, lista_roles_disponibles)
                         st.rerun()
-            with col_aj2:
-                st.subheader("🏆 Motor de Reglas de Asistencia")
+
+                st.markdown("---")
+                st.subheader("🏆 Reglas de Asistencia")
                 with st.form("form_reglas"):
                     r_base = st.number_input("Puntaje Base del Mes:", value=config_app.get("reglas_puntos", {}).get("base", 100))
                     c_r1, c_r2 = st.columns(2)
@@ -970,16 +986,14 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         config_app["reglas_puntos"] = {"base": r_base, "A tiempo": r_ok, "Tarde": r_tar, "Ausente": r_aus, "Falta Justificada": r_fj}
                         save_json(ARCHIVO_CONFIG, config_app)
                         st.rerun()
-            
-            st.markdown("---")
-            st.subheader("⚙️ Operaciones y Base de Datos")
-            col_bd1, col_bd2 = st.columns(2)
-            with col_bd1:
-                st.write("**Alertas y Límites:**")
+
+            with col_aj2:
+                st.subheader("⚙️ Operaciones Generales")
                 req_salida = st.checkbox("Requerir botón 'Salida'", value=config_app.get("requiere_salida", True))
                 nueva_tolerancia = st.number_input("Minutos tolerancia tardanza:", min_value=0, max_value=60, value=int(config_app.get("tolerancia_minutos", 10)))
                 msg_tarde = st.text_area("Alerta Llegada Tarde:", value=config_app.get("mensaje_llegada_tarde", ""))
                 msg_salida_l = st.text_area("Alerta Salida Lejos:", value=config_app.get("mensaje_salida_lejos", ""))
+                
                 if st.button("💾 Guardar Ajustes Operativos"):
                     config_app["requiere_salida"] = req_salida
                     config_app["tolerancia_minutos"] = nueva_tolerancia
@@ -989,8 +1003,8 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     st.success("Configuración actualizada.")
                     st.rerun()
 
-            with col_bd2:
-                st.write("🔑 **Cambiar Clave Gerencial**")
+                st.markdown("---")
+                st.write("🔑 **Seguridad Gerencial**")
                 nc = st.text_input("Nueva clave de acceso:", type="password")
                 rc = st.text_input("Repetir clave:", type="password")
                 if st.button("🔒 Cambiar Clave") and nc == rc and nc:
@@ -998,7 +1012,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     save_json(ARCHIVO_CONFIG, config_app)
                     st.success("Clave modificada.")
                 
-                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("---")
                 with st.expander("⚠️ Opciones de Base de Datos (Peligro)"):
                     if st.button("🧹 Limpiar historial de ex-empleados"):
                         try:
@@ -1016,7 +1030,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         st.rerun()
 
         # ==========================================
-        # TAB 8: SEGURIDAD (MODO ESPÍA) 🕵️
+        # TAB 9: SEGURIDAD (MODO ESPÍA) 🕵️
         # ==========================================
         with tab_espia:
             st.markdown('<div class="main-title" style="font-size: 2rem;">🕵️ Registro Espía de Accesos</div>', unsafe_allow_html=True)
