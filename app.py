@@ -40,13 +40,32 @@ ARCHIVO_ASISTENCIA = "asistencia.csv"
 ARCHIVO_CONFIG = "config.json"
 RADIO_MAXIMO_METROS = 50
 
+# 🛠️ PARCHE AUTOMÁTICO PARA ACTUALIZAR ARCHIVOS VIEJOS
+if os.path.exists(ARCHIVO_ASISTENCIA):
+    try:
+        df_patch = pd.read_csv(ARCHIVO_ASISTENCIA)
+        columnas_requeridas = ["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Distancia_m"]
+        cambios = False
+        for col in columnas_requeridas:
+            if col not in df_patch.columns:
+                if col == "Tipo": df_patch[col] = "Entrada"
+                elif col == "Estado": df_patch[col] = "A tiempo"
+                elif col == "Turno": df_patch[col] = "Sin Turno"
+                elif col == "Distancia_m": df_patch[col] = 0.0
+                else: df_patch[col] = "N/A"
+                cambios = True
+        if cambios:
+            df_patch.to_csv(ARCHIVO_ASISTENCIA, index=False)
+    except:
+        pass
+
 # Configuración Inicial
 if not os.path.exists(ARCHIVO_CONFIG):
     config_inicial = {"admin_password": "1234", "tolerancia_minutos": 15, "requiere_salida": True, "mensaje_dia": ""}
     with open(ARCHIVO_CONFIG, 'w') as f: json.dump(config_inicial, f)
 with open(ARCHIVO_CONFIG, 'r') as f: config_app = json.load(f)
 
-# Parches de actualización
+# Parches de actualización config
 if "tolerancia_minutos" not in config_app: config_app["tolerancia_minutos"] = 15
 if "requiere_salida" not in config_app: config_app["requiere_salida"] = True
 if "mensaje_dia" not in config_app: config_app["mensaje_dia"] = ""
@@ -235,37 +254,46 @@ elif pestaña == "⚙️ Panel de Administrador":
             st.subheader("📊 Análisis de Asistencia (Solo Entradas)")
             if os.path.exists(ARCHIVO_ASISTENCIA):
                 df_stats = pd.read_csv(ARCHIVO_ASISTENCIA)
+                
+                # Asegurarse que exista la columna Tipo por las dudas
+                if "Tipo" not in df_stats.columns:
+                    df_stats["Tipo"] = "Entrada"
+                    
                 df_entradas = df_stats[df_stats["Tipo"] == "Entrada"].copy()
-                df_entradas['Fecha_Obj'] = pd.to_datetime(df_entradas['Fecha'])
                 
-                zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
-                hoy = datetime.datetime.now(zona_arg).date()
-                
-                # Diaria
-                entradas_hoy = df_entradas[df_entradas['Fecha_Obj'].dt.date == hoy]
-                # Semanal
-                hace_7_dias = hoy - datetime.timedelta(days=7)
-                entradas_semana = df_entradas[df_entradas['Fecha_Obj'].dt.date >= hace_7_dias]
-                # Mensual
-                entradas_mes = df_entradas[(df_entradas['Fecha_Obj'].dt.month == hoy.month) & (df_entradas['Fecha_Obj'].dt.year == hoy.year)]
-                # Anual
-                entradas_anio = df_entradas[df_entradas['Fecha_Obj'].dt.year == hoy.year]
+                if not df_entradas.empty:
+                    df_entradas['Fecha_Obj'] = pd.to_datetime(df_entradas['Fecha'], errors='coerce')
+                    
+                    zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
+                    hoy = datetime.datetime.now(zona_arg).date()
+                    
+                    # Diaria
+                    entradas_hoy = df_entradas[df_entradas['Fecha_Obj'].dt.date == hoy]
+                    # Semanal
+                    hace_7_dias = hoy - datetime.timedelta(days=7)
+                    entradas_semana = df_entradas[df_entradas['Fecha_Obj'].dt.date >= hace_7_dias]
+                    # Mensual
+                    entradas_mes = df_entradas[(df_entradas['Fecha_Obj'].dt.month == hoy.month) & (df_entradas['Fecha_Obj'].dt.year == hoy.year)]
+                    # Anual
+                    entradas_anio = df_entradas[df_entradas['Fecha_Obj'].dt.year == hoy.year]
 
-                def mostrar_metricas(titulo, df_filtrado):
-                    st.markdown(f"**{titulo}**")
-                    c1, c2, c3 = st.columns(3)
-                    total = len(df_filtrado)
-                    tardes = len(df_filtrado[df_filtrado["Estado"] == "Tarde"])
-                    a_tiempo = len(df_filtrado[df_filtrado["Estado"] == "A tiempo"])
-                    c1.metric("Total Asistencias", total)
-                    c2.metric("✅ A Tiempo", a_tiempo)
-                    c3.metric("⚠️ Llegadas Tarde", tardes)
-                    st.write("---")
+                    def mostrar_metricas(titulo, df_filtrado):
+                        st.markdown(f"**{titulo}**")
+                        c1, c2, c3 = st.columns(3)
+                        total = len(df_filtrado)
+                        tardes = len(df_filtrado[df_filtrado["Estado"] == "Tarde"])
+                        a_tiempo = len(df_filtrado[df_filtrado["Estado"] == "A tiempo"])
+                        c1.metric("Total Asistencias", total)
+                        c2.metric("✅ A Tiempo", a_tiempo)
+                        c3.metric("⚠️ Llegadas Tarde", tardes)
+                        st.write("---")
 
-                mostrar_metricas("📅 HOY", entradas_hoy)
-                mostrar_metricas("🗓️ ÚLTIMOS 7 DÍAS", entradas_semana)
-                mostrar_metricas("📆 ESTE MES", entradas_mes)
-                mostrar_metricas("🌎 ESTE AÑO", entradas_anio)
+                    mostrar_metricas("📅 HOY", entradas_hoy)
+                    mostrar_metricas("🗓️ ÚLTIMOS 7 DÍAS", entradas_semana)
+                    mostrar_metricas("📆 ESTE MES", entradas_mes)
+                    mostrar_metricas("🌎 ESTE AÑO", entradas_anio)
+                else:
+                    st.info("Aún no hay registros de Entrada para analizar.")
             else:
                 st.info("No hay datos para generar estadísticas.")
 
@@ -277,10 +305,12 @@ elif pestaña == "⚙️ Panel de Administrador":
                 if len(rango_fechas) == 2:
                     f_inicio, f_fin = rango_fechas
                     df_full = pd.read_csv(ARCHIVO_ASISTENCIA)
-                    df_full['Fecha_Temp'] = pd.to_datetime(df_full['Fecha']).dt.date
-                    df_descarga = df_full[(df_full['Fecha_Temp'] >= f_inicio) & (df_full['Fecha_Temp'] <= f_fin)].drop(columns=['Fecha_Temp'])
-                    if not df_descarga.empty:
-                        st.download_button(label="📥 DESCARGAR PLANILLA EXCEL (CSV)", data=df_descarga.to_csv(index=False).encode('utf-8'), file_name=f"Asistencia_{f_inicio}_al_{f_fin}.csv", mime="text/csv", use_container_width=True)
+                    
+                    if "Fecha" in df_full.columns:
+                        df_full['Fecha_Temp'] = pd.to_datetime(df_full['Fecha'], errors='coerce').dt.date
+                        df_descarga = df_full[(df_full['Fecha_Temp'] >= f_inicio) & (df_full['Fecha_Temp'] <= f_fin)].drop(columns=['Fecha_Temp'])
+                        if not df_descarga.empty:
+                            st.download_button(label="📥 DESCARGAR PLANILLA EXCEL (CSV)", data=df_descarga.to_csv(index=False).encode('utf-8'), file_name=f"Asistencia_{f_inicio}_al_{f_fin}.csv", mime="text/csv", use_container_width=True)
                 
                 st.markdown("---")
                 st.subheader("✏️ Editar o Borrar Fichajes Manualmente")
@@ -291,35 +321,41 @@ elif pestaña == "⚙️ Panel de Administrador":
                     df_edicion = pd.read_csv(ARCHIVO_ASISTENCIA)
                     fecha_str = fecha_edicion.strftime("%Y-%m-%d")
                     # Encontrar indices exactos
-                    indices_afectados = df_edicion.index[(df_edicion["Fecha"] == fecha_str) & (df_edicion["Empleado"] == emp_edicion)].tolist()
-                    
-                    if not indices_afectados:
-                        st.warning("No hay registros de este empleado en esta fecha.")
-                    else:
-                        st.write("Fichajes encontrados. Modificá la hora/estado o borralos:")
-                        for idx in indices_afectados:
-                            row = df_edicion.loc[idx]
-                            with st.container():
-                                c1, c2, c3, c4 = st.columns([2,2,2,1])
-                                c1.write(f"**{row['Tipo']}** ({row['Turno']})")
-                                nueva_hora = c2.text_input("Hora (HH:MM:SS)", value=row['Hora'], key=f"h_{idx}")
-                                estados_posibles = ["A tiempo", "Tarde", "Salida", "N/A"]
-                                idx_estado = estados_posibles.index(row['Estado']) if row['Estado'] in estados_posibles else 3
-                                nuevo_estado = c3.selectbox("Estado", estados_posibles, index=idx_estado, key=f"e_{idx}")
-                                
-                                if c4.button("💾 Guardar", key=f"btn_{idx}"):
-                                    df_edicion.at[idx, 'Hora'] = nueva_hora
-                                    df_edicion.at[idx, 'Estado'] = nuevo_estado
-                                    df_edicion.to_csv(ARCHIVO_ASISTENCIA, index=False)
-                                    st.success("¡Modificado!")
-                                    st.rerun()
+                    if "Fecha" in df_edicion.columns and "Empleado" in df_edicion.columns:
+                        indices_afectados = df_edicion.index[(df_edicion["Fecha"] == fecha_str) & (df_edicion["Empleado"] == emp_edicion)].tolist()
                         
-                        st.write("---")
-                        if st.button("🗑️ Eliminar TODOS los registros de este empleado en esta fecha"):
-                            df_limpio = df_edicion.drop(indices_afectados)
-                            df_limpio.to_csv(ARCHIVO_ASISTENCIA, index=False)
-                            st.success("¡Registros eliminados!")
-                            st.rerun()
+                        if not indices_afectados:
+                            st.warning("No hay registros de este empleado en esta fecha.")
+                        else:
+                            st.write("Fichajes encontrados. Modificá la hora/estado o borralos:")
+                            for idx in indices_afectados:
+                                row = df_edicion.loc[idx]
+                                with st.container():
+                                    c1, c2, c3, c4 = st.columns([2,2,2,1])
+                                    tipo_mostrar = row.get('Tipo', 'Entrada')
+                                    turno_mostrar = row.get('Turno', 'N/A')
+                                    estado_mostrar = row.get('Estado', 'N/A')
+                                    hora_mostrar = row.get('Hora', '00:00:00')
+                                    
+                                    c1.write(f"**{tipo_mostrar}** ({turno_mostrar})")
+                                    nueva_hora = c2.text_input("Hora (HH:MM:SS)", value=hora_mostrar, key=f"h_{idx}")
+                                    estados_posibles = ["A tiempo", "Tarde", "Salida", "N/A"]
+                                    idx_estado = estados_posibles.index(estado_mostrar) if estado_mostrar in estados_posibles else 3
+                                    nuevo_estado = c3.selectbox("Estado", estados_posibles, index=idx_estado, key=f"e_{idx}")
+                                    
+                                    if c4.button("💾 Guardar", key=f"btn_{idx}"):
+                                        df_edicion.at[idx, 'Hora'] = nueva_hora
+                                        df_edicion.at[idx, 'Estado'] = nuevo_estado
+                                        df_edicion.to_csv(ARCHIVO_ASISTENCIA, index=False)
+                                        st.success("¡Modificado!")
+                                        st.rerun()
+                            
+                            st.write("---")
+                            if st.button("🗑️ Eliminar TODOS los registros de este empleado en esta fecha"):
+                                df_limpio = df_edicion.drop(indices_afectados)
+                                df_limpio.to_csv(ARCHIVO_ASISTENCIA, index=False)
+                                st.success("¡Registros eliminados!")
+                                st.rerun()
             else:
                 st.info("La base de datos está vacía.")
 
