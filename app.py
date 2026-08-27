@@ -140,6 +140,9 @@ lista_puntos = load_json("ajustes_puntos", [])
 reportes_log = load_json("reportes", [])
 salidas_pendientes = load_json("salidas_pendientes", [])
 
+# ---> NUEVA BASE DE DATOS DE SUELDOS HISTÓRICOS <---
+sueldos_historico = load_json("sueldos_historico", [])
+
 ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A"]
 
 def procesar_rango_fechas(rango):
@@ -461,7 +464,6 @@ if pestaña == "⏱️ Portal del Empleado":
                     turno_actual = datos_turno_activo.get("Turno", "N/A")
                     st.success(f"🟢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
                     
-                    # ---> LÓGICA DE SALIDA AUTOMÁTICA VS MANUAL <---
                     if not config_app.get("exigir_salida_manual", False):
                         st.info("🕒 **Salida Automática Activada:** No necesitás registrar tu salida. El sistema computará tu turno de 6 horas automáticamente (descontando llegadas tarde). Si te retirás antes de tiempo, pedile al Responsable de Turno que audite tu salida.")
                     else:
@@ -616,8 +618,10 @@ elif pestaña == "⚙️ Panel de Gerencia":
             save_json("intentos_seguridad", lista_intentos)
 
     if password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == "doremifasol":
-        tab_analytics, tab_puntos, tab_auditoria_tareas, tab_auditoria_horas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_espia = st.tabs([
-            "📈 Analytics", "🏆 Ranking", "📋 Auditar Tareas", "📝 Auditar Horarios", "👤 Perfil Empleado", "👥 Staff", "📍 Tiendas", "📢 Avisos", "⚙️ Config/Reseteo", "🕵️ Espía"
+        
+        # ---> AGREGAMOS LA NUEVA PESTAÑA "SUELDOS" <---
+        tab_analytics, tab_sueldos, tab_puntos, tab_auditoria_tareas, tab_auditoria_horas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_espia = st.tabs([
+            "📈 Analytics", "💰 Sueldos", "🏆 Ranking", "📋 Auditar Tareas", "📝 Auditar Horarios", "👤 Perfil Empleado", "👥 Staff", "📍 Tiendas", "📢 Avisos", "⚙️ Config/Reseteo", "🕵️ Espía"
         ])
 
         with tab_analytics:
@@ -687,6 +691,8 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     fecha_in_dl = c_dl2.date_input("📅 Desde el día:", value=ahora.date() - datetime.timedelta(days=7), key="dl_in")
                     fecha_fi_dl = c_dl3.date_input("📅 Hasta el día:", value=ahora.date(), key="dl_fi")
                     
+                    v_recortar_salida = st.checkbox("✂️ Recortar horas extra (Topar el pago hasta el horario de salida oficial del turno)", value=False)
+                    
                     df_dl = df_activos.copy()
                     df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
                     
@@ -700,19 +706,20 @@ elif pestaña == "⚙️ Panel de Gerencia":
                             for loc in df_e["Sucursal"].unique():
                                 df_e_loc = df_e[df_e["Sucursal"] == loc]
                                 horas_totales = 0.0
+                                pago_total = 0.0
+                                
                                 for f in df_e_loc["Fecha"].unique():
                                     df_ef = df_e_loc[df_e_loc["Fecha"] == f].copy()
                                     df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
                                     df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                                     ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                                     
-                                    # ---> NUEVO SISTEMA: 6 HORAS ASEGURADAS CON DESCUENTO DE LLEGADA TARDE <---
+                                    horas_dia = 0.0
                                     if not ent.empty:
                                         h_in = ent.iloc[0]["Hora_dt"]
                                         turno_actual_eval = ent.iloc[0]["Turno"]
                                         horas_dia = 6.0
                                         
-                                        # Calculamos si llegó tarde para descontarlo de las 6 horas
                                         if turno_actual_eval in lista_turnos:
                                             h_oficial_in_str = lista_turnos[turno_actual_eval].get("ingreso")
                                             if h_oficial_in_str:
@@ -723,36 +730,50 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                                     if diff_tarde > 0:
                                                         horas_dia -= diff_tarde
                                         
-                                        # Verificamos si hay una salida registrada (Manual o por Cajero)
                                         if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
                                             h_out = sal.iloc[-1]["Hora_dt"]
                                             diff_trabajado = (h_out - h_in).total_seconds() / 3600.0
                                             diff_trabajado = diff_trabajado if diff_trabajado >= 0 else (diff_trabajado + 24.0)
                                             
-                                            # Si la salida marca que se fue ANTES de cumplir sus horas, pisamos el valor
                                             if diff_trabajado < horas_dia:
                                                 horas_dia = diff_trabajado
 
-                                        horas_totales += max(0.0, horas_dia)
+                                        horas_dia = max(0.0, horas_dia)
+                                        horas_totales += horas_dia
+                                        
+                                        # ---> CÁLCULO DE LIQUIDACIÓN DE SUELDO POR DÍA <---
+                                        sueldo_hora = 0.0
+                                        for s in sueldos_historico:
+                                            if s["Empleado"] == emp and s["Fecha_Desde"] <= str(f) <= s["Fecha_Hasta"]:
+                                                sueldo_hora = float(s["Valor_Hora"])
+                                                break
+                                        
+                                        pago_total += (horas_dia * sueldo_hora)
                                 
                                 if horas_totales > 0:
                                     datos_horas.append({
                                         "Personal": emp, 
                                         "Rol": roles_empleados.get(emp, "Staff"), 
                                         "Sucursal": loc, 
-                                        "⏱️ Horas Computadas": round(horas_totales, 2)
+                                        "⏱️ Horas Computadas": round(horas_totales, 2),
+                                        "💰 Pago Est.": round(pago_total, 2)
                                     })
                             
                     if datos_horas:
                         df_horas_final = pd.DataFrame(datos_horas).sort_values(by=["Personal", "⏱️ Horas Computadas"], ascending=[True, False])
-                        st.dataframe(df_horas_final, use_container_width=True, hide_index=True)
+                        
+                        # Formatear la columna de Pago Est. con el signo $ para que se vea lindo en la tabla
+                        df_mostrar = df_horas_final.copy()
+                        df_mostrar["💰 Pago Est."] = df_mostrar["💰 Pago Est."].apply(lambda x: f"${x:,.2f}")
+                        
+                        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
                         
                         st.write("⬇️ **Descargar Archivos (Excel/CSV)**")
                         c_btn1, c_btn2 = st.columns(2)
                         
                         csv_horas = df_horas_final.to_csv(index=False).encode('utf-8')
                         b64_horas = base64.b64encode(csv_horas).decode()
-                        link_horas = f'<a href="data:file/csv;base64,{b64_horas}" download="HorasTotales_{local_descarga}_{fecha_in_dl}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">⏱️ Descargar Horas</a>'
+                        link_horas = f'<a href="data:file/csv;base64,{b64_horas}" download="Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">⏱️ Descargar Liquidación</a>'
                         c_btn1.markdown(link_horas, unsafe_allow_html=True)
 
                         df_asist_dl = df_dl.copy()
@@ -764,13 +785,62 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         b64_asist = base64.b64encode(csv_asist).decode()
                         link_asist = f'<a href="data:file/csv;base64,{b64_asist}" download="Fichajes_{local_descarga}_{fecha_in_dl}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">📄 Descargar Fichajes</a>'
                         c_btn2.markdown(link_asist, unsafe_allow_html=True)
-                        
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        with st.expander("📱 ¿No te descarga en el celular? Usá esta alternativa"):
-                            st.info("Algunos celulares bloquean las descargas automáticas. Tocá el botón de **Copiar** que aparece arriba a la derecha del siguiente recuadro negro y pegá los datos directamente en Excel, Google Sheets o WhatsApp.")
-                            st.code(csv_horas.decode('utf-8'), language='csv')
                     else:
                         st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
+
+        # ---> NUEVA PESTAÑA DE CONFIGURACIÓN DE SUELDOS <---
+        with tab_sueldos:
+            st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Liquidación de Sueldos</div>', unsafe_allow_html=True)
+            st.write("Configurá cuánto vale la hora de trabajo de cada empleado. El sistema usará este valor para calcular el **Pago Estimado** en la pestaña de Analytics.")
+            
+            c_su1, c_su2 = st.columns([1, 2])
+            with c_su1:
+                with st.form("form_nuevo_sueldo"):
+                    st.subheader("➕ Asignar Tarifa")
+                    emp_s = st.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados))
+                    val_s = st.number_input("Valor por Hora ($):", min_value=0.0, step=100.0)
+                    f_ini = st.date_input("Vigente Desde:", value=ahora.date())
+                    # Por defecto ponemos que el sueldo rige hasta el año 2099 (para que sea fijo hasta que lo cambien)
+                    f_fin = st.date_input("Vigente Hasta:", value=datetime.date(2099, 12, 31))
+                    
+                    if st.form_submit_button("Guardar Tarifa"):
+                        if emp_s == "Seleccionar..." or val_s <= 0:
+                            st.warning("⚠️ Tenés que seleccionar un empleado y poner un valor mayor a $0.")
+                        elif f_ini > f_fin:
+                            st.warning("⚠️ La fecha 'Desde' no puede ser mayor a la fecha 'Hasta'.")
+                        else:
+                            sueldos_historico.append({
+                                "Empleado": emp_s,
+                                "Fecha_Desde": f_ini.strftime("%Y-%m-%d"),
+                                "Fecha_Hasta": f_fin.strftime("%Y-%m-%d"),
+                                "Valor_Hora": val_s
+                            })
+                            save_json("sueldos_historico", sueldos_historico)
+                            st.success(f"✅ ¡Tarifa de ${val_s}/h guardada para {emp_s}!")
+                            st.rerun()
+            
+            with c_su2:
+                st.subheader("📋 Historial de Tarifas Activas")
+                if sueldos_historico:
+                    df_sueldos = pd.DataFrame(sueldos_historico)
+                    df_sueldos = df_sueldos.sort_values(by=["Empleado", "Fecha_Desde"], ascending=[True, False])
+                    # Mostramos visualmente en la tabla un texto más amigable si el año es 2099
+                    df_sueldos["Fecha_Hasta"] = df_sueldos["Fecha_Hasta"].replace("2099-12-31", "Actualidad")
+                    df_sueldos["Valor_Hora"] = df_sueldos["Valor_Hora"].apply(lambda x: f"${x:,.2f}")
+                    
+                    st.dataframe(df_sueldos, use_container_width=True, hide_index=True)
+                    
+                    st.write("---")
+                    st.write("**Borrar una configuración equivocada:**")
+                    for idx, s in enumerate(sueldos_historico):
+                        txt_hasta = "Actualidad" if s['Fecha_Hasta'] == "2099-12-31" else s['Fecha_Hasta']
+                        with st.expander(f"👤 {s['Empleado']} | ${s['Valor_Hora']}/h | 🗓️ {s['Fecha_Desde']} al {txt_hasta}"):
+                            if st.button("🗑️ Eliminar esta tarifa", key=f"del_sueldo_{idx}"):
+                                sueldos_historico.pop(idx)
+                                save_json("sueldos_historico", sueldos_historico)
+                                st.rerun()
+                else:
+                    st.info("ℹ️ Todavía no configuraste ningún sueldo. Las horas se calcularán con un valor de $0 por defecto.")
 
         with tab_puntos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Ranking de Puntos</div>', unsafe_allow_html=True)
@@ -930,7 +1000,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                         ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                         
-                        # ---> NUEVO SISTEMA: 6 HORAS ASEGURADAS CON DESCUENTO DE LLEGADA TARDE <---
                         if not ent.empty:
                             h_in = ent.iloc[0]["Hora_dt"]
                             turno_actual_eval = ent.iloc[0]["Turno"]
@@ -1034,6 +1103,11 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                 for m in lista_mensajes:
                                     if m.get('destinatario') == emp_mod: m['destinatario'] = nn
                                 save_json("mensajes", lista_mensajes)
+                                
+                                # ---> ACTUALIZAR TAMBIÉN EL HISTORIAL DE SUELDOS <---
+                                for sh in sueldos_historico:
+                                    if sh.get('Empleado') == emp_mod: sh['Empleado'] = nn
+                                save_json("sueldos_historico", sueldos_historico)
                                 
                                 try:
                                     supabase.table("asistencia").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
@@ -1158,8 +1232,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     nueva_tolerancia = st.number_input("Minutos tolerancia (llegada tarde):", value=int(config_app.get("tolerancia_minutos", 10)))
                     
                     st.markdown("---")
-                    
-                    # ---> BOTÓN PARA EXIGIR O NO LA SALIDA MANUAL <---
                     v_exigir_salida_manual = st.checkbox("🛑 Exigir Fichaje de Salida Manual", value=config_app.get("exigir_salida_manual", False), help="Si se desactiva, la salida es automática y no se les pedirá fichar al irse (El sistema asumirá 6 horas menos las llegadas tarde).")
                     v_mostrar_membresia = st.checkbox("👁️ Mostrar tipo de membresía contratada", value=config_app.get("mostrar_membresia", False), help="Muestra a todos los empleados el plan de software contratado en el menú lateral.")
                     
@@ -1287,6 +1359,7 @@ elif pestaña == "💻 Dueño del Software":
                 save_json("ajustes_puntos", [])
                 save_json("reportes", [])
                 save_json("salidas_pendientes", [])
+                save_json("sueldos_historico", []) # Borrar sueldos históricos
                 
                 supabase.table("asistencia").delete().neq("id", 0).execute()
                 supabase.table("tareas_log").delete().neq("id", 0).execute()
