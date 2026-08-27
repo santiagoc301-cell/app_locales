@@ -1323,4 +1323,3 @@ if password_ingresada:
                     st.rerun()
             else:
                 st.info("Sin intentos de acceso.")
-```
