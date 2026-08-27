@@ -240,6 +240,7 @@ if pestaña == "⏱️ Portal del Empleado":
             puntos_actuales = config_app["reglas_puntos"]["base"]
             d1_mes = ahora.date().replace(day=1)
             
+            # --- CÁLCULOS PRINCIPALES ---
             df_punt = load_df("asistencia")
             if not df_punt.empty:
                 df_punt['F_Obj'] = pd.to_datetime(df_punt['Fecha'], errors='coerce').dt.date
@@ -253,20 +254,71 @@ if pestaña == "⏱️ Portal del Empleado":
             
             puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada" and datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() >= d1_mes])
             
+            # --- DETECCIÓN DE TURNO ACTIVO ---
+            df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy() if not df_punt.empty else pd.DataFrame()
+            estado_laboral = "Fuera"
+            datos_turno_activo = {}
+            
+            if not df_hoy.empty:
+                if 'id' in df_hoy.columns:
+                    df_hoy['id_num'] = pd.to_numeric(df_hoy['id'], errors='coerce')
+                    df_hoy = df_hoy.sort_values(by="id_num")
+                ultimo_reg = df_hoy.iloc[-1]
+                if ultimo_reg["Tipo"] == "Entrada":
+                    estado_laboral = "Adentro"
+                    try: dist_guardada = float(ultimo_reg.get("Distancia_m", 0.0))
+                    except: dist_guardada = 0.0
+                    datos_turno_activo = {"Sucursal": str(ultimo_reg["Sucursal"]), "Turno": str(ultimo_reg["Turno"]), "Distancia_m": dist_guardada}
+
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts en {ahora.strftime('%B')})</div></div>", unsafe_allow_html=True)
 
+            # ---> NUEVO PANEL DEL CAJERO (CON AUDITORÍA DE SALIDAS) <---
             if rol_empleado in ["Cajero", "Encargado"]:
                 with st.expander("👑 Panel de Responsable de Turno", expanded=False):
-                    st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés asignar bonos o multas a otros compañeros. Requiere auditoría.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas y asignar puntos a tus compañeros.</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("#### 🕒 Auditar Salida de Compañero")
+                    st.write("Si alguien se olvidó de fichar o se retiró antes, cargá su salida manualmente para que quede registrada en Gerencia.")
+                    with st.form("form_sup_salida"):
+                        c_s1, c_s2 = st.columns(2)
+                        s_emp_salida = c_s1.selectbox("Compañero a retirar:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
+                        s_hora_salida = c_s2.time_input("Hora exacta de salida:", ahora.time())
+                        s_motivo_salida = st.text_input("Nota de Auditoría (Ej: 'Se fue temprano por el médico'):")
+                        
+                        if st.form_submit_button("Fichar Salida"):
+                            if s_emp_salida == "Seleccionar...":
+                                st.warning("⚠️ Elegí un compañero de la lista.")
+                            else:
+                                hora_str_salida = s_hora_salida.strftime("%I:%M:%S %p")
+                                nota_final = f"[Auditado por {empleado_en_celu}] {s_motivo_salida}"
+                                loc_aud = datos_turno_activo.get("Sucursal", "Manual") if estado_laboral == "Adentro" else "Manual"
+                                turn_aud = datos_turno_activo.get("Turno", "Manual") if estado_laboral == "Adentro" else "Manual"
+                                
+                                insert_row("asistencia", {
+                                    "Fecha": str(fecha_hoy), 
+                                    "Hora": str(hora_str_salida), 
+                                    "Empleado": str(s_emp_salida), 
+                                    "Sucursal": str(loc_aud), 
+                                    "Turno": str(turn_aud), 
+                                    "Tipo": "Salida", 
+                                    "Estado": "Salida", 
+                                    "Distancia_m": 0.0, 
+                                    "Nota": str(nota_final)
+                                })
+                                st.success(f"✅ Salida de {s_emp_salida} registrada correctamente a las {hora_str_salida}.")
+                                st.rerun()
+
+                    st.markdown("---")
+                    st.markdown("#### 🏆 Asignar Bono o Multa")
                     with st.form("form_sup_puntos"):
                         s_emp = st.selectbox("Compañero:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
                         s_pts = st.number_input("Puntos (+/-):", value=0, step=1)
                         s_mot = st.text_input("Motivo:")
                         
                         if st.form_submit_button("Enviar a Gerencia"):
-                            if s_emp == "Seleccionar... or s_pts == 0 or not s_mot.strip()":
-                                st.warning("⚠️ ¡Completá todos los campos!")
+                            if s_emp == "Seleccionar..." or s_pts == 0 or not s_mot.strip():
+                                st.warning("⚠️ ¡Completá todos los campos! (Elegí un compañero, poné un puntaje distinto a 0 y escribí el motivo).")
                             else:
                                 lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot.strip(), "Autor": empleado_en_celu, "Estado": "Pendiente"})
                                 save_json("ajustes_puntos", lista_puntos)
@@ -283,23 +335,8 @@ if pestaña == "⏱️ Portal del Empleado":
                         st.markdown(f"<div class='msg-individual report-box'>📩 <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
 
             with st.expander("📍 Smart Check-In", expanded=True):
-                df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy() if not df_punt.empty else pd.DataFrame()
-                estado_laboral = "Fuera"
-                datos_turno_activo = {}
-                
-                if not df_hoy.empty:
-                    if 'id' in df_hoy.columns:
-                        df_hoy['id_num'] = pd.to_numeric(df_hoy['id'], errors='coerce')
-                        df_hoy = df_hoy.sort_values(by="id_num")
-                    
-                    ultimo_reg = df_hoy.iloc[-1]
-                    if ultimo_reg["Tipo"] == "Entrada":
-                        estado_laboral = "Adentro"
-                        try: dist_guardada = float(ultimo_reg.get("Distancia_m", 0.0))
-                        except: dist_guardada = 0.0
-                        datos_turno_activo = {"Sucursal": str(ultimo_reg["Sucursal"]), "Turno": str(ultimo_reg["Turno"]), "Distancia_m": dist_guardada}
-                    else:
-                        st.info("📋 Ya tenés turnos finalizados hoy. Podés registrar un nuevo ingreso si es necesario.")
+                if estado_laboral == "Adentro":
+                    st.info("📋 Ya tenés una entrada abierta.")
 
                 if estado_laboral == "Fuera":
                     st.markdown("### 🤖 Radar Automático")
@@ -635,8 +672,9 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                     df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                                     ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                                     
-                                    if not ent.empty and not sal.empty:
-                                        if sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
+                                    # ---> NUEVO SISTEMA DE FANTASMA (6 HORAS POR DEFECTO) <---
+                                    if not ent.empty:
+                                        if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
                                             h_in = ent.iloc[0]["Hora_dt"]
                                             h_out = sal.iloc[-1]["Hora_dt"]
                                             turno_actual_eval = ent.iloc[0]["Turno"]
@@ -655,6 +693,9 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                                             diff = diff_oficial
 
                                             horas_totales += diff
+                                        else:
+                                            # Ficharon entrada pero no marcaron salida: 6 horas de base aseguradas.
+                                            horas_totales += 6.0
                                 
                                 if horas_totales > 0:
                                     datos_horas.append({
@@ -830,10 +871,15 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
                         df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                         ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
-                        if not ent.empty and not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
-                            h_in, h_out = ent.iloc[0]["Hora_dt"], sal.iloc[-1]["Hora_dt"]
-                            diff = (h_out - h_in).total_seconds() / 3600.0
-                            horas_totales += diff if diff >= 0 else (diff + 24.0)
+                        
+                        # ---> NUEVO SISTEMA FANTASMA PARA EL PERFIL <---
+                        if not ent.empty:
+                            if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
+                                h_in, h_out = ent.iloc[0]["Hora_dt"], sal.iloc[-1]["Hora_dt"]
+                                diff = (h_out - h_in).total_seconds() / 3600.0
+                                horas_totales += diff if diff >= 0 else (diff + 24.0)
+                            else:
+                                horas_totales += 6.0
                                 
                     e_aj = sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == emp_perfil and p.get('Estado') == 'Aprobada' and pf_in <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= pf_fi])
                     e_tp = 0
@@ -957,8 +1003,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 for loc, d_loc in lista_locales.items(): st.write(f"- **{loc}** | IP: `{d_loc.get('ip', 'Ninguna')}`")
                 
                 st.markdown("---")
-                
-                # ---> LÓGICA SEGURA DE IP PARA GERENCIA <---
                 ip_gerencia = st.session_state.get('client_ip')
                 if not ip_gerencia:
                     ip_eval = streamlit_js_eval(js_expressions="fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')", want_output=True, key="ip_manager")
