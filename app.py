@@ -274,43 +274,8 @@ if pestaña == "⏱️ Portal del Empleado":
 
             if rol_empleado in ["Cajero", "Encargado"]:
                 with st.expander("👑 Panel de Responsable de Turno", expanded=False):
-                    st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas, cargar tu caja y asignar puntos.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas y asignar puntos a tus compañeros.</div>", unsafe_allow_html=True)
                     
-                    # ---> MÓDULO DE CIERRE DE CAJA PARA CAJEROS <---
-                    st.markdown("#### 💸 Cierre de Caja Diario")
-                    st.write("Registrá los montos recaudados al finalizar tu turno.")
-                    with st.form("form_cierre_caja"):
-                        c_caj1, c_caj2 = st.columns(2)
-                        val_efectivo = c_caj1.number_input("💵 Efectivo ($):", min_value=0.0, step=1000.0)
-                        val_tarjeta = c_caj2.number_input("💳 Tarjeta ($):", min_value=0.0, step=1000.0)
-                        
-                        c_caj3, c_caj4 = st.columns(2)
-                        val_transf = c_caj3.number_input("📱 Transferencia ($):", min_value=0.0, step=1000.0)
-                        val_total = c_caj4.number_input("📊 Total Ventas Declarado ($):", min_value=0.0, step=1000.0)
-                        
-                        nota_caja = st.text_input("📝 Novedades (Faltantes, sobrantes, etc.):")
-                        
-                        if st.form_submit_button("📤 Enviar Cierre de Caja"):
-                            sucursal_actual = datos_turno_activo.get("Sucursal", "Desconocida") if estado_laboral == "Adentro" else "Desconocida"
-                            turno_actual = datos_turno_activo.get("Turno", "Desconocido") if estado_laboral == "Adentro" else "Desconocido"
-                            
-                            cierres_caja.append({
-                                "Fecha": str(fecha_hoy),
-                                "Hora": str(hora_hoy),
-                                "Cajero": str(empleado_en_celu),
-                                "Sucursal": str(sucursal_actual),
-                                "Turno": str(turno_actual),
-                                "Efectivo": val_efectivo,
-                                "Tarjeta": val_tarjeta,
-                                "Transferencia": val_transf,
-                                "Total_Ventas": val_total,
-                                "Nota": nota_caja.strip()
-                            })
-                            save_json("cierres_caja", cierres_caja)
-                            st.success("✅ ¡Cierre de caja enviado correctamente a Gerencia!")
-                            st.rerun()
-
-                    st.markdown("---")
                     st.markdown("#### 🕒 Auditar Salida de Compañero")
                     if estado_laboral == "Adentro":
                         suc_cajero = datos_turno_activo.get("Sucursal")
@@ -653,7 +618,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
     if password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == "doremifasol":
         
-        # ---> NUEVA PESTAÑA "CAJAS" <---
         tab_analytics, tab_caja, tab_sueldos, tab_puntos, tab_auditoria_tareas, tab_auditoria_horas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_espia = st.tabs([
             "📈 Analytics", "💸 Cajas", "💰 Sueldos", "🏆 Ranking", "📋 Tareas", "📝 Horarios", "👤 Perfiles", "👥 Staff", "📍 Tiendas", "📢 Avisos", "⚙️ Ajustes", "🕵️ Espía"
         ])
@@ -725,8 +689,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     fecha_in_dl = c_dl2.date_input("📅 Desde el día:", value=ahora.date() - datetime.timedelta(days=7), key="dl_in")
                     fecha_fi_dl = c_dl3.date_input("📅 Hasta el día:", value=ahora.date(), key="dl_fi")
                     
-                    v_recortar_salida = st.checkbox("✂️ Recortar horas extra (Topar el pago hasta el horario de salida oficial del turno)", value=False)
-                    
                     df_dl = df_activos.copy()
                     df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
                     
@@ -749,6 +711,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                     ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                                     
                                     horas_dia = 0.0
+                                    # ---> HORAS FIJAS AUTOMÁTICAS (MENOS TARDANZAS) <---
                                     if not ent.empty:
                                         h_in = ent.iloc[0]["Hora_dt"]
                                         turno_actual_eval = ent.iloc[0]["Turno"]
@@ -825,9 +788,51 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     else:
                         st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
 
-        # ---> NUEVA PESTAÑA: CIERRES DE CAJA <---
+        # ---> NUEVA PESTAÑA: CIERRES DE CAJA EN GERENCIA <---
         with tab_caja:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💸 Control de Caja</div>', unsafe_allow_html=True)
+            
+            with st.expander("➕ Cargar Nuevo Cierre de Caja", expanded=True):
+                st.write("Registrá los montos recaudados al finalizar el turno de una sucursal.")
+                with st.form("form_cierre_caja"):
+                    c_caj1, c_caj2 = st.columns(2)
+                    caj_emp = c_caj1.selectbox("Cajero/Encargado Responsable:", ["Seleccionar..."] + sorted(lista_empleados))
+                    caj_suc = c_caj2.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()))
+                    
+                    c_caj3, c_caj4 = st.columns(2)
+                    val_efectivo = c_caj3.number_input("💵 Efectivo ($):", min_value=0.0, step=1000.0)
+                    val_tarjeta = c_caj4.number_input("💳 Tarjeta ($):", min_value=0.0, step=1000.0)
+                    
+                    c_caj5, c_caj6 = st.columns(2)
+                    val_transf = c_caj5.number_input("📱 Transferencia ($):", min_value=0.0, step=1000.0)
+                    val_total = c_caj6.number_input("📊 Total Ventas Declarado ($):", min_value=0.0, step=1000.0)
+                    
+                    c_caj7, c_caj8 = st.columns(2)
+                    caj_fecha = c_caj7.date_input("Fecha del Cierre:", value=ahora.date())
+                    nota_caja = c_caj8.text_input("📝 Novedades (Faltantes, sobrantes, etc.):")
+                    
+                    if st.form_submit_button("💾 Guardar Cierre de Caja"):
+                        if caj_emp == "Seleccionar..." or caj_suc == "Seleccionar...":
+                            st.warning("⚠️ Seleccioná un empleado y una sucursal para guardar el reporte.")
+                        else:
+                            cierres_caja.append({
+                                "Fecha": caj_fecha.strftime("%Y-%m-%d"),
+                                "Hora": hora_hoy,
+                                "Cajero": caj_emp,
+                                "Sucursal": caj_suc,
+                                "Turno": "N/A", 
+                                "Efectivo": val_efectivo,
+                                "Tarjeta": val_tarjeta,
+                                "Transferencia": val_transf,
+                                "Total_Ventas": val_total,
+                                "Nota": nota_caja.strip()
+                            })
+                            save_json("cierres_caja", cierres_caja)
+                            st.success("✅ ¡Cierre de caja guardado correctamente!")
+                            st.rerun()
+
+            st.write("---")
+            st.subheader("📋 Historial de Cajas")
             c_fc1, c_fc2 = st.columns([1,3])
             filtro_caja = c_fc1.selectbox("⏳ Filtrar por:", ["Hoy", "Esta Semana", "Este Mes", "Mes Anterior", "Todo el Historial", "Personalizado"], key="filtro_caja")
             rango_caja = c_fc2.date_input("🗓️ Fechas de Caja:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_caja == "Personalizado" else None
@@ -884,7 +889,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     emp_s = st.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados))
                     val_s = st.number_input("Valor por Hora ($):", min_value=0.0, step=100.0)
                     
-                    # ---> CALENDARIO SIN RESTRICCIONES DE AÑO <---
                     f_ini = st.date_input("Vigente Desde:", value=ahora.date())
                     es_actual = st.checkbox("✅ Tarifa actual (Sin fecha de cierre)", value=True, help="Si está marcado, esta tarifa regirá para siempre hasta que le asignes una nueva.")
                     if es_actual:
@@ -987,8 +991,8 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 ap_motivo = c_b4.text_input("Motivo:")
                 
                 if st.form_submit_button("Aplicar a Puntuación"):
-                    if ap_emp == "Seleccionar...":
-                        st.warning("⚠️ Error: Faltan completar datos (Asegurate de elegir un empleado).")
+                    if ap_emp == "Seleccionar..." or ap_puntos == 0 or not ap_motivo.strip():
+                        st.warning("⚠️ Error: Faltan completar datos (Asegurate de elegir un empleado, que los puntos no sean 0 y escribir un motivo).")
                     else:
                         lista_puntos.append({"Fecha": ap_fecha.strftime("%Y-%m-%d"), "Empleado": ap_emp, "Puntos": ap_puntos, "Motivo": ap_motivo.strip(), "Autor": "Gerencia", "Estado": "Aprobada"})
                         save_json("ajustes_puntos", lista_puntos)
@@ -1401,7 +1405,6 @@ elif pestaña == "💻 Dueño del Software":
                 estado_actual = st.selectbox("Estado del Sistema:", ["Activo", "Suspendido"], index=["Activo", "Suspendido"].index(owner_config.get("estado_licencia", "Activo")))
                 plan_actual = st.selectbox("Plan de Pago contratado:", ["Mensual", "Anual", "Vitalicio"], index=["Mensual", "Anual", "Vitalicio"].index(owner_config.get("plan_pago", "Mensual")))
                 
-                # ---> CALENDARIO SIN RESTRICCIONES DE AÑO <---
                 fecha_venc = st.date_input("Fecha de Vencimiento Automático:", value=datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date())
                 msg_bloqueo = st.text_area("Mensaje de Bloqueo (Se muestra al suspender o vencer):", value=owner_config.get("mensaje_bloqueo", ""))
                 
