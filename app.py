@@ -16,34 +16,71 @@ st.set_page_config(page_title="Gestión Corporativa", page_icon="🛍️", layou
 # ==========================================
 st.markdown("""
 <style>
+    /* ---> MODO MARCA BLANCA TOTAL <--- */
     [data-testid="stToolbar"] { display: none !important; } 
     .viewerBadge_container { display: none !important; } 
     footer { display: none !important; } 
     #MainMenu { display: none !important; } 
     [data-testid="collapsedControl"] { display: none !important; }
 
-    .main-title { font-size: 2.2rem; font-weight: 800; color: #111827; margin-bottom: 0.5rem; text-align: center; text-transform: uppercase; letter-spacing: -0.5px;}
-    .sub-text { font-size: 1.15rem; color: #4B5563; margin-bottom: 2rem; }
-    div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #2563EB; transition: transform 0.2s ease-in-out;}
-    div[data-testid="metric-container"]:hover { transform: translateY(-5px); }
-    div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 800; color: #111827; }
-    .stButton>button { border-radius: 10px; font-weight: 600; transition: all 0.3s; border: 1px solid #D1D5DB; padding: 0.5rem 1rem; width: 100%;}
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 10px -1px rgba(0, 0, 0, 0.1); border-color: #9CA3AF;}
-    .alert-box { padding: 15px; border-radius: 10px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; }
-    .task-box { padding: 15px; border-radius: 10px; border-left: 6px solid #10B981; background-color: #ECFDF5; margin-bottom: 15px; }
-    .task-pend { padding: 15px; border-radius: 10px; border-left: 6px solid #F59E0B; background-color: #FFFBEB; margin-bottom: 15px; }
-    .task-rej { padding: 15px; border-radius: 10px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; }
-    .report-box { padding: 15px; border-radius: 10px; border-left: 6px solid #8B5CF6; background-color: #F5F3FF; margin-bottom: 15px; }
-    .super-box { padding: 15px; border-radius: 10px; border-left: 6px solid #3B82F6; background-color: #EFF6FF; margin-bottom: 15px; }
-    .highlight-edit { padding: 20px; background-color: #EFF6FF; border-radius: 12px; border-left: 6px solid #3B82F6; margin-bottom: 20px;}
-    .credencial { background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2); margin-bottom: 20px;}
-    .cred-nombre { font-size: 1.8rem; font-weight: 800; margin: 0;}
-    .cred-rol { font-size: 1.1rem; opacity: 0.9; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
-    .cred-nivel { font-size: 1.3rem; font-weight: 700; background-color: rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 20px; display: inline-block;}
-    .validation-box { padding: 15px; border-radius: 10px; border: 1px solid #E5E7EB; background-color: #F9FAFB; margin-bottom: 10px;}
-    .msg-rol { padding: 15px; border-radius: 10px; border-left: 6px solid #4F46E5; background-color: #EEF2FF; margin-bottom: 15px; }
-    .bloqueo-pantalla { padding: 40px; background-color: #FEF2F2; border: 4px solid #EF4444; border-radius: 20px; text-align: center; margin-top: 50px;}
-    .bloqueo-titulo { font-size: 3rem; color: #B91C1C; font-weight: 900; margin-bottom: 20px;}
+    /* ---> DISEÑO DE PESTAÑAS (TABS) ESTILO APP MODERNA <--- */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        padding-bottom: 5px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #F3F4F6;
+        border-radius: 8px 8px 0 0;
+        padding: 10px 20px;
+        border: 1px solid #E5E7EB;
+        border-bottom: none;
+        transition: all 0.3s ease;
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #1e3a8a, #3b82f6) !important;
+        color: white !important;
+        font-weight: 800 !important;
+        box-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.2);
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: #E0E7FF;
+    }
+
+    /* ---> DISEÑO GENERAL DE LA APP <--- */
+    .main-title { 
+        font-size: 2.4rem; 
+        font-weight: 900; 
+        background: -webkit-linear-gradient(45deg, #111827, #3b82f6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem; 
+        text-align: center; 
+        text-transform: uppercase; 
+        letter-spacing: -0.5px;
+    }
+    div[data-testid="metric-container"] { background: linear-gradient(180deg, #ffffff 0%, #F9FAFB 100%); border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #3b82f6; transition: transform 0.2s ease-in-out;}
+    div[data-testid="metric-container"]:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);}
+    div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #111827; }
+    
+    .stButton>button { border-radius: 12px; font-weight: 700; transition: all 0.3s; border: 1px solid #D1D5DB; padding: 0.6rem 1rem; width: 100%; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);}
+    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border-color: #9CA3AF;}
+    
+    .alert-box { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+    .task-box { padding: 18px; border-radius: 12px; border-left: 6px solid #10B981; background-color: #ECFDF5; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+    .task-pend { padding: 18px; border-radius: 12px; border-left: 6px solid #F59E0B; background-color: #FFFBEB; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+    .task-rej { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+    .report-box { padding: 18px; border-radius: 12px; border-left: 6px solid #8B5CF6; background-color: #F5F3FF; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+    .super-box { padding: 18px; border-radius: 12px; border-left: 6px solid #3B82F6; background-color: #EFF6FF; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+    .highlight-edit { padding: 20px; background-color: #EFF6FF; border-radius: 12px; border-left: 6px solid #3B82F6; margin-bottom: 20px; font-weight: bold;}
+    
+    .credencial { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; padding: 25px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4); margin-bottom: 25px; border: 1px solid rgba(255,255,255,0.1);}
+    .cred-nombre { font-size: 2rem; font-weight: 900; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);}
+    .cred-rol { font-size: 1.2rem; opacity: 0.95; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
+    .cred-nivel { font-size: 1.4rem; font-weight: 800; background-color: rgba(255,255,255,0.25); padding: 8px 20px; border-radius: 25px; display: inline-block; backdrop-filter: blur(5px);}
+    
+    .validation-box { padding: 18px; border-radius: 12px; border: 1px solid #E5E7EB; background-color: #F9FAFB; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+    .bloqueo-pantalla { padding: 40px; background: linear-gradient(180deg, #FEF2F2 0%, #ffffff 100%); border: 4px solid #EF4444; border-radius: 20px; text-align: center; margin-top: 50px; box-shadow: 0 25px 50px -12px rgba(239, 68, 68, 0.25);}
+    .bloqueo-titulo { font-size: 3.5rem; color: #B91C1C; font-weight: 900; margin-bottom: 20px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -119,13 +156,10 @@ hora_hoy = ahora.strftime("%I:%M:%S %p")
 config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "exigir_salida_manual": False, "autoregistro": False, "ip_wifi_oficial": "", "radio_metros": 50, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"), "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
 config_app = load_json("config", config_defecto)
 
-# ---> NUEVAS VARIABLES DEL DUEÑO (AVISOS Y MEMBRESÍA) <---
 owner_config_defecto = {
     "estado_licencia": "Activo", "plan_pago": "Mensual", "fecha_vencimiento": "2030-12-31",
     "mensaje_bloqueo": "⚠️ SISTEMA SUSPENDIDO TEMPORALMENTE.\n\nPor favor, comuníquese con el proveedor del software para regularizar el estado de su cuenta.",
-    "mostrar_membresia": False,
-    "dias_aviso": 5,
-    "mensaje_aviso": "⚠️ Tu suscripción está próxima a vencer. Por favor, renová tu plan para evitar interrupciones en el servicio.",
+    "mostrar_membresia": False, "dias_aviso": 5, "mensaje_aviso": "⚠️ Tu suscripción está próxima a vencer. Por favor, renová tu plan para evitar interrupciones en el servicio.",
     "empresa_nombre": "SyncroRetail Solutions", "quienes_somos": "Nacimos con una misión clara: revolucionar la gestión del personal y potenciar el rendimiento de los equipos de trabajo...",
     "contactos": "🏢 Oficina Central: Salta Capital, Argentina\n🛠️ Soporte y Soluciones: soporte@syncroretail.com\n💡 Sugerencias y Nuevas Funciones: desarrollo@syncroretail.com"
 }
@@ -417,7 +451,15 @@ if pestaña == "⏱️ Portal del Empleado":
                         nombres_turnos = list(lista_turnos.keys())
                         idx_defecto = 0
                         
-                        turno_planificado = planificacion_turnos.get(fecha_hoy, {}).get(empleado_en_celu, "Libre")
+                        turno_planificado = "Libre"
+                        dia_plan = planificacion_turnos.get(fecha_hoy, {})
+                        loc_plan_actual = dia_plan.get(local_detectado, {})
+                        if isinstance(loc_plan_actual, dict):
+                            for t_name, emps_asignados in loc_plan_actual.items():
+                                if isinstance(emps_asignados, list) and empleado_en_celu in emps_asignados:
+                                    turno_planificado = t_name
+                                    break
+                                    
                         if turno_planificado in nombres_turnos:
                             idx_defecto = nombres_turnos.index(turno_planificado)
                         elif nombres_turnos:
@@ -437,7 +479,7 @@ if pestaña == "⏱️ Portal del Empleado":
                         if nombres_turnos:
                             st.markdown("🕒 **Verificá y confirmá tu turno:**")
                             if turno_planificado != "Libre" and turno_planificado in nombres_turnos:
-                                st.markdown(f"*(Turno asignado en tu planilla: **{turno_planificado}**)*")
+                                st.markdown(f"*(Turno planificado por Gerencia: **{turno_planificado}**)*")
                             
                             turno_seleccionado = st.selectbox("Turno a fichar:", nombres_turnos, index=idx_defecto, label_visibility="collapsed")
                             st.markdown(f"<small style='color: gray;'>El horario oficial de este turno es de {lista_turnos[turno_seleccionado]['ingreso']} a {lista_turnos[turno_seleccionado]['salida']}</small>", unsafe_allow_html=True)
@@ -579,7 +621,6 @@ if pestaña == "⏱️ Portal del Empleado":
                 st.markdown("📞 **Contactos Útiles:**")
                 st.write(owner_config.get('contactos', ''))
                 
-                # ---> ETIQUETA DE MEMBRESÍA CONTROLADA POR DUEÑO <---
                 if owner_config.get("mostrar_membresia", False):
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.markdown(f"<div style='text-align: center; padding: 10px; background-color: #F3F4F6; border-radius: 10px; border: 1px solid #E5E7EB;'><span style='font-size: 0.8rem; color: #6B7280;'>TIPO DE MEMBRESÍA</span><br><b style='color: #111827;'>⭐ Plan {owner_config.get('plan_pago', 'Mensual')}</b></div>", unsafe_allow_html=True)
@@ -630,7 +671,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
     if password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == "doremifasol":
         
-        # ---> AVISO DE VENCIMIENTO PRÓXIMO (SOLO VISIBLE PARA GERENCIA) <---
         try:
             f_venc = datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date()
             dias_restantes = (f_venc - ahora.date()).days
@@ -805,7 +845,16 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         df_mostrar = df_horas_final.copy()
                         df_mostrar["💰 Pago Est."] = df_mostrar["💰 Pago Est."].apply(lambda x: f"${x:,.2f}")
                         
-                        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+                        # --- PANDAS STYLER PARA COLOREAR LA COLUMNA DE PAGOS ---
+                        def style_pago(val):
+                            return 'background-color: #ECFDF5; color: #065F46; font-weight: 800;'
+                        
+                        try:
+                            styled_df = df_mostrar.style.map(style_pago, subset=["💰 Pago Est."])
+                        except:
+                            styled_df = df_mostrar.style.applymap(style_pago, subset=["💰 Pago Est."])
+                            
+                        st.dataframe(styled_df, use_container_width=True, hide_index=True)
                         
                         st.write("⬇️ **Descargar Archivos (Excel/CSV)**")
                         c_btn1, c_btn2 = st.columns(2)
@@ -998,7 +1047,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
         with tab_horarios:
             st.markdown('<div class="main-title" style="font-size: 2rem;">📅 Planificación y Horarios</div>', unsafe_allow_html=True)
             
-            st.subheader("🗓️ Planilla Semanal de Turnos")
+            st.subheader("🗓️ Planilla Semanal de Turnos (Roster)")
             today_date = ahora.date()
             lunes_actual = today_date - datetime.timedelta(days=today_date.weekday())
             
@@ -1019,54 +1068,85 @@ elif pestaña == "⚙️ Panel de Gerencia":
             cols_fechas = [f"{nombres_dias[i]} {fechas_semana[i].strftime('%d/%m')}" for i in range(7)]
             str_fechas = [f.strftime("%Y-%m-%d") for f in fechas_semana]
             
-            plan_data = []
-            opciones_turno = ["Libre"] + list(lista_turnos.keys())
+            st.info("💡 **Instrucciones:** Seleccioná a qué empleado le toca cubrir cada cupo. Si no necesitás llenar todos los cupos, dejalo en 'Nadie'.")
             
-            for emp in lista_empleados:
-                row = {"Empleado": emp}
-                for i, f_str in enumerate(str_fechas):
-                    val = planificacion_turnos.get(f_str, {}).get(emp, "Libre")
-                    if val not in opciones_turno: val = "Libre"
-                    row[cols_fechas[i]] = val
-                plan_data.append(row)
+            nuevos_datos_plan = {}
+            opciones_emps = ["Nadie"] + sorted(lista_empleados)
+            
+            for loc in lista_locales.keys():
+                st.markdown(f"### 🏢 Sucursal: {loc}")
                 
-            df_plan = pd.DataFrame(plan_data)
-            
-            st.write("Modificá la tabla haciendo doble clic en las celdas y tocá Guardar abajo.")
-            config_cols = {"Empleado": st.column_config.TextColumn("Empleado", disabled=True)}
-            for c in cols_fechas:
-                config_cols[c] = st.column_config.SelectboxColumn(c, options=opciones_turno, default="Libre")
+                for turno, datos_turno in lista_turnos.items():
+                    st.markdown(f"**🕒 {turno}** ({datos_turno.get('ingreso')} a {datos_turno.get('salida')})")
+                    
+                    data_t = []
+                    for i in range(3): # 3 Cupos por defecto por turno
+                        row_t = {"Cupo": f"👤 Cupo {i+1}"}
+                        for j, f_str in enumerate(str_fechas):
+                            try:
+                                emps_asignados = planificacion_turnos.get(f_str, {}).get(loc, {}).get(turno, [])
+                                emp_name = emps_asignados[i] if i < len(emps_asignados) else "Nadie"
+                            except:
+                                emp_name = "Nadie"
+                            row_t[cols_fechas[j]] = emp_name
+                        data_t.append(row_t)
+                        
+                    df_plan_t = pd.DataFrame(data_t)
+                    
+                    config_cols_t = {"Cupo": st.column_config.TextColumn("Cupo", disabled=True)}
+                    for c in cols_fechas:
+                        config_cols_t[c] = st.column_config.SelectboxColumn(c, options=opciones_emps, default="Nadie")
+                        
+                    df_editado_t = st.data_editor(df_plan_t, column_config=config_cols_t, hide_index=True, use_container_width=True, key=f"ed_{loc}_{turno}", num_rows="dynamic")
+                    nuevos_datos_plan[(loc, turno)] = df_editado_t
+                st.markdown("<br>", unsafe_allow_html=True)
                 
-            df_editado = st.data_editor(df_plan, column_config=config_cols, hide_index=True, use_container_width=True, key="editor_plan")
-            
-            if st.button("💾 Guardar Planificación", use_container_width=True):
-                for idx, row in df_editado.iterrows():
-                    emp = row["Empleado"]
-                    for i, f_str in enumerate(str_fechas):
-                        if f_str not in planificacion_turnos: planificacion_turnos[f_str] = {}
-                        planificacion_turnos[f_str][emp] = row[cols_fechas[i]]
+            if st.button("💾 Guardar Planificación Semanal", use_container_width=True, type="primary"):
+                for f_str in str_fechas:
+                    if f_str not in planificacion_turnos: planificacion_turnos[f_str] = {}
+                    for loc in lista_locales.keys():
+                        if loc not in planificacion_turnos[f_str]: planificacion_turnos[f_str][loc] = {}
+                        if not isinstance(planificacion_turnos[f_str][loc], dict): planificacion_turnos[f_str][loc] = {}
+                        
+                        for turno in lista_turnos.keys():
+                            df_e = nuevos_datos_plan[(loc, turno)]
+                            day_col = cols_fechas[str_fechas.index(f_str)]
+                            emps = df_e[day_col].dropna().tolist()
+                            emps = [e for e in emps if e != "Nadie" and str(e).strip() != ""]
+                            emps = list(dict.fromkeys(emps)) # Eliminar duplicados si pusieron 2 veces al mismo
+                            planificacion_turnos[f_str][loc][turno] = emps
                 save_json("planificacion_turnos", planificacion_turnos)
                 st.success("✅ ¡Planificación semanal guardada con éxito!")
                 st.rerun()
                 
             st.markdown("---")
             st.subheader("⚖️ Comparativa: Planificado vs. Real")
-            st.write("Revisá automáticamente si el equipo cumplió con los horarios que armaste.")
+            st.write("Revisá automáticamente si el equipo cumplió con los horarios y sucursales que armaste arriba.")
+            
+            def get_plan_emp(fecha_s, empleado_s):
+                for l_plan, turnos_dict in planificacion_turnos.get(fecha_s, {}).items():
+                    if isinstance(turnos_dict, dict):
+                        for t_plan, emps_list in turnos_dict.items():
+                            if isinstance(emps_list, list) and empleado_s in emps_list:
+                                return l_plan, t_plan
+                return None, "Libre"
             
             df_asist_comp = load_df("asistencia")
             comp_data = []
             for emp in lista_empleados:
                 row = {"Empleado": emp}
                 for i, f_str in enumerate(str_fechas):
-                    plan_val = planificacion_turnos.get(f_str, {}).get(emp, "Libre")
+                    plan_loc, plan_turno = get_plan_emp(f_str, emp)
                     
                     real_estado = "No Fichó"
                     real_turno = ""
+                    real_sucursal = ""
                     if not df_asist_comp.empty:
                         f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Entrada")]
                         if not f_asist.empty:
                             real_estado = f_asist.iloc[-1]["Estado"]
                             real_turno = f_asist.iloc[-1]["Turno"]
+                            real_sucursal = f_asist.iloc[-1]["Sucursal"]
                         else:
                             f_aus = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Ausente")]
                             if not f_aus.empty:
@@ -1074,20 +1154,20 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     
                     f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
                     if f_date > today_date:
-                        cell_val = f"⏳ {plan_val}"
+                        cell_val = f"⏳ {plan_turno}" if plan_turno != "Libre" else "Libre"
                     else:
-                        if plan_val == "Libre":
+                        if plan_turno == "Libre":
                             if real_estado == "No Fichó": cell_val = "✅ Libre"
-                            else: cell_val = f"⚠️ Vino igual ({real_estado})"
+                            else: cell_val = f"⚠️ Vino en su franco"
                         else:
                             if real_estado == "No Fichó":
-                                if f_date == today_date: cell_val = f"⏳ Pendiente / ❌ Faltó"
+                                if f_date == today_date: cell_val = f"⏳ Pendiente"
                                 else: cell_val = f"❌ Faltó sin aviso"
                             elif real_estado == "Ausente Reportado": 
-                                cell_val = f"❌ Ausente"
+                                cell_val = f"❌ Ausente reportado"
                             else:
-                                if real_turno != plan_val and real_turno in lista_turnos:
-                                    cell_val = f"⚠️ Vino en {real_turno}"
+                                if real_turno != plan_turno or real_sucursal != plan_loc:
+                                    cell_val = f"⚠️ Vino a {real_sucursal} ({real_turno})"
                                 else:
                                     if real_estado == "A tiempo": cell_val = f"✅ A tiempo"
                                     elif real_estado == "Tarde": cell_val = f"⚠️ Tarde"
@@ -1095,61 +1175,22 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     row[cols_fechas[i]] = cell_val
                 comp_data.append(row)
             
-            st.dataframe(pd.DataFrame(comp_data), hide_index=True, use_container_width=True)
-
-            st.markdown("---")
-            st.subheader("🛡️ Salidas Pendientes (Reportadas por Cajeros)")
-            if salidas_pendientes:
-                for idx, sp in enumerate(salidas_pendientes):
-                    c_sp1, c_sp2, c_sp3 = st.columns([4, 1, 1])
-                    c_sp1.markdown(f"**{sp['Autor']}** retiró a **{sp['Empleado']}** a las {sp['Hora']} ({sp['Nota']})")
-                    if c_sp2.button("✅ Aprobar", key=f"apr_sal_{idx}"):
-                        insert_row("asistencia", {"Fecha": sp["Fecha"], "Hora": sp["Hora"], "Empleado": sp["Empleado"], "Sucursal": sp["Sucursal"], "Turno": sp["Turno"], "Tipo": "Salida", "Estado": "Salida", "Distancia_m": 0.0, "Nota": sp["Nota"]})
-                        salidas_pendientes.pop(idx)
-                        save_json("salidas_pendientes", salidas_pendientes)
-                        st.rerun()
-                    if c_sp3.button("❌ Rechazar", key=f"rec_sal_{idx}"):
-                        salidas_pendientes.pop(idx)
-                        save_json("salidas_pendientes", salidas_pendientes)
-                        st.rerun()
-            else:
-                st.info("No hay solicitudes de salida pendientes de revisión.")
-
-            st.write("---")
+            # --- PANDAS STYLER PARA LA PLANILLA SEMANAL ---
+            def color_comparativa(val):
+                if isinstance(val, str):
+                    if '✅' in val: return 'background-color: #D1FAE5; color: #065F46; font-weight: 600;'
+                    if '❌' in val: return 'background-color: #FEE2E2; color: #991B1B; font-weight: 600;'
+                    if '⚠️' in val: return 'background-color: #FEF3C7; color: #92400E; font-weight: 600;'
+                    if '⏳' in val: return 'background-color: #DBEAFE; color: #1E40AF; font-weight: 600;'
+                return ''
             
-            st.markdown('<div class="highlight-edit"><b>✏️ AUDITORÍA DIRECTA DE HORARIOS</b></div>', unsafe_allow_html=True)
-            col_ed1, col_ed2 = st.columns(2)
-            fecha_edicion = col_ed1.date_input("Fecha a auditar:", key="fecha_edit")
-            emp_edicion = col_ed2.selectbox("Personal a auditar:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_edit")
-            
-            if emp_edicion != "Seleccionar...":
-                df_edicion = load_df("asistencia")
-                if not df_edicion.empty:
-                    df_ed = df_edicion[(df_edicion["Fecha"] == fecha_edicion.strftime("%Y-%m-%d")) & (df_edicion["Empleado"] == emp_edicion)]
-                    if not df_ed.empty:
-                        for idx, row in df_ed.iterrows():
-                            db_id = int(row['id'])
-                            c1, c2, c3, c4 = st.columns([2,2,2,1])
-                            n_tipo = c1.selectbox("Tipo", ["Entrada", "Salida", "Ausente"], index=["Entrada", "Salida", "Ausente"].index(row['Tipo']) if row['Tipo'] in ["Entrada", "Salida", "Ausente"] else 0, key=f"t_{db_id}")
-                            n_hora = c2.text_input("Hora (Ej: 08:30 AM)", value=row['Hora'], key=f"h_{db_id}")
-                            n_estado = c3.selectbox("Estado", ESTADOS_POSIBLES, index=ESTADOS_POSIBLES.index(row['Estado']) if row['Estado'] in ESTADOS_POSIBLES else 7, key=f"e_{db_id}")
-                            if c4.button("💾", key=f"btn_{db_id}"):
-                                supabase.table("asistencia").update({'Tipo': str(n_tipo), 'Hora': str(n_hora), 'Estado': str(n_estado)}).eq('id', db_id).execute()
-                                st.rerun()
-                    else: st.warning("Sin movimientos ese día.")
-
-            st.write("---")
-            st.subheader("✍️ Carga Manual Total (Falta o Olvido)")
-            with st.form("form_fichaje_manual"):
-                c_f1, c_f2, c_f3 = st.columns(3)
-                fm_emp = c_f1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
-                fm_fecha = c_f2.date_input("Fecha:", ahora.date())
-                fm_hora_str = c_f3.time_input("Hora exacta:", ahora.time()).strftime("%I:%M:%S %p")
-                fm_tipo, fm_estado, fm_nota = c_f1.selectbox("Movimiento:", ["Entrada", "Salida", "Ausente"]), c_f2.selectbox("Estado final:", ESTADOS_POSIBLES), c_f3.text_input("Nota / Justificación:")
+            df_comp = pd.DataFrame(comp_data)
+            try:
+                styled_comp = df_comp.style.map(color_comparativa)
+            except:
+                styled_comp = df_comp.style.applymap(color_comparativa)
                 
-                if st.form_submit_button("➕ Cargar Movimiento") and fm_emp != "Seleccionar...":
-                    insert_row("asistencia", {"Fecha": str(fm_fecha.strftime("%Y-%m-%d")), "Hora": str(fm_hora_str), "Empleado": str(fm_emp), "Sucursal": "Manual", "Turno": "Manual", "Tipo": str(fm_tipo), "Estado": str(fm_estado), "Distancia_m": 0.0, "Nota": str(fm_nota)})
-                    st.rerun()
+            st.dataframe(styled_comp, hide_index=True, use_container_width=True)
 
         with tab_puntos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Ranking de Puntos</div>', unsafe_allow_html=True)
