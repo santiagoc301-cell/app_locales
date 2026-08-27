@@ -139,9 +139,8 @@ lista_intentos = load_json("intentos_seguridad", [])
 lista_puntos = load_json("ajustes_puntos", [])
 reportes_log = load_json("reportes", [])
 salidas_pendientes = load_json("salidas_pendientes", [])
-
-# ---> NUEVA BASE DE DATOS DE SUELDOS HISTÓRICOS <---
 sueldos_historico = load_json("sueldos_historico", [])
+cierres_caja = load_json("cierres_caja", [])
 
 ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A"]
 
@@ -275,8 +274,43 @@ if pestaña == "⏱️ Portal del Empleado":
 
             if rol_empleado in ["Cajero", "Encargado"]:
                 with st.expander("👑 Panel de Responsable de Turno", expanded=False):
-                    st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas y asignar puntos a tus compañeros.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas, cargar tu caja y asignar puntos.</div>", unsafe_allow_html=True)
                     
+                    # ---> MÓDULO DE CIERRE DE CAJA PARA CAJEROS <---
+                    st.markdown("#### 💸 Cierre de Caja Diario")
+                    st.write("Registrá los montos recaudados al finalizar tu turno.")
+                    with st.form("form_cierre_caja"):
+                        c_caj1, c_caj2 = st.columns(2)
+                        val_efectivo = c_caj1.number_input("💵 Efectivo ($):", min_value=0.0, step=1000.0)
+                        val_tarjeta = c_caj2.number_input("💳 Tarjeta ($):", min_value=0.0, step=1000.0)
+                        
+                        c_caj3, c_caj4 = st.columns(2)
+                        val_transf = c_caj3.number_input("📱 Transferencia ($):", min_value=0.0, step=1000.0)
+                        val_total = c_caj4.number_input("📊 Total Ventas Declarado ($):", min_value=0.0, step=1000.0)
+                        
+                        nota_caja = st.text_input("📝 Novedades (Faltantes, sobrantes, etc.):")
+                        
+                        if st.form_submit_button("📤 Enviar Cierre de Caja"):
+                            sucursal_actual = datos_turno_activo.get("Sucursal", "Desconocida") if estado_laboral == "Adentro" else "Desconocida"
+                            turno_actual = datos_turno_activo.get("Turno", "Desconocido") if estado_laboral == "Adentro" else "Desconocido"
+                            
+                            cierres_caja.append({
+                                "Fecha": str(fecha_hoy),
+                                "Hora": str(hora_hoy),
+                                "Cajero": str(empleado_en_celu),
+                                "Sucursal": str(sucursal_actual),
+                                "Turno": str(turno_actual),
+                                "Efectivo": val_efectivo,
+                                "Tarjeta": val_tarjeta,
+                                "Transferencia": val_transf,
+                                "Total_Ventas": val_total,
+                                "Nota": nota_caja.strip()
+                            })
+                            save_json("cierres_caja", cierres_caja)
+                            st.success("✅ ¡Cierre de caja enviado correctamente a Gerencia!")
+                            st.rerun()
+
+                    st.markdown("---")
                     st.markdown("#### 🕒 Auditar Salida de Compañero")
                     if estado_laboral == "Adentro":
                         suc_cajero = datos_turno_activo.get("Sucursal")
@@ -619,9 +653,9 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
     if password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == "doremifasol":
         
-        # ---> AGREGAMOS LA NUEVA PESTAÑA "SUELDOS" <---
-        tab_analytics, tab_sueldos, tab_puntos, tab_auditoria_tareas, tab_auditoria_horas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_espia = st.tabs([
-            "📈 Analytics", "💰 Sueldos", "🏆 Ranking", "📋 Auditar Tareas", "📝 Auditar Horarios", "👤 Perfil Empleado", "👥 Staff", "📍 Tiendas", "📢 Avisos", "⚙️ Config/Reseteo", "🕵️ Espía"
+        # ---> NUEVA PESTAÑA "CAJAS" <---
+        tab_analytics, tab_caja, tab_sueldos, tab_puntos, tab_auditoria_tareas, tab_auditoria_horas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_espia = st.tabs([
+            "📈 Analytics", "💸 Cajas", "💰 Sueldos", "🏆 Ranking", "📋 Tareas", "📝 Horarios", "👤 Perfiles", "👥 Staff", "📍 Tiendas", "📢 Avisos", "⚙️ Ajustes", "🕵️ Espía"
         ])
 
         with tab_analytics:
@@ -741,7 +775,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                         horas_dia = max(0.0, horas_dia)
                                         horas_totales += horas_dia
                                         
-                                        # ---> CÁLCULO DE LIQUIDACIÓN DE SUELDO POR DÍA <---
                                         sueldo_hora = 0.0
                                         for s in sueldos_historico:
                                             if s["Empleado"] == emp and s["Fecha_Desde"] <= str(f) <= s["Fecha_Hasta"]:
@@ -762,7 +795,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     if datos_horas:
                         df_horas_final = pd.DataFrame(datos_horas).sort_values(by=["Personal", "⏱️ Horas Computadas"], ascending=[True, False])
                         
-                        # Formatear la columna de Pago Est. con el signo $ para que se vea lindo en la tabla
                         df_mostrar = df_horas_final.copy()
                         df_mostrar["💰 Pago Est."] = df_mostrar["💰 Pago Est."].apply(lambda x: f"${x:,.2f}")
                         
@@ -785,25 +817,82 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         b64_asist = base64.b64encode(csv_asist).decode()
                         link_asist = f'<a href="data:file/csv;base64,{b64_asist}" download="Fichajes_{local_descarga}_{fecha_in_dl}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">📄 Descargar Fichajes</a>'
                         c_btn2.markdown(link_asist, unsafe_allow_html=True)
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        with st.expander("📱 ¿No te descarga en el celular? Usá esta alternativa"):
+                            st.info("Algunos celulares bloquean las descargas automáticas. Tocá el botón de **Copiar** que aparece arriba a la derecha del siguiente recuadro negro y pegá los datos directamente en Excel, Google Sheets o WhatsApp.")
+                            st.code(csv_horas.decode('utf-8'), language='csv')
                     else:
                         st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
 
-        # ---> NUEVA PESTAÑA DE CONFIGURACIÓN DE SUELDOS <---
+        # ---> NUEVA PESTAÑA: CIERRES DE CAJA <---
+        with tab_caja:
+            st.markdown('<div class="main-title" style="font-size: 2rem;">💸 Control de Caja</div>', unsafe_allow_html=True)
+            c_fc1, c_fc2 = st.columns([1,3])
+            filtro_caja = c_fc1.selectbox("⏳ Filtrar por:", ["Hoy", "Esta Semana", "Este Mes", "Mes Anterior", "Todo el Historial", "Personalizado"], key="filtro_caja")
+            rango_caja = c_fc2.date_input("🗓️ Fechas de Caja:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_caja == "Personalizado" else None
+            c_in, c_fi = get_fechas_filtro(filtro_caja, rango_caja)
+            
+            if cierres_caja:
+                cierres_filtrados = []
+                for c in cierres_caja:
+                    d_obj = datetime.datetime.strptime(c["Fecha"], "%Y-%m-%d").date()
+                    if c_in <= d_obj <= c_fi:
+                        cierres_filtrados.append(c)
+                
+                if cierres_filtrados:
+                    df_caja = pd.DataFrame(cierres_filtrados)
+                    
+                    tot_efectivo = df_caja["Efectivo"].sum()
+                    tot_tarjeta = df_caja["Tarjeta"].sum()
+                    tot_transf = df_caja["Transferencia"].sum()
+                    tot_ventas = df_caja["Total_Ventas"].sum()
+                    
+                    st.write("---")
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("💵 Efectivo Total", f"${tot_efectivo:,.2f}")
+                    col2.metric("💳 Tarjeta Total", f"${tot_tarjeta:,.2f}")
+                    col3.metric("📱 Transf. Total", f"${tot_transf:,.2f}")
+                    col4.metric("📊 TOTAL VENTAS", f"${tot_ventas:,.2f}")
+                    st.write("---")
+                    
+                    df_mostrar_caja = df_caja.copy()
+                    df_mostrar_caja["Efectivo"] = df_mostrar_caja["Efectivo"].apply(lambda x: f"${float(x):,.2f}")
+                    df_mostrar_caja["Tarjeta"] = df_mostrar_caja["Tarjeta"].apply(lambda x: f"${float(x):,.2f}")
+                    df_mostrar_caja["Transferencia"] = df_mostrar_caja["Transferencia"].apply(lambda x: f"${float(x):,.2f}")
+                    df_mostrar_caja["Total_Ventas"] = df_mostrar_caja["Total_Ventas"].apply(lambda x: f"${float(x):,.2f}")
+                    
+                    st.dataframe(df_mostrar_caja.sort_values(by=["Fecha", "Hora"], ascending=[False, False]), use_container_width=True, hide_index=True)
+                    
+                    csv_caja = df_caja.to_csv(index=False).encode('utf-8')
+                    b64_caja = base64.b64encode(csv_caja).decode()
+                    link_caja = f'<br><a href="data:file/csv;base64,{b64_caja}" download="Cierres_Caja_{c_in}_al_{c_fi}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">💸 Descargar Reporte de Cajas (Excel/CSV)</a>'
+                    st.markdown(link_caja, unsafe_allow_html=True)
+                else:
+                    st.info("ℹ️ No hay cierres de caja registrados en estas fechas.")
+            else:
+                st.info("ℹ️ Todavía no hay ningún cierre de caja registrado en el sistema.")
+
         with tab_sueldos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Liquidación de Sueldos</div>', unsafe_allow_html=True)
-            st.write("Configurá cuánto vale la hora de trabajo de cada empleado. El sistema usará este valor para calcular el **Pago Estimado** en la pestaña de Analytics.")
+            st.write("Configurá cuánto vale la hora de trabajo de cada empleado. Podés editar tarifas pasadas si te equivocaste.")
             
             c_su1, c_su2 = st.columns([1, 2])
             with c_su1:
                 with st.form("form_nuevo_sueldo"):
-                    st.subheader("➕ Asignar Tarifa")
+                    st.subheader("➕ Asignar Nueva Tarifa")
                     emp_s = st.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados))
                     val_s = st.number_input("Valor por Hora ($):", min_value=0.0, step=100.0)
-                    f_ini = st.date_input("Vigente Desde:", value=ahora.date())
-                    # Por defecto ponemos que el sueldo rige hasta el año 2099 (para que sea fijo hasta que lo cambien)
-                    f_fin = st.date_input("Vigente Hasta:", value=datetime.date(2099, 12, 31))
                     
-                    if st.form_submit_button("Guardar Tarifa"):
+                    # ---> CALENDARIO SIN RESTRICCIONES DE AÑO <---
+                    f_ini = st.date_input("Vigente Desde:", value=ahora.date())
+                    es_actual = st.checkbox("✅ Tarifa actual (Sin fecha de cierre)", value=True, help="Si está marcado, esta tarifa regirá para siempre hasta que le asignes una nueva.")
+                    if es_actual:
+                        f_fin = datetime.date(2099, 12, 31)
+                    else:
+                        f_fin = st.date_input("Vigente Hasta:", value=ahora.date())
+                    
+                    if st.form_submit_button("💾 Guardar Tarifa"):
                         if emp_s == "Seleccionar..." or val_s <= 0:
                             st.warning("⚠️ Tenés que seleccionar un empleado y poner un valor mayor a $0.")
                         elif f_ini > f_fin:
@@ -820,22 +909,39 @@ elif pestaña == "⚙️ Panel de Gerencia":
                             st.rerun()
             
             with c_su2:
-                st.subheader("📋 Historial de Tarifas Activas")
+                st.subheader("📋 Historial y Edición de Tarifas")
                 if sueldos_historico:
                     df_sueldos = pd.DataFrame(sueldos_historico)
                     df_sueldos = df_sueldos.sort_values(by=["Empleado", "Fecha_Desde"], ascending=[True, False])
-                    # Mostramos visualmente en la tabla un texto más amigable si el año es 2099
-                    df_sueldos["Fecha_Hasta"] = df_sueldos["Fecha_Hasta"].replace("2099-12-31", "Actualidad")
-                    df_sueldos["Valor_Hora"] = df_sueldos["Valor_Hora"].apply(lambda x: f"${x:,.2f}")
-                    
-                    st.dataframe(df_sueldos, use_container_width=True, hide_index=True)
+                    df_mostrar = df_sueldos.copy()
+                    df_mostrar["Fecha_Hasta"] = df_mostrar["Fecha_Hasta"].replace("2099-12-31", "Actualidad")
+                    df_mostrar["Valor_Hora"] = df_mostrar["Valor_Hora"].apply(lambda x: f"${float(x):,.2f}")
+                    st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
                     
                     st.write("---")
-                    st.write("**Borrar una configuración equivocada:**")
+                    st.write("**✏️ Corregir o Eliminar Tarifas:**")
                     for idx, s in enumerate(sueldos_historico):
                         txt_hasta = "Actualidad" if s['Fecha_Hasta'] == "2099-12-31" else s['Fecha_Hasta']
-                        with st.expander(f"👤 {s['Empleado']} | ${s['Valor_Hora']}/h | 🗓️ {s['Fecha_Desde']} al {txt_hasta}"):
-                            if st.button("🗑️ Eliminar esta tarifa", key=f"del_sueldo_{idx}"):
+                        with st.expander(f"👤 {s['Empleado']} | ${float(s['Valor_Hora']):,.2f}/h | 🗓️ {s['Fecha_Desde']} al {txt_hasta}"):
+                            c_ed1, c_ed2, c_ed3 = st.columns(3)
+                            n_val = c_ed1.number_input("Valor ($):", value=float(s['Valor_Hora']), step=100.0, key=f"nval_{idx}")
+                            n_ini = c_ed2.date_input("Desde:", value=datetime.datetime.strptime(s['Fecha_Desde'], "%Y-%m-%d").date(), key=f"nini_{idx}")
+                            
+                            is_2099 = s['Fecha_Hasta'] == "2099-12-31"
+                            n_fin = c_ed3.date_input("Hasta:", value=datetime.datetime.strptime(s['Fecha_Hasta'], "%Y-%m-%d").date() if not is_2099 else ahora.date(), key=f"nfin_{idx}")
+                            n_actual = c_ed3.checkbox("Dejar sin fecha de fin", value=is_2099, key=f"nact_{idx}")
+                            
+                            if n_actual: n_fin_str = "2099-12-31"
+                            else: n_fin_str = n_fin.strftime("%Y-%m-%d")
+                            
+                            c_b1, c_b2 = st.columns(2)
+                            if c_b1.button("💾 Guardar Cambios", key=f"save_s_{idx}"):
+                                sueldos_historico[idx]['Valor_Hora'] = n_val
+                                sueldos_historico[idx]['Fecha_Desde'] = n_ini.strftime("%Y-%m-%d")
+                                sueldos_historico[idx]['Fecha_Hasta'] = n_fin_str
+                                save_json("sueldos_historico", sueldos_historico)
+                                st.rerun()
+                            if c_b2.button("🗑️ Eliminar Tarifa", key=f"del_s_{idx}"):
                                 sueldos_historico.pop(idx)
                                 save_json("sueldos_historico", sueldos_historico)
                                 st.rerun()
@@ -881,8 +987,8 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 ap_motivo = c_b4.text_input("Motivo:")
                 
                 if st.form_submit_button("Aplicar a Puntuación"):
-                    if ap_emp == "Seleccionar..." or ap_puntos == 0 or not ap_motivo.strip():
-                        st.warning("⚠️ Error: Faltan completar datos (Asegurate de elegir un empleado, que los puntos no sean 0 y escribir un motivo).")
+                    if ap_emp == "Seleccionar...":
+                        st.warning("⚠️ Error: Faltan completar datos (Asegurate de elegir un empleado).")
                     else:
                         lista_puntos.append({"Fecha": ap_fecha.strftime("%Y-%m-%d"), "Empleado": ap_emp, "Puntos": ap_puntos, "Motivo": ap_motivo.strip(), "Autor": "Gerencia", "Estado": "Aprobada"})
                         save_json("ajustes_puntos", lista_puntos)
@@ -1104,10 +1210,13 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                     if m.get('destinatario') == emp_mod: m['destinatario'] = nn
                                 save_json("mensajes", lista_mensajes)
                                 
-                                # ---> ACTUALIZAR TAMBIÉN EL HISTORIAL DE SUELDOS <---
                                 for sh in sueldos_historico:
                                     if sh.get('Empleado') == emp_mod: sh['Empleado'] = nn
                                 save_json("sueldos_historico", sueldos_historico)
+                                
+                                for cc in cierres_caja:
+                                    if cc.get('Cajero') == emp_mod: cc['Cajero'] = nn
+                                save_json("cierres_caja", cierres_caja)
                                 
                                 try:
                                     supabase.table("asistencia").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
@@ -1292,6 +1401,7 @@ elif pestaña == "💻 Dueño del Software":
                 estado_actual = st.selectbox("Estado del Sistema:", ["Activo", "Suspendido"], index=["Activo", "Suspendido"].index(owner_config.get("estado_licencia", "Activo")))
                 plan_actual = st.selectbox("Plan de Pago contratado:", ["Mensual", "Anual", "Vitalicio"], index=["Mensual", "Anual", "Vitalicio"].index(owner_config.get("plan_pago", "Mensual")))
                 
+                # ---> CALENDARIO SIN RESTRICCIONES DE AÑO <---
                 fecha_venc = st.date_input("Fecha de Vencimiento Automático:", value=datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date())
                 msg_bloqueo = st.text_area("Mensaje de Bloqueo (Se muestra al suspender o vencer):", value=owner_config.get("mensaje_bloqueo", ""))
                 
@@ -1359,7 +1469,8 @@ elif pestaña == "💻 Dueño del Software":
                 save_json("ajustes_puntos", [])
                 save_json("reportes", [])
                 save_json("salidas_pendientes", [])
-                save_json("sueldos_historico", []) # Borrar sueldos históricos
+                save_json("sueldos_historico", [])
+                save_json("cierres_caja", [])
                 
                 supabase.table("asistencia").delete().neq("id", 0).execute()
                 supabase.table("tareas_log").delete().neq("id", 0).execute()
