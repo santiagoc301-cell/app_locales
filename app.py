@@ -16,12 +16,14 @@ st.set_page_config(page_title="Gestión Corporativa", page_icon="🛍️", layou
 # ==========================================
 st.markdown("""
 <style>
+    /* ---> MODO MARCA BLANCA TOTAL (EXTREMO) <--- */
     [data-testid="stToolbar"] { display: none !important; } 
     .viewerBadge_container { display: none !important; } 
     footer { display: none !important; } 
     #MainMenu { display: none !important; } 
     [data-testid="collapsedControl"] { display: none !important; }
 
+    /* ---> DISEÑO DE LA APP <--- */
     .main-title { font-size: 2.2rem; font-weight: 800; color: #111827; margin-bottom: 0.5rem; text-align: center; text-transform: uppercase; letter-spacing: -0.5px;}
     .sub-text { font-size: 1.15rem; color: #4B5563; margin-bottom: 2rem; }
     div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #2563EB; transition: transform 0.2s ease-in-out;}
@@ -92,7 +94,7 @@ def save_json(key_name, data):
             supabase.table('app_data').update({'data': data}).eq('id', key_name).execute()
         else:
             supabase.table('app_data').insert({'id': key_name, 'data': data}).execute()
-        get_all_settings.clear() # Limpia la caché para que el cambio se vea al instante
+        get_all_settings.clear() 
     except Exception as e:
         st.error(f"🚨 Error guardando '{key_name}': {e}")
 
@@ -110,7 +112,7 @@ def insert_row(table_name, row_dict):
         st.error(f"🚨 Error guardando en la tabla '{table_name}': {e}")
 
 # ==========================================
-# 2. CARGA DE DATOS CENTRALIZADA (1 SOLO VIAJE A LA NUBE)
+# 2. CARGA DE DATOS CENTRALIZADA
 # ==========================================
 config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "mostrar_membresia": False, "autoregistro": False, "ip_wifi_oficial": "", "radio_metros": 50, "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
 config_app = load_json("config", config_defecto)
@@ -180,6 +182,14 @@ st.markdown('<div class="main-title">🌟 Portal Corporativo</div>', unsafe_allo
 pestaña = st.selectbox("Navegación:", ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia", "💻 Dueño del Software"], label_visibility="collapsed")
 st.write("---")
 
+# ---> CORRECCIÓN DEL ERROR DE NOMBRE (VARIABLE GLOBAL SEGURA) <---
+empleado_en_celu = None
+if 'device_id' in st.session_state:
+    for emp, dev in dispositivos_vinculados.items():
+        if dev == st.session_state['device_id']:
+            empleado_en_celu = emp
+            break
+
 # ==========================================
 # 🛑 SISTEMA ANTIFRAUDE (KILL SWITCH Y VENCIMIENTO)
 # ==========================================
@@ -205,25 +215,20 @@ if pestaña in ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia"]:
 # ==========================================
 if pestaña == "⏱️ Portal del Empleado":
     
-    # ---> OPTIMIZACIÓN: SOLO BUSCA EL ID DEL CELULAR SI ENTRA AL PORTAL DEL EMPLEADO <---
     if 'device_id' not in st.session_state:
         js_get_device = "(function() { let id = localStorage.getItem('tienda_app_device_id'); if (!id) { id = 'dev_' + Math.random().toString(36).substring(2, 15); localStorage.setItem('tienda_app_device_id', id); } return id; })();"
         did = streamlit_js_eval(js_expressions=js_get_device, want_output=True, key="get_dev_id")
-        if did: st.session_state['device_id'] = did
+        if did: 
+            st.session_state['device_id'] = did
+            st.rerun()
+            
     device_id = st.session_state.get('device_id')
     
-    empleado_en_celu = None
-    if device_id:
-        for emp, dev in dispositivos_vinculados.items():
-            if dev == device_id:
-                empleado_en_celu = emp
-                break
-
     if config_app.get("mensaje_dia", "").strip() != "":
         st.info(f"📢 **Comunicado Interno:**\n\n{config_app['mensaje_dia']}")
 
     if not device_id:
-        st.info("🔄 Inicializando motor de acceso...")
+        st.info("🔄 Autenticando tu equipo...")
     else:
         if empleado_en_celu:
             if 'fichaje_exitoso' in st.session_state:
@@ -298,7 +303,6 @@ if pestaña == "⏱️ Portal del Empleado":
                     else:
                         st.info("📋 Ya tenés turnos finalizados hoy. Podés registrar un nuevo ingreso si es necesario.")
 
-                # ---> OPTIMIZACIÓN DE GPS Y WIFI (SOLO CUANDO EXPANDE EL CHECK IN) <---
                 if estado_laboral == "Fuera":
                     st.markdown("### 🤖 Radar Automático")
                     local_detectado = None
