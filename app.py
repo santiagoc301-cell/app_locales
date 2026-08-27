@@ -16,14 +16,12 @@ st.set_page_config(page_title="Gestión Corporativa", page_icon="🛍️", layou
 # ==========================================
 st.markdown("""
 <style>
-    /* ---> MODO MARCA BLANCA TOTAL (EXTREMO) <--- */
     [data-testid="stToolbar"] { display: none !important; } 
     .viewerBadge_container { display: none !important; } 
     footer { display: none !important; } 
     #MainMenu { display: none !important; } 
     [data-testid="collapsedControl"] { display: none !important; }
 
-    /* ---> DISEÑO DE LA APP <--- */
     .main-title { font-size: 2.2rem; font-weight: 800; color: #111827; margin-bottom: 0.5rem; text-align: center; text-transform: uppercase; letter-spacing: -0.5px;}
     .sub-text { font-size: 1.15rem; color: #4B5563; margin-bottom: 2rem; }
     div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #2563EB; transition: transform 0.2s ease-in-out;}
@@ -64,43 +62,55 @@ def init_connection():
 
 supabase = init_connection()
 
-def load_json(key_name, default_data):
+# ---> MOTOR TURBO (SISTEMA DE CACHÉ DE CONFIGURACIONES) <---
+@st.cache_data(ttl=60)
+def get_all_settings():
     try:
-        res = supabase.table('app_data').select('data').eq('id', key_name).execute()
-        if res.data: return res.data[0]['data']
-        else:
+        res = supabase.table('app_data').select('id, data').execute()
+        if res.data:
+            return {row['id']: row['data'] for row in res.data}
+        return {}
+    except:
+        return {}
+
+def load_json(key_name, default_data):
+    settings = get_all_settings()
+    if key_name in settings:
+        return settings[key_name]
+    else:
+        try:
             supabase.table('app_data').insert({'id': key_name, 'data': default_data}).execute()
+            get_all_settings.clear()
             return default_data
-    except Exception as e:
-        st.error(f"🚨 Error cargando '{key_name}': {e}")
-        st.stop()
+        except:
+            return default_data
 
 def save_json(key_name, data):
     try:
-        res = supabase.table('app_data').select('id').eq('id', key_name).execute()
-        if res.data: supabase.table('app_data').update({'data': data}).eq('id', key_name).execute()
-        else: supabase.table('app_data').insert({'id': key_name, 'data': data}).execute()
+        settings = get_all_settings()
+        if key_name in settings:
+            supabase.table('app_data').update({'data': data}).eq('id', key_name).execute()
+        else:
+            supabase.table('app_data').insert({'id': key_name, 'data': data}).execute()
+        get_all_settings.clear() # Limpia la caché para que el cambio se vea al instante
     except Exception as e:
         st.error(f"🚨 Error guardando '{key_name}': {e}")
-        st.stop()
 
 def load_df(table_name):
     try:
         res = supabase.table(table_name).select('*').execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception as e:
-        st.error(f"🚨 Error leyendo la tabla '{table_name}': {e}")
-        st.stop()
+        return pd.DataFrame()
 
 def insert_row(table_name, row_dict):
     try: 
         supabase.table(table_name).insert(row_dict).execute()
     except Exception as e:
         st.error(f"🚨 Error guardando en la tabla '{table_name}': {e}")
-        st.stop()
 
 # ==========================================
-# 2. CARGA DE DATOS CENTRALIZADA
+# 2. CARGA DE DATOS CENTRALIZADA (1 SOLO VIAJE A LA NUBE)
 # ==========================================
 config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "mostrar_membresia": False, "autoregistro": False, "ip_wifi_oficial": "", "radio_metros": 50, "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
 config_app = load_json("config", config_defecto)
@@ -131,22 +141,6 @@ lista_puntos = load_json("ajustes_puntos", [])
 reportes_log = load_json("reportes", [])
 
 ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A"]
-
-# ==========================================
-# 3. IDENTIFICADOR Y RED DEL CELULAR
-# ==========================================
-js_get_device = "(function() { let id = localStorage.getItem('tienda_app_device_id'); if (!id) { id = 'dev_' + Math.random().toString(36).substring(2, 15); localStorage.setItem('tienda_app_device_id', id); } return id; })();"
-device_id = streamlit_js_eval(js_expressions=js_get_device, want_output=True, key="get_dev_id")
-
-js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
-client_ip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
-
-empleado_en_celu = None
-if device_id:
-    for emp, dev in dispositivos_vinculados.items():
-        if dev == device_id:
-            empleado_en_celu = emp
-            break
 
 def procesar_rango_fechas(rango):
     if isinstance(rango, tuple) or isinstance(rango, list):
@@ -211,11 +205,25 @@ if pestaña in ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia"]:
 # ==========================================
 if pestaña == "⏱️ Portal del Empleado":
     
+    # ---> OPTIMIZACIÓN: SOLO BUSCA EL ID DEL CELULAR SI ENTRA AL PORTAL DEL EMPLEADO <---
+    if 'device_id' not in st.session_state:
+        js_get_device = "(function() { let id = localStorage.getItem('tienda_app_device_id'); if (!id) { id = 'dev_' + Math.random().toString(36).substring(2, 15); localStorage.setItem('tienda_app_device_id', id); } return id; })();"
+        did = streamlit_js_eval(js_expressions=js_get_device, want_output=True, key="get_dev_id")
+        if did: st.session_state['device_id'] = did
+    device_id = st.session_state.get('device_id')
+    
+    empleado_en_celu = None
+    if device_id:
+        for emp, dev in dispositivos_vinculados.items():
+            if dev == device_id:
+                empleado_en_celu = emp
+                break
+
     if config_app.get("mensaje_dia", "").strip() != "":
         st.info(f"📢 **Comunicado Interno:**\n\n{config_app['mensaje_dia']}")
 
     if not device_id:
-        st.info("🔄 Autenticando tu equipo...")
+        st.info("🔄 Inicializando motor de acceso...")
     else:
         if empleado_en_celu:
             if 'fichaje_exitoso' in st.session_state:
@@ -290,16 +298,28 @@ if pestaña == "⏱️ Portal del Empleado":
                     else:
                         st.info("📋 Ya tenés turnos finalizados hoy. Podés registrar un nuevo ingreso si es necesario.")
 
+                # ---> OPTIMIZACIÓN DE GPS Y WIFI (SOLO CUANDO EXPANDE EL CHECK IN) <---
                 if estado_laboral == "Fuera":
                     st.markdown("### 🤖 Radar Automático")
                     local_detectado = None
                     distancia_real = 0.0
                     metodo_det = ""
-                    ubicacion = get_geolocation() if config_app.get("verificar_gps", True) else None
+                    
+                    client_ip_local = None
+                    if config_app.get("verificar_wifi", False):
+                        if 'client_ip' not in st.session_state:
+                            js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
+                            cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
+                            if cip: st.session_state['client_ip'] = cip
+                        client_ip_local = st.session_state.get('client_ip')
 
-                    if config_app.get("verificar_wifi", False) and client_ip and client_ip != 'Error':
+                    ubicacion = None
+                    if config_app.get("verificar_gps", True):
+                        ubicacion = get_geolocation()
+
+                    if config_app.get("verificar_wifi", False) and client_ip_local and client_ip_local != 'Error':
                         for loc, d_loc in lista_locales.items():
-                            if d_loc.get("ip", "").strip() == client_ip:
+                            if d_loc.get("ip", "").strip() == client_ip_local:
                                 local_detectado = loc
                                 metodo_det = "📶 Red Wi-Fi de la tienda"
                                 break
@@ -336,7 +356,6 @@ if pestaña == "⏱️ Portal del Empleado":
                         if nombres_turnos:
                             st.markdown("🕒 **Verificá y confirmá tu turno:**")
                             turno_seleccionado = st.selectbox("Turno a fichar:", nombres_turnos, index=idx_defecto, label_visibility="collapsed")
-                            
                             st.markdown(f"<small style='color: gray;'>El horario oficial de este turno es de {lista_turnos[turno_seleccionado]['ingreso']} a {lista_turnos[turno_seleccionado]['salida']}</small>", unsafe_allow_html=True)
                             
                             nota_empleado = st.text_input("📝 Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
@@ -395,10 +414,17 @@ if pestaña == "⏱️ Portal del Empleado":
                                 en_rango_sal = False
                                 st.markdown("<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⏳ <b>Obteniendo GPS...</b></div>", unsafe_allow_html=True)
                         
+                        client_ip_local = None
                         if config_app.get("verificar_wifi", False):
+                            if 'client_ip' not in st.session_state:
+                                js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
+                                cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
+                                if cip: st.session_state['client_ip'] = cip
+                            client_ip_local = st.session_state.get('client_ip')
+                            
                             ip_tienda = lista_locales[local_actual].get("ip", "").strip()
                             if not ip_tienda: wifi_aprobado_sal = False
-                            elif client_ip and client_ip == ip_tienda: st.markdown("<div class='validation-box'>✅ <b>Red Aprobada.</b></div>", unsafe_allow_html=True)
+                            elif client_ip_local and client_ip_local == ip_tienda: st.markdown("<div class='validation-box'>✅ <b>Red Aprobada.</b></div>", unsafe_allow_html=True)
                             else: wifi_aprobado_sal = False
 
                         if config_app.get("verificar_wifi", False) and not wifi_aprobado_sal: puede_salir = False
@@ -657,6 +683,11 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         b64_asist = base64.b64encode(csv_asist).decode()
                         link_asist = f'<a href="data:file/csv;base64,{b64_asist}" download="Fichajes_{local_descarga}_{fecha_in_dl}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">📄 Descargar Fichajes</a>'
                         c_btn2.markdown(link_asist, unsafe_allow_html=True)
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        with st.expander("📱 ¿No te descarga en el celular? Usá esta alternativa"):
+                            st.info("Algunos celulares bloquean las descargas automáticas. Tocá el botón de **Copiar** que aparece arriba a la derecha del siguiente recuadro negro y pegá los datos directamente en Excel, Google Sheets o WhatsApp.")
+                            st.code(csv_horas.decode('utf-8'), language='csv')
                     else:
                         st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
 
