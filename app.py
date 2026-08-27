@@ -8,7 +8,7 @@ import altair as alt
 from supabase import create_client
 
 # Configuración inicial de la página
-st.set_page_config(page_title="Gestión Corporativa - Retail", page_icon="🛍️", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Gestión Corporativa", page_icon="🛍️", layout="centered")
 
 # ==========================================
 # 💎 ESTÉTICA PREMIUM COMERCIAL (CSS) Y MARCA BLANCA
@@ -16,18 +16,19 @@ st.set_page_config(page_title="Gestión Corporativa - Retail", page_icon="🛍�
 st.markdown("""
 <style>
     /* ---> MODO MARCA BLANCA TOTAL (EXTREMO) <--- */
-    [data-testid="stToolbar"] { display: none !important; }
-    .viewerBadge_container { display: none !important; }
-    footer { display: none !important; }
-    #MainMenu { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; } 
+    .viewerBadge_container { display: none !important; } 
+    footer { display: none !important; } 
+    #MainMenu { display: none !important; } 
+    [data-testid="collapsedControl"] { display: none !important; } /* Elimina la flechita molesta de la barra lateral */
 
     /* ---> DISEÑO DE LA APP <--- */
-    .main-title { font-size: 2.8rem; font-weight: 800; color: #111827; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: -0.5px;}
+    .main-title { font-size: 2.2rem; font-weight: 800; color: #111827; margin-bottom: 0.5rem; text-align: center; text-transform: uppercase; letter-spacing: -0.5px;}
     .sub-text { font-size: 1.15rem; color: #4B5563; margin-bottom: 2rem; }
     div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #2563EB; transition: transform 0.2s ease-in-out;}
     div[data-testid="metric-container"]:hover { transform: translateY(-5px); }
     div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 800; color: #111827; }
-    .stButton>button { border-radius: 10px; font-weight: 600; transition: all 0.3s; border: 1px solid #D1D5DB; padding: 0.5rem 1rem; }
+    .stButton>button { border-radius: 10px; font-weight: 600; transition: all 0.3s; border: 1px solid #D1D5DB; padding: 0.5rem 1rem; width: 100%;}
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 10px -1px rgba(0, 0, 0, 0.1); border-color: #9CA3AF;}
     .alert-box { padding: 15px; border-radius: 10px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; }
     .task-box { padding: 15px; border-radius: 10px; border-left: 6px solid #10B981; background-color: #ECFDF5; margin-bottom: 15px; }
@@ -178,21 +179,11 @@ def calcular_nivel(puntos):
     else: return "👑 Leyenda"
 
 # ==========================================
-# 4. MENÚ LATERAL Y QUIÉNES SOMOS
+# 4. NAVEGACIÓN FRONTAL PARA CELULARES
 # ==========================================
-st.sidebar.title("🛍️ Menú Principal")
-pestaña = st.sidebar.radio("Navegar a:", ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia", "💻 Dueño del Software"])
-
-with st.sidebar.expander("🏢 Quiénes Somos / Contactos", expanded=False):
-    st.markdown(f"### {owner_config.get('empresa_nombre', 'Nuestra Empresa')}")
-    st.write(owner_config.get('quienes_somos', ''))
-    st.markdown("---")
-    st.markdown("📞 **Contactos Útiles:**")
-    st.write(owner_config.get('contactos', ''))
-
-if config_app.get("mostrar_membresia", False):
-    st.sidebar.markdown("<br>", unsafe_allow_html=True)
-    st.sidebar.markdown(f"<div style='text-align: center; padding: 10px; background-color: #F3F4F6; border-radius: 10px; border: 1px solid #E5E7EB;'><span style='font-size: 0.8rem; color: #6B7280;'>TIPO DE MEMBRESÍA</span><br><b style='color: #111827;'>⭐ Plan {owner_config.get('plan_pago', 'Mensual')}</b></div>", unsafe_allow_html=True)
+st.markdown('<div class="main-title">🌟 Portal Corporativo</div>', unsafe_allow_html=True)
+pestaña = st.selectbox("Navegación:", ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia", "💻 Dueño del Software"], label_visibility="collapsed")
+st.write("---")
 
 # ==========================================
 # 🛑 SISTEMA ANTIFRAUDE (KILL SWITCH Y VENCIMIENTO)
@@ -215,10 +206,9 @@ if pestaña in ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia"]:
         st.stop()
 
 # ==========================================
-# 5. INTERFAZ PRINCIPAL
+# 5. INTERFAZ: PORTAL DEL EMPLEADO
 # ==========================================
 if pestaña == "⏱️ Portal del Empleado":
-    st.markdown('<div class="main-title">⏱️ Portal del Equipo</div>', unsafe_allow_html=True)
     
     if config_app.get("mensaje_dia", "").strip() != "":
         st.info(f"📢 **Comunicado Interno:**\n\n{config_app['mensaje_dia']}")
@@ -326,7 +316,6 @@ if pestaña == "⏱️ Portal del Empleado":
                                     break
                     
                     if local_detectado:
-                        # --- NUEVA LÓGICA DE SELECCIÓN DE TURNO HÍBRIDA ---
                         nombres_turnos = list(lista_turnos.keys())
                         idx_defecto = 0
                         if nombres_turnos:
@@ -345,7 +334,6 @@ if pestaña == "⏱️ Portal del Empleado":
                         
                         if nombres_turnos:
                             st.markdown("🕒 **Verificá y confirmá tu turno:**")
-                            # El selectbox le sugiere el turno, pero le permite cambiarlo.
                             turno_seleccionado = st.selectbox("Turno a fichar:", nombres_turnos, index=idx_defecto, label_visibility="collapsed")
                             
                             st.markdown(f"<small style='color: gray;'>El horario oficial de este turno es de {lista_turnos[turno_seleccionado]['ingreso']} a {lista_turnos[turno_seleccionado]['salida']}</small>", unsafe_allow_html=True)
@@ -468,6 +456,19 @@ if pestaña == "⏱️ Portal del Empleado":
                             df_emp = df_emp.sort_values(by="id_num", ascending=False)
                         st.dataframe(df_emp[["Fecha", "Hora", "Tipo", "Estado", "Nota"]], hide_index=True, use_container_width=True)
                     else: st.write("Sin fichajes recientes.")
+                    
+            # --- SECCIÓN: QUIÉNES SOMOS AL FINAL DEL PORTAL ---
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            with st.expander("🏢 Quiénes Somos / Soporte Técnico", expanded=False):
+                st.markdown(f"### {owner_config.get('empresa_nombre', 'Nuestra Empresa')}")
+                st.write(owner_config.get('quienes_somos', ''))
+                st.markdown("---")
+                st.markdown("📞 **Contactos Útiles:**")
+                st.write(owner_config.get('contactos', ''))
+                
+                if config_app.get("mostrar_membresia", False):
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center; padding: 10px; background-color: #F3F4F6; border-radius: 10px; border: 1px solid #E5E7EB;'><span style='font-size: 0.8rem; color: #6B7280;'>TIPO DE MEMBRESÍA</span><br><b style='color: #111827;'>⭐ Plan {owner_config.get('plan_pago', 'Mensual')}</b></div>", unsafe_allow_html=True)
         else:
             st.warning("⚠️ **Equipo no autorizado.**")
             
@@ -504,7 +505,7 @@ if pestaña == "⏱️ Portal del Empleado":
 # 6. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
 # ==========================================
 elif pestaña == "⚙️ Panel de Gerencia":
-    st.markdown('<div class="main-title">⚙️ Panel de Gerencia Corporativa</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">⚙️ Panel de Gerencia</div>', unsafe_allow_html=True)
     password_ingresada = st.text_input("Clave de acceso:", type="password")
     
     if password_ingresada and password_ingresada != "doremifasol":
@@ -1083,7 +1084,7 @@ elif pestaña == "💻 Dueño del Software":
 
         with tab_empresa:
             st.subheader("Personalizar Información 'Quiénes Somos'")
-            st.write("Esta información aparecerá en el menú lateral izquierdo para que todos los empleados la vean.")
+            st.write("Esta información aparecerá en el menú inferior para que todos los empleados la vean.")
             with st.form("form_empresa"):
                 nombre_empresa = st.text_input("Nombre de la Empresa o Cliente:", value=owner_config.get("empresa_nombre", ""))
                 historia = st.text_area("Historia / Quiénes Somos:", value=owner_config.get("quienes_somos", ""))
