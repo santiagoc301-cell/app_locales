@@ -6,6 +6,7 @@ import pandas as pd
 import json
 import altair as alt
 from supabase import create_client
+import base64
 
 # Configuración inicial de la página
 st.set_page_config(page_title="Gestión Corporativa", page_icon="🛍️", layout="centered")
@@ -20,7 +21,7 @@ st.markdown("""
     .viewerBadge_container { display: none !important; } 
     footer { display: none !important; } 
     #MainMenu { display: none !important; } 
-    [data-testid="collapsedControl"] { display: none !important; } /* Elimina la flechita molesta de la barra lateral */
+    [data-testid="collapsedControl"] { display: none !important; }
 
     /* ---> DISEÑO DE LA APP <--- */
     .main-title { font-size: 2.2rem; font-weight: 800; color: #111827; margin-bottom: 0.5rem; text-align: center; text-transform: uppercase; letter-spacing: -0.5px;}
@@ -457,7 +458,6 @@ if pestaña == "⏱️ Portal del Empleado":
                         st.dataframe(df_emp[["Fecha", "Hora", "Tipo", "Estado", "Nota"]], hide_index=True, use_container_width=True)
                     else: st.write("Sin fichajes recientes.")
                     
-            # --- SECCIÓN: QUIÉNES SOMOS AL FINAL DEL PORTAL ---
             st.markdown("<br><br>", unsafe_allow_html=True)
             with st.expander("🏢 Quiénes Somos / Soporte Técnico", expanded=False):
                 st.markdown(f"### {owner_config.get('empresa_nombre', 'Nuestra Empresa')}")
@@ -505,8 +505,7 @@ if pestaña == "⏱️ Portal del Empleado":
 # 6. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
 # ==========================================
 elif pestaña == "⚙️ Panel de Gerencia":
-    st.markdown('<div class="main-title">⚙️ Panel de Gerencia</div>', unsafe_allow_html=True)
-    password_ingresada = st.text_input("Clave de acceso:", type="password")
+    password_ingresada = st.text_input("Clave de acceso de Gerencia:", type="password")
     
     if password_ingresada and password_ingresada != "doremifasol":
         if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
@@ -645,14 +644,19 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         c_btn1, c_btn2 = st.columns(2)
                         
                         csv_horas = df_horas_final.to_csv(index=False).encode('utf-8')
-                        c_btn1.download_button(label="⏱️ Descargar Recuento de Horas", data=csv_horas, file_name=f"HorasTotales_{local_descarga}_{fecha_in_dl}.csv", mime="text/csv", use_container_width=True)
+                        b64_horas = base64.b64encode(csv_horas).decode()
+                        link_horas = f'<a href="data:file/csv;base64,{b64_horas}" download="HorasTotales_{local_descarga}_{fecha_in_dl}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">⏱️ Descargar Horas</a>'
+                        c_btn1.markdown(link_horas, unsafe_allow_html=True)
 
                         df_asist_dl = df_dl.copy()
                         df_asist_dl['Hora_dt'] = pd.to_datetime(df_asist_dl['Hora'], errors='coerce')
                         df_asist_dl = df_asist_dl.sort_values(by=["Fecha", "Hora_dt"])
                         df_asist_dl = df_asist_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
+                        
                         csv_asist = df_asist_dl.to_csv(index=False).encode('utf-8')
-                        c_btn2.download_button(label="📄 Descargar Fichajes Detallados", data=csv_asist, file_name=f"Fichajes_{local_descarga}_{fecha_in_dl}.csv", mime="text/csv", use_container_width=True)
+                        b64_asist = base64.b64encode(csv_asist).decode()
+                        link_asist = f'<a href="data:file/csv;base64,{b64_asist}" download="Fichajes_{local_descarga}_{fecha_in_dl}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">📄 Descargar Fichajes</a>'
+                        c_btn2.markdown(link_asist, unsafe_allow_html=True)
                     else:
                         st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
 
