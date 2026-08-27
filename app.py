@@ -15,11 +15,11 @@ st.set_page_config(page_title="Gestión Corporativa - Retail", page_icon="🛍�
 # ==========================================
 st.markdown("""
 <style>
-    /* ---> MODO MARCA BLANCA: OCULTA EL GATITO, EL FORK Y EL FOOTER <--- */
-    [data-testid="stToolbar"] { visibility: hidden !important; }
-    footer { visibility: hidden !important; }
-    #MainMenu { visibility: hidden !important; }
-    header { background: transparent !important; }
+    /* ---> MODO MARCA BLANCA TOTAL (EXTREMO) <--- */
+    [data-testid="stToolbar"] { display: none !important; } /* Borra el menú de arriba a la derecha */
+    .viewerBadge_container { display: none !important; } /* Borra la corona y el logo rojo de abajo */
+    footer { display: none !important; } /* Borra la marca de agua del final */
+    #MainMenu { display: none !important; }
 
     /* ---> DISEÑO DE LA APP <--- */
     .main-title { font-size: 2.8rem; font-weight: 800; color: #111827; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: -0.5px;}
@@ -707,9 +707,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         supabase.table("tareas_log").update({"Estado": "Rechazada"}).eq("id", int(row['id'])).execute()
                         st.rerun()
 
-            # ---> AQUÍ ESTABA EL ERROR DEL CORCHETE. AHORA CORREGIDO CON PARÉNTESIS <---
             puntos_pendientes = [p for p in lista_puntos if p.get("Estado") == "Pendiente"]
-            
             if puntos_pendientes:
                 st.write("**Evaluaciones Pendientes (De Supervisores):**")
                 for idx, p in enumerate(lista_puntos):
