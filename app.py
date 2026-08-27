@@ -34,6 +34,9 @@ st.markdown("""
     .cred-rol { font-size: 1.1rem; opacity: 0.9; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
     .cred-nivel { font-size: 1.3rem; font-weight: 700; background-color: rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 20px; display: inline-block;}
     .validation-box { padding: 15px; border-radius: 10px; border: 1px solid #E5E7EB; background-color: #F9FAFB; margin-bottom: 10px;}
+    .msg-rol { padding: 15px; border-radius: 10px; border-left: 6px solid #4F46E5; background-color: #EEF2FF; margin-bottom: 15px; }
+    .bloqueo-pantalla { padding: 40px; background-color: #FEF2F2; border: 4px solid #EF4444; border-radius: 20px; text-align: center; margin-top: 50px;}
+    .bloqueo-titulo { font-size: 3rem; color: #B91C1C; font-weight: 900; margin-bottom: 20px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -52,7 +55,6 @@ def init_connection():
 
 supabase = init_connection()
 
-# MODO DIAGNÓSTICO ACTIVADO
 def load_json(key_name, default_data):
     try:
         res = supabase.table('app_data').select('data').eq('id', key_name).execute()
@@ -91,8 +93,19 @@ def insert_row(table_name, row_dict):
 # ==========================================
 # 2. CARGA DE DATOS CENTRALIZADA
 # ==========================================
-config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "ip_wifi_oficial": "", "radio_metros": 50, "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
+config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "ip_wifi_oficial": "", "radio_metros": 50, "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
 config_app = load_json("config", config_defecto)
+
+# ---> CONFIGURACIÓN DEL DUEÑO DEL SOFTWARE <---
+owner_config_defecto = {
+    "estado_licencia": "Activo",
+    "plan_pago": "Mensual",
+    "mensaje_bloqueo": "⚠️ SISTEMA SUSPENDIDO TEMPORALMENTE.\n\nPor favor, comuníquese con el proveedor del software para regularizar el estado de su cuenta.",
+    "empresa_nombre": "Mi Tienda Oficial",
+    "quienes_somos": "Somos una empresa dedicada a ofrecer la mejor calidad y atención a nuestros clientes. Trabajamos en equipo para lograr nuestros objetivos diarios.",
+    "contactos": "📍 Dirección Central\n📞 RRHH: +54 9 000 0000\n✉️ soporte@mitienda.com"
+}
+owner_config = load_json("owner_config", owner_config_defecto)
 
 lista_roles_disponibles = load_json("lista_roles", ["Vendedor", "Cajero", "Encargado", "Depósito", "Otro"])
 lista_empleados = load_json("empleados", ["Abril Gonzalez", "Agustina Lopez", "Daniela Perez", "Macarena Silva"])
@@ -158,11 +171,35 @@ def calcular_nivel(puntos):
     else: return "👑 Leyenda"
 
 # ==========================================
-# 4. INTERFAZ PRINCIPAL
+# 4. MENÚ LATERAL Y QUIÉNES SOMOS
 # ==========================================
 st.sidebar.title("🛍️ Menú Principal")
-pestaña = st.sidebar.radio("Navegar a:", ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia"])
+pestaña = st.sidebar.radio("Navegar a:", ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia", "💻 Dueño del Software"])
 
+# --- SECCIÓN: QUIÉNES SOMOS (Visible para todos en el menú) ---
+with st.sidebar.expander("🏢 Quiénes Somos / Contactos", expanded=False):
+    st.markdown(f"### {owner_config.get('empresa_nombre', 'Nuestra Empresa')}")
+    st.write(owner_config.get('quienes_somos', ''))
+    st.markdown("---")
+    st.markdown("📞 **Contactos Útiles:**")
+    st.write(owner_config.get('contactos', ''))
+
+# ==========================================
+# 🛑 SISTEMA ANTIFRAUDE (KILL SWITCH)
+# ==========================================
+# Si la licencia está suspendida, bloquea a Empleados y Gerencia. Solo pasa el Dueño.
+if pestaña in ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia"] and owner_config.get("estado_licencia") == "Suspendido":
+    st.markdown(f"""
+        <div class="bloqueo-pantalla">
+            <div class="bloqueo-titulo">⛔ ACCESO BLOQUEADO</div>
+            <p style="font-size: 1.5rem; color: #7F1D1D;">{owner_config.get("mensaje_bloqueo")}</p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.stop()  # 🛑 Detiene absolutamente toda la aplicación acá mismo.
+
+# ==========================================
+# 5. INTERFAZ PRINCIPAL
+# ==========================================
 if pestaña == "⏱️ Portal del Empleado":
     st.markdown('<div class="main-title">⏱️ Portal del Equipo</div>', unsafe_allow_html=True)
     
@@ -216,11 +253,16 @@ if pestaña == "⏱️ Portal del Empleado":
                                 save_json("ajustes_puntos", lista_puntos)
                                 st.success("✅ Evaluación enviada a Gerencia correctamente.")
 
-            mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu]]
+            # --- SISTEMA DE MENSAJES CON SOPORTE PARA ROLES ---
+            mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu, rol_empleado]]
             if mensajes_usuario:
                 for m in mensajes_usuario:
-                    if m['destinatario'] == 'Todos': st.markdown(f"<div class='msg-global'>🏷️ <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
-                    else: st.markdown(f"<div class='msg-individual'>📩 <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    if m['destinatario'] == 'Todos': 
+                        st.markdown(f"<div class='msg-global alert-box' style='border-color: #3B82F6; background-color: #EFF6FF;'>🏷️ <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    elif m['destinatario'] == rol_empleado:
+                        st.markdown(f"<div class='msg-rol'>👥 <b>Para el equipo de {rol_empleado}s:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    else: 
+                        st.markdown(f"<div class='msg-individual report-box'>📩 <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
 
             with st.expander("📍 Smart Check-In", expanded=True):
                 df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy() if not df_punt.empty else pd.DataFrame()
@@ -235,18 +277,9 @@ if pestaña == "⏱️ Portal del Empleado":
                     ultimo_reg = df_hoy.iloc[-1]
                     if ultimo_reg["Tipo"] == "Entrada":
                         estado_laboral = "Adentro"
-                        
-                        # --- CORRECCIÓN INT64: Conversión a formato nativo de Python ---
-                        try:
-                            dist_guardada = float(ultimo_reg.get("Distancia_m", 0.0))
-                        except:
-                            dist_guardada = 0.0
-                            
-                        datos_turno_activo = {
-                            "Sucursal": str(ultimo_reg["Sucursal"]), 
-                            "Turno": str(ultimo_reg["Turno"]), 
-                            "Distancia_m": dist_guardada
-                        }
+                        try: dist_guardada = float(ultimo_reg.get("Distancia_m", 0.0))
+                        except: dist_guardada = 0.0
+                        datos_turno_activo = {"Sucursal": str(ultimo_reg["Sucursal"]), "Turno": str(ultimo_reg["Turno"]), "Distancia_m": dist_guardada}
                     else:
                         st.info("📋 Ya tenés turnos finalizados hoy. Podés registrar un nuevo ingreso si es necesario.")
 
@@ -272,7 +305,7 @@ if pestaña == "⏱️ Portal del Empleado":
                                 dist = geodesic(coord_usuario, coord_local).meters
                                 if dist <= int(config_app.get("radio_metros", 50)):
                                     local_detectado = loc
-                                    distancia_real = float(dist) # Obligamos formato float
+                                    distancia_real = float(dist)
                                     metodo_det = f"🛰️ GPS Satelital ({dist:.1f} metros)"
                                     break
                     
@@ -305,6 +338,11 @@ if pestaña == "⏱️ Portal del Empleado":
                             
                             msg_final = f"¡Entrada registrada a las {hora_hoy}!"
                             if estado_llegada == "Tarde": msg_final += f"\n\n🔴 {config_app.get('mensaje_llegada_tarde')}"
+                            
+                            for a in alertas_ingreso:
+                                if a['destinatario'] in ['Todos', empleado_en_celu, rol_empleado]: 
+                                    msg_final += f"\n\n📩 {a['texto']}"
+                            
                             st.session_state['fichaje_exitoso'] = msg_final
                             st.rerun()
                     else:
@@ -317,13 +355,48 @@ if pestaña == "⏱️ Portal del Empleado":
                     local_actual = datos_turno_activo.get("Sucursal", "N/A")
                     turno_actual = datos_turno_activo.get("Turno", "N/A")
                     st.success(f"🟢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
-                    nota_empleado = st.text_input("📝 Novedad al salir (Opcional):")
                     
-                    if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
-                        # --- CORRECCIÓN INT64 APLICADA AQUÍ TAMBIÉN ---
-                        insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(datos_turno_activo.get("Distancia_m", 0.0)), 1), "Nota": str(nota_empleado)})
-                        st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
-                        st.rerun() 
+                    puede_salir = True
+                    distancia_salida = datos_turno_activo.get("Distancia_m", 0.0)
+                    
+                    if config_app.get("salida_estricta", False) and local_actual in lista_locales:
+                        st.markdown("📍 **Verificación requerida para finalizar turno:**")
+                        ubicacion_sal = get_geolocation() if config_app.get("verificar_gps", True) else None
+                        en_rango_sal = True
+                        wifi_aprobado_sal = True
+                        radio_permitido = int(config_app.get("radio_metros", 50))
+                        
+                        if config_app.get("verificar_gps", True):
+                            if ubicacion_sal and 'coords' in ubicacion_sal:
+                                coord_us = (ubicacion_sal['coords']['latitude'], ubicacion_sal['coords']['longitude'])
+                                coord_loc = (lista_locales[local_actual]["lat"], lista_locales[local_actual]["lon"])
+                                distancia_salida = geodesic(coord_us, coord_loc).meters
+                                if distancia_salida <= radio_permitido:
+                                    st.markdown(f"<div class='validation-box'>✅ <b>GPS Aprobado:</b> Estás en el local ({distancia_salida:.1f} m).</div>", unsafe_allow_html=True)
+                                else:
+                                    en_rango_sal = False
+                                    st.markdown(f"<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Fuera de rango:</b> Estás a {distancia_salida:.1f} m. (Límite: {radio_permitido}m). <b>No podés finalizar el turno desde acá.</b></div>", unsafe_allow_html=True)
+                            else:
+                                en_rango_sal = False
+                                st.markdown("<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⏳ <b>Obteniendo GPS...</b></div>", unsafe_allow_html=True)
+                        
+                        if config_app.get("verificar_wifi", False):
+                            ip_tienda = lista_locales[local_actual].get("ip", "").strip()
+                            if not ip_tienda: wifi_aprobado_sal = False
+                            elif client_ip and client_ip == ip_tienda: st.markdown("<div class='validation-box'>✅ <b>Red Aprobada.</b></div>", unsafe_allow_html=True)
+                            else: wifi_aprobado_sal = False
+
+                        if config_app.get("verificar_wifi", False) and not wifi_aprobado_sal: puede_salir = False
+                        if config_app.get("verificar_gps", True) and not en_rango_sal: puede_salir = False
+
+                    if puede_salir:
+                        nota_empleado = st.text_input("📝 Novedad al salir (Opcional):")
+                        if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
+                            insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(distancia_salida), 1), "Nota": str(nota_empleado)})
+                            st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
+                            st.rerun() 
+                    else:
+                        st.error("⚠️ El sistema exige que finalices tu turno físicamente dentro de la sucursal.")
 
             with st.expander("🛑 Buzón de Reportes Confidenciales", expanded=False):
                 tipo_rep = st.selectbox("Tipo:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
@@ -378,7 +451,7 @@ if pestaña == "⏱️ Portal del Empleado":
                 st.rerun()
 
 # ==========================================
-# 5. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
+# 6. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
 # ==========================================
 elif pestaña == "⚙️ Panel de Gerencia":
     st.markdown('<div class="main-title">⚙️ Panel de Gerencia Corporativa</div>', unsafe_allow_html=True)
@@ -734,7 +807,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
             with col_m1:
                 st.subheader("📲 Alerta al Ingresar")
                 with st.form("form_alertas"):
-                    dest_ing = st.selectbox("Destinatario:", ["Todos"] + sorted(lista_empleados))
+                    dest_ing = st.selectbox("Destinatario:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados))
                     txt_alerta = st.text_area("Mensaje:")
                     if st.form_submit_button("Crear Alerta") and txt_alerta: alertas_ingreso.append({"destinatario": dest_ing, "texto": txt_alerta}); save_json("alertas_ingreso", alertas_ingreso); st.rerun()
                 for idx, a in enumerate(alertas_ingreso):
@@ -743,7 +816,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
             with col_m2:
                 st.subheader("📌 Anuncio Fijo")
                 with st.form("form_fijo"):
-                    dest_fijo = st.selectbox("Destinatario:", ["Todos"] + sorted(lista_empleados), key="fijo")
+                    dest_fijo = st.selectbox("Destinatario:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="fijo")
                     txt_fijo = st.text_area("Mensaje:")
                     if st.form_submit_button("Publicar") and txt_fijo: lista_mensajes.append({"destinatario": dest_fijo, "texto": txt_fijo}); save_json("mensajes", lista_mensajes); st.rerun()
                 for idx, m in enumerate(lista_mensajes):
@@ -770,12 +843,16 @@ elif pestaña == "⚙️ Panel de Gerencia":
             with col_aj2:
                 st.subheader("⚙️ Seguridad de Red y Ajustes")
                 with st.form("form_seguridad"):
-                    v_gps = st.checkbox("📡 Requerir GPS", value=config_app.get("verificar_gps", True))
+                    v_gps = st.checkbox("📡 Requerir GPS para Entrada", value=config_app.get("verificar_gps", True))
                     radio_m = st.number_input("Radio en metros:", value=int(config_app.get("radio_metros", 50)))
-                    v_wifi = st.checkbox("📶 Requerir Wi-Fi", value=config_app.get("verificar_wifi", False))
-                    nueva_tolerancia = st.number_input("Minutos tolerancia:", value=int(config_app.get("tolerancia_minutos", 10)))
+                    v_wifi = st.checkbox("📶 Requerir Wi-Fi para Entrada", value=config_app.get("verificar_wifi", False))
+                    nueva_tolerancia = st.number_input("Minutos tolerancia (llegada tarde):", value=int(config_app.get("tolerancia_minutos", 10)))
+                    
+                    st.markdown("---")
+                    v_salida_estricta = st.checkbox("🛑 Exigir GPS/Wi-Fi para Fichar Salida", value=config_app.get("salida_estricta", False), help="Si se activa, el empleado no podrá salir si no está físicamente dentro del local.")
+                    
                     if st.form_submit_button("💾 Guardar Ajustes"):
-                        config_app.update({"verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia})
+                        config_app.update({"verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "salida_estricta": v_salida_estricta})
                         save_json("config", config_app); st.rerun()
                 
                 st.write("🔑 **Cambiar Clave de Gerencia**")
@@ -808,3 +885,45 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 st.dataframe(pd.DataFrame(lista_intentos).sort_values(by=["Fecha", "Hora"], ascending=[False, False]), use_container_width=True, hide_index=True)
                 if st.button("🗑️ Limpiar registro"): save_json("intentos_seguridad", []); st.rerun()
             else: st.info("Sin intentos de acceso.")
+
+# ==========================================
+# 7. PANEL EXCLUSIVO DEL DUEÑO DEL SOFTWARE
+# ==========================================
+elif pestaña == "💻 Dueño del Software":
+    st.markdown('<div class="main-title">💻 Administrador del Sistema</div>', unsafe_allow_html=True)
+    st.info("🔐 Área restringida exclusiva para el propietario y desarrollador del software.")
+    
+    pass_dueño = st.text_input("Ingrese la Clave Maestra:", type="password")
+    
+    # LA CLAVE MAESTRA INHACKEABLE (Podes cambiar la palabra SantiMaster2026 por la que quieras)
+    if pass_dueño == "SantiMaster2026":
+        st.success("✅ Acceso Maestro Concedido")
+        
+        tab_licencia, tab_empresa = st.tabs(["🔴 Control de Licencia", "🏢 Información de la Empresa"])
+        
+        with tab_licencia:
+            st.subheader("Estado de la Licencia del Cliente")
+            with st.form("form_licencia"):
+                estado_actual = st.selectbox("Estado del Sistema:", ["Activo", "Suspendido"], index=["Activo", "Suspendido"].index(owner_config.get("estado_licencia", "Activo")))
+                plan_actual = st.selectbox("Plan de Pago contratado:", ["Mensual", "Anual", "Vitalicio"], index=["Mensual", "Anual", "Vitalicio"].index(owner_config.get("plan_pago", "Mensual")))
+                msg_bloqueo = st.text_area("Mensaje de Bloqueo (Se muestra al suspender):", value=owner_config.get("mensaje_bloqueo", ""))
+                
+                if st.form_submit_button("💾 Guardar Estado"):
+                    owner_config.update({"estado_licencia": estado_actual, "plan_pago": plan_actual, "mensaje_bloqueo": msg_bloqueo})
+                    save_json("owner_config", owner_config)
+                    st.success("¡Cambios aplicados! Si suspendiste el sistema, nadie más podrá acceder.")
+                    st.rerun()
+                    
+        with tab_empresa:
+            st.subheader("Personalizar Información 'Quiénes Somos'")
+            st.write("Esta información aparecerá en el menú lateral izquierdo para que todos los empleados la vean.")
+            with st.form("form_empresa"):
+                nombre_empresa = st.text_input("Nombre de la Empresa o Cliente:", value=owner_config.get("empresa_nombre", ""))
+                historia = st.text_area("Historia / Quiénes Somos:", value=owner_config.get("quienes_somos", ""))
+                datos_contacto = st.text_area("Datos de Contacto (Teléfonos, mails, etc):", value=owner_config.get("contactos", ""))
+                
+                if st.form_submit_button("💾 Actualizar Pantalla Pública"):
+                    owner_config.update({"empresa_nombre": nombre_empresa, "quienes_somos": historia, "contactos": datos_contacto})
+                    save_json("owner_config", owner_config)
+                    st.success("¡Información actualizada con éxito!")
+                    st.rerun()
