@@ -215,8 +215,6 @@ if pestaña == "⏱️ Portal del Empleado":
                 datos_turno_activo = {}
                 
                 if not df_hoy.empty:
-                    # CORRECCIÓN DE ESTADO (INFALIBLE)
-                    # En lugar de leer horas como texto, usamos el número de ID único de la base de datos que siempre va hacia adelante.
                     if 'id' in df_hoy.columns:
                         df_hoy['id_num'] = pd.to_numeric(df_hoy['id'], errors='coerce')
                         df_hoy = df_hoy.sort_values(by="id_num")
@@ -365,8 +363,8 @@ elif pestaña == "⚙️ Panel de Gerencia":
         with tab_analytics:
             st.markdown('<div class="main-title" style="font-size: 2rem;">📈 Analytics Globales</div>', unsafe_allow_html=True)
             c_fil1, c_fil2 = st.columns([1,3])
-            filtro_a = c_fil1.selectbox("⏳ Filtrar por:", ["Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_a")
-            rango_stats = c_fil2.date_input("🗓️ Fechas:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_a == "Personalizado" else None
+            filtro_a = c_fil1.selectbox("⏳ KPI Dashboard (Métricas Rápidas):", ["Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_a")
+            rango_stats = c_fil2.date_input("🗓️ Fechas del Dashboard:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_a == "Personalizado" else None
             s_in, s_fi = get_fechas_filtro(filtro_a, rango_stats)
 
             df_activos = load_df("asistencia")
@@ -388,46 +386,27 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 c_h3.markdown("<div class='alert-box'><b>❌ Ausentes</b><br>" + ("<br>".join(ausentes) if ausentes else "Ninguno") + "</div>", unsafe_allow_html=True)
                 c_h4.markdown("<div class='validation-box'><b>⚪ Sin Fichar</b><br>" + ("<br>".join(sin_fichar) if sin_fichar else "Todos OK") + "</div>", unsafe_allow_html=True)
                 
-                st.write("---")
                 df_per = df_activos[(df_activos['Fecha_Obj'].dt.date >= s_in) & (df_activos['Fecha_Obj'].dt.date <= s_fi)]
                 if not df_per.empty:
                     atiempo, tardes, ausencias_tot = len(df_per[(df_per["Tipo"] == "Entrada") & (df_per["Estado"] == "A tiempo")]), len(df_per[(df_per["Tipo"] == "Entrada") & (df_per["Estado"] == "Tarde")]), len(df_per[df_per["Tipo"] == "Ausente"])
                     tot_ingresos = atiempo + tardes
                     
+                    st.write("---")
                     c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("🎯 Puntualidad", f"{round((atiempo / tot_ingresos) * 100, 1) if tot_ingresos > 0 else 0}%")
-                    c2.metric("✅ A Tiempo", atiempo)
-                    c3.metric("⚠️ Tarde", tardes)
+                    c1.metric("🎯 Puntualidad Promedio", f"{round((atiempo / tot_ingresos) * 100, 1) if tot_ingresos > 0 else 0}%")
+                    c2.metric("✅ Ingresos A Tiempo", atiempo)
+                    c3.metric("⚠️ Llegadas Tarde", tardes)
                     c4.metric("❌ Inasistencias", ausencias_tot)
                     
-                    st.markdown("### ⏱️ Recuento de Horas")
-                    datos_horas = []
-                    for emp in lista_empleados:
-                        df_e = df_per[df_per["Empleado"] == emp]
-                        horas_totales = 0.0
-                        for f in df_e["Fecha"].unique():
-                            df_ef = df_e[df_e["Fecha"] == f].copy()
-                            # CORRECCIÓN DE CÁLCULO DE HORAS TOLERANTE A FORMATOS
-                            df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
-                            df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
-                            ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
-                            
-                            if not ent.empty and not sal.empty:
-                                if sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
-                                    h_in = ent.iloc[0]["Hora_dt"]
-                                    h_out = sal.iloc[-1]["Hora_dt"]
-                                    diff = (h_out - h_in).total_seconds() / 3600.0
-                                    horas_totales += diff if diff >= 0 else (diff + 24.0)
-                        datos_horas.append({"Personal": emp, "Rol": roles_empleados.get(emp, ""), "⏱️ Horas Computadas": round(horas_totales, 2)})
-                        
-                    if datos_horas: st.dataframe(pd.DataFrame(datos_horas).sort_values(by="⏱️ Horas Computadas", ascending=False), use_container_width=True, hide_index=True)
-                    
+                    # --- NUEVO PANEL DE RECUENTO DE HORAS Y EXPORTACIONES ---
                     st.write("---")
-                    st.subheader("📥 Exportar Planilla de Asistencia (Excel/CSV)")
+                    st.markdown("### ⏱️ Recuento de Horas y Exportaciones")
+                    st.write("Configurá los filtros acá abajo para calcular las horas de tu equipo y descargar las planillas para liquidación.")
+                    
                     c_dl1, c_dl2, c_dl3 = st.columns(3)
-                    local_descarga = c_dl1.selectbox("Filtrar Sucursal:", ["Todas las sucursales"] + list(lista_locales.keys()), key="dl_loc")
-                    fecha_in_dl = c_dl2.date_input("Desde Fecha:", value=ahora.date() - datetime.timedelta(days=7), key="dl_in")
-                    fecha_fi_dl = c_dl3.date_input("Hasta Fecha:", value=ahora.date(), key="dl_fi")
+                    local_descarga = c_dl1.selectbox("🏢 Sucursal a evaluar:", ["Todas las sucursales"] + list(lista_locales.keys()), key="dl_loc")
+                    fecha_in_dl = c_dl2.date_input("📅 Desde el día:", value=ahora.date() - datetime.timedelta(days=7), key="dl_in")
+                    fecha_fi_dl = c_dl3.date_input("📅 Hasta el día:", value=ahora.date(), key="dl_fi")
                     
                     df_dl = df_activos.copy()
                     df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
@@ -435,14 +414,55 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     if local_descarga != "Todas las sucursales":
                         df_dl = df_dl[df_dl["Sucursal"] == local_descarga]
                     
+                    datos_horas = []
                     if not df_dl.empty:
-                        df_dl['Hora_dt'] = pd.to_datetime(df_dl['Hora'], errors='coerce')
-                        df_dl = df_dl.sort_values(by=["Fecha", "Hora_dt"])
-                        df_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
-                        csv = df_dl.to_csv(index=False).encode('utf-8')
-                        st.download_button(label="⬇️ Descargar Reporte Generado", data=csv, file_name=f"Reporte_Asistencia_{fecha_in_dl}.csv", mime="text/csv", use_container_width=True)
+                        for emp in df_dl["Empleado"].unique():
+                            df_e = df_dl[df_dl["Empleado"] == emp]
+                            # Agrupamos también por sucursal para que sepas en qué local metieron esas horas
+                            for loc in df_e["Sucursal"].unique():
+                                df_e_loc = df_e[df_e["Sucursal"] == loc]
+                                horas_totales = 0.0
+                                for f in df_e_loc["Fecha"].unique():
+                                    df_ef = df_e_loc[df_e_loc["Fecha"] == f].copy()
+                                    df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
+                                    df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
+                                    ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
+                                    
+                                    if not ent.empty and not sal.empty:
+                                        if sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
+                                            h_in = ent.iloc[0]["Hora_dt"]
+                                            h_out = sal.iloc[-1]["Hora_dt"]
+                                            diff = (h_out - h_in).total_seconds() / 3600.0
+                                            horas_totales += diff if diff >= 0 else (diff + 24.0)
+                                
+                                if horas_totales > 0:
+                                    datos_horas.append({
+                                        "Personal": emp, 
+                                        "Rol": roles_empleados.get(emp, "Staff"), 
+                                        "Sucursal": loc, 
+                                        "⏱️ Horas Computadas": round(horas_totales, 2)
+                                    })
+                            
+                    if datos_horas:
+                        df_horas_final = pd.DataFrame(datos_horas).sort_values(by=["Personal", "⏱️ Horas Computadas"], ascending=[True, False])
+                        st.dataframe(df_horas_final, use_container_width=True, hide_index=True)
+                        
+                        st.write("⬇️ **Descargar Archivos (Excel/CSV)**")
+                        c_btn1, c_btn2 = st.columns(2)
+                        
+                        # 1. Reporte de horas totales
+                        csv_horas = df_horas_final.to_csv(index=False).encode('utf-8')
+                        c_btn1.download_button(label="⏱️ Descargar Recuento de Horas", data=csv_horas, file_name=f"HorasTotales_{local_descarga}_{fecha_in_dl}.csv", mime="text/csv", use_container_width=True)
+
+                        # 2. Reporte de Fichajes Detallados (Minuto a minuto)
+                        df_asist_dl = df_dl.copy()
+                        df_asist_dl['Hora_dt'] = pd.to_datetime(df_asist_dl['Hora'], errors='coerce')
+                        df_asist_dl = df_asist_dl.sort_values(by=["Fecha", "Hora_dt"])
+                        df_asist_dl = df_asist_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
+                        csv_asist = df_asist_dl.to_csv(index=False).encode('utf-8')
+                        c_btn2.download_button(label="📄 Descargar Fichajes Detallados", data=csv_asist, file_name=f"Fichajes_{local_descarga}_{fecha_in_dl}.csv", mime="text/csv", use_container_width=True)
                     else:
-                        st.info("Sin registros para la sucursal y fechas seleccionadas.")
+                        st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
 
         with tab_puntos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Ranking de Puntos</div>', unsafe_allow_html=True)
