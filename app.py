@@ -111,7 +111,7 @@ def insert_row(table_name, row_dict):
 # ==========================================
 # 2. CARGA DE DATOS CENTRALIZADA
 # ==========================================
-config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "mostrar_membresia": False, "autoregistro": False, "ip_wifi_oficial": "", "radio_metros": 50, "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
+config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "exigir_salida_manual": False, "mostrar_membresia": False, "autoregistro": False, "ip_wifi_oficial": "", "radio_metros": 50, "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
 config_app = load_json("config", config_defecto)
 
 owner_config_defecto = {
@@ -252,7 +252,6 @@ if pestaña == "⏱️ Portal del Empleado":
             
             puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada" and datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() >= d1_mes])
 
-            # ---> DETECCIÓN DE TURNO Y SUCURSAL GLOBAL <---
             df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy() if not df_punt.empty else pd.DataFrame()
             estado_laboral = "Fuera"
             datos_turno_activo = {}
@@ -271,7 +270,6 @@ if pestaña == "⏱️ Portal del Empleado":
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts en {ahora.strftime('%B')})</div></div>", unsafe_allow_html=True)
 
-            # ---> PANEL DEL CAJERO (FILTRADO INTELIGENTE POR SUCURSAL + ANTI-SPAM) <---
             if rol_empleado in ["Cajero", "Encargado"]:
                 with st.expander("👑 Panel de Responsable de Turno", expanded=False):
                     st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas y asignar puntos a tus compañeros.</div>", unsafe_allow_html=True)
@@ -309,7 +307,6 @@ if pestaña == "⏱️ Portal del Empleado":
                                     elif not s_motivo_salida.strip():
                                         st.warning("⚠️ Escribí el motivo en la nota (Obligatorio para la auditoría).")
                                     else:
-                                        # ---> FILTRO ANTI-SPAM DE SALIDAS DUPLICADAS <---
                                         ya_pedido = False
                                         for sp in salidas_pendientes:
                                             if sp.get("Empleado") == s_emp_salida and sp.get("Fecha") == str(fecha_hoy):
@@ -464,54 +461,58 @@ if pestaña == "⏱️ Portal del Empleado":
                     turno_actual = datos_turno_activo.get("Turno", "N/A")
                     st.success(f"🟢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
                     
-                    puede_salir = True
-                    distancia_salida = datos_turno_activo.get("Distancia_m", 0.0)
-                    
-                    if config_app.get("salida_estricta", False) and local_actual in lista_locales:
-                        st.markdown("📍 **Verificación requerida para finalizar turno:**")
-                        ubicacion_sal = get_geolocation() if config_app.get("verificar_gps", True) else None
-                        en_rango_sal = True
-                        wifi_aprobado_sal = True
-                        radio_permitido = int(config_app.get("radio_metros", 50))
+                    # ---> LÓGICA DE SALIDA AUTOMÁTICA VS MANUAL <---
+                    if not config_app.get("exigir_salida_manual", False):
+                        st.info("🕒 **Salida Automática Activada:** No necesitás registrar tu salida. El sistema computará tu turno de 6 horas automáticamente (descontando llegadas tarde). Si te retirás antes de tiempo, pedile al Responsable de Turno que audite tu salida.")
+                    else:
+                        puede_salir = True
+                        distancia_salida = datos_turno_activo.get("Distancia_m", 0.0)
                         
-                        if config_app.get("verificar_gps", True):
-                            if ubicacion_sal and 'coords' in ubicacion_sal:
-                                coord_us = (ubicacion_sal['coords']['latitude'], ubicacion_sal['coords']['longitude'])
-                                coord_loc = (lista_locales[local_actual]["lat"], lista_locales[local_actual]["lon"])
-                                distancia_salida = geodesic(coord_us, coord_loc).meters
-                                if distancia_salida <= radio_permitido:
-                                    st.markdown(f"<div class='validation-box'>✅ <b>GPS Aprobado:</b> Estás en el local ({distancia_salida:.1f} m).</div>", unsafe_allow_html=True)
+                        if config_app.get("salida_estricta", False) and local_actual in lista_locales:
+                            st.markdown("📍 **Verificación requerida para finalizar turno:**")
+                            ubicacion_sal = get_geolocation() if config_app.get("verificar_gps", True) else None
+                            en_rango_sal = True
+                            wifi_aprobado_sal = True
+                            radio_permitido = int(config_app.get("radio_metros", 50))
+                            
+                            if config_app.get("verificar_gps", True):
+                                if ubicacion_sal and 'coords' in ubicacion_sal:
+                                    coord_us = (ubicacion_sal['coords']['latitude'], ubicacion_sal['coords']['longitude'])
+                                    coord_loc = (lista_locales[local_actual]["lat"], lista_locales[local_actual]["lon"])
+                                    distancia_salida = geodesic(coord_us, coord_loc).meters
+                                    if distancia_salida <= radio_permitido:
+                                        st.markdown(f"<div class='validation-box'>✅ <b>GPS Aprobado:</b> Estás en el local ({distancia_salida:.1f} m).</div>", unsafe_allow_html=True)
+                                    else:
+                                        en_rango_sal = False
+                                        st.markdown(f"<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Fuera de rango:</b> Estás a {distancia_salida:.1f} m. (Límite: {radio_permitido}m). <b>No podés finalizar el turno desde acá.</b></div>", unsafe_allow_html=True)
                                 else:
                                     en_rango_sal = False
-                                    st.markdown(f"<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Fuera de rango:</b> Estás a {distancia_salida:.1f} m. (Límite: {radio_permitido}m). <b>No podés finalizar el turno desde acá.</b></div>", unsafe_allow_html=True)
-                            else:
-                                en_rango_sal = False
-                                st.markdown("<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⏳ <b>Obteniendo GPS...</b></div>", unsafe_allow_html=True)
-                        
-                        client_ip_local = None
-                        if config_app.get("verificar_wifi", False):
-                            if 'client_ip' not in st.session_state:
-                                js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
-                                cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
-                                if cip: st.session_state['client_ip'] = cip
-                            client_ip_local = st.session_state.get('client_ip')
+                                    st.markdown("<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⏳ <b>Obteniendo GPS...</b></div>", unsafe_allow_html=True)
                             
-                            ip_tienda = lista_locales[local_actual].get("ip", "").strip()
-                            if not ip_tienda: wifi_aprobado_sal = False
-                            elif client_ip_local and client_ip_local == ip_tienda: st.markdown("<div class='validation-box'>✅ <b>Red Aprobada.</b></div>", unsafe_allow_html=True)
-                            else: wifi_aprobado_sal = False
+                            client_ip_local = None
+                            if config_app.get("verificar_wifi", False):
+                                if 'client_ip' not in st.session_state:
+                                    js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
+                                    cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
+                                    if cip: st.session_state['client_ip'] = cip
+                                client_ip_local = st.session_state.get('client_ip')
+                                
+                                ip_tienda = lista_locales[local_actual].get("ip", "").strip()
+                                if not ip_tienda: wifi_aprobado_sal = False
+                                elif client_ip_local and client_ip_local == ip_tienda: st.markdown("<div class='validation-box'>✅ <b>Red Aprobada.</b></div>", unsafe_allow_html=True)
+                                else: wifi_aprobado_sal = False
 
-                        if config_app.get("verificar_wifi", False) and not wifi_aprobado_sal: puede_salir = False
-                        if config_app.get("verificar_gps", True) and not en_rango_sal: puede_salir = False
+                            if config_app.get("verificar_wifi", False) and not wifi_aprobado_sal: puede_salir = False
+                            if config_app.get("verificar_gps", True) and not en_rango_sal: puede_salir = False
 
-                    if puede_salir:
-                        nota_empleado = st.text_input("📝 Novedad al salir (Opcional):")
-                        if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
-                            insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(distancia_salida), 1), "Nota": str(nota_empleado)})
-                            st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
-                            st.rerun() 
-                    else:
-                        st.error("⚠️ El sistema exige que finalices tu turno físicamente dentro de la sucursal.")
+                        if puede_salir:
+                            nota_empleado = st.text_input("📝 Novedad al salir (Opcional):")
+                            if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
+                                insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(distancia_salida), 1), "Nota": str(nota_empleado)})
+                                st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
+                                st.rerun() 
+                        else:
+                            st.error("⚠️ El sistema exige que finalices tu turno físicamente dentro de la sucursal.")
 
             with st.expander("🛑 Buzón de Reportes Confidenciales", expanded=False):
                 tipo_rep = st.selectbox("Tipo:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
@@ -686,8 +687,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     fecha_in_dl = c_dl2.date_input("📅 Desde el día:", value=ahora.date() - datetime.timedelta(days=7), key="dl_in")
                     fecha_fi_dl = c_dl3.date_input("📅 Hasta el día:", value=ahora.date(), key="dl_fi")
                     
-                    v_recortar_salida = st.checkbox("✂️ Recortar horas extra (Topar el pago hasta el horario de salida oficial del turno)", value=False)
-                    
                     df_dl = df_activos.copy()
                     df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
                     
@@ -707,28 +706,34 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                     df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                                     ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                                     
+                                    # ---> NUEVO SISTEMA: 6 HORAS ASEGURADAS CON DESCUENTO DE LLEGADA TARDE <---
                                     if not ent.empty:
+                                        h_in = ent.iloc[0]["Hora_dt"]
+                                        turno_actual_eval = ent.iloc[0]["Turno"]
+                                        horas_dia = 6.0
+                                        
+                                        # Calculamos si llegó tarde para descontarlo de las 6 horas
+                                        if turno_actual_eval in lista_turnos:
+                                            h_oficial_in_str = lista_turnos[turno_actual_eval].get("ingreso")
+                                            if h_oficial_in_str:
+                                                h_oficial_in = pd.to_datetime(h_oficial_in_str, errors='coerce')
+                                                if not pd.isna(h_oficial_in):
+                                                    h_oficial_in = h_oficial_in.replace(year=h_in.year, month=h_in.month, day=h_in.day)
+                                                    diff_tarde = (h_in - h_oficial_in).total_seconds() / 3600.0
+                                                    if diff_tarde > 0:
+                                                        horas_dia -= diff_tarde
+                                        
+                                        # Verificamos si hay una salida registrada (Manual o por Cajero)
                                         if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
-                                            h_in = ent.iloc[0]["Hora_dt"]
                                             h_out = sal.iloc[-1]["Hora_dt"]
-                                            turno_actual_eval = ent.iloc[0]["Turno"]
+                                            diff_trabajado = (h_out - h_in).total_seconds() / 3600.0
+                                            diff_trabajado = diff_trabajado if diff_trabajado >= 0 else (diff_trabajado + 24.0)
                                             
-                                            diff = (h_out - h_in).total_seconds() / 3600.0
-                                            diff = diff if diff >= 0 else (diff + 24.0)
-                                            
-                                            if v_recortar_salida and turno_actual_eval in lista_turnos:
-                                                h_oficial_out_str = lista_turnos[turno_actual_eval].get("salida")
-                                                if h_oficial_out_str:
-                                                    h_oficial_out = pd.to_datetime(h_oficial_out_str, errors='coerce')
-                                                    if not pd.isna(h_oficial_out):
-                                                        diff_oficial = (h_oficial_out - h_in).total_seconds() / 3600.0
-                                                        diff_oficial = diff_oficial if diff_oficial >= 0 else (diff_oficial + 24.0)
-                                                        if diff > diff_oficial:
-                                                            diff = diff_oficial
+                                            # Si la salida marca que se fue ANTES de cumplir sus horas, pisamos el valor
+                                            if diff_trabajado < horas_dia:
+                                                horas_dia = diff_trabajado
 
-                                            horas_totales += diff
-                                        else:
-                                            horas_totales += 6.0
+                                        horas_totales += max(0.0, horas_dia)
                                 
                                 if horas_totales > 0:
                                     datos_horas.append({
@@ -925,13 +930,31 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                         ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                         
+                        # ---> NUEVO SISTEMA: 6 HORAS ASEGURADAS CON DESCUENTO DE LLEGADA TARDE <---
                         if not ent.empty:
+                            h_in = ent.iloc[0]["Hora_dt"]
+                            turno_actual_eval = ent.iloc[0]["Turno"]
+                            horas_dia = 6.0
+                            
+                            if turno_actual_eval in lista_turnos:
+                                h_oficial_in_str = lista_turnos[turno_actual_eval].get("ingreso")
+                                if h_oficial_in_str:
+                                    h_oficial_in = pd.to_datetime(h_oficial_in_str, errors='coerce')
+                                    if not pd.isna(h_oficial_in):
+                                        h_oficial_in = h_oficial_in.replace(year=h_in.year, month=h_in.month, day=h_in.day)
+                                        diff_tarde = (h_in - h_oficial_in).total_seconds() / 3600.0
+                                        if diff_tarde > 0:
+                                            horas_dia -= diff_tarde
+                            
                             if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
-                                h_in, h_out = ent.iloc[0]["Hora_dt"], sal.iloc[-1]["Hora_dt"]
-                                diff = (h_out - h_in).total_seconds() / 3600.0
-                                horas_totales += diff if diff >= 0 else (diff + 24.0)
-                            else:
-                                horas_totales += 6.0
+                                h_out = sal.iloc[-1]["Hora_dt"]
+                                diff_trabajado = (h_out - h_in).total_seconds() / 3600.0
+                                diff_trabajado = diff_trabajado if diff_trabajado >= 0 else (diff_trabajado + 24.0)
+                                
+                                if diff_trabajado < horas_dia:
+                                    horas_dia = diff_trabajado
+
+                            horas_totales += max(0.0, horas_dia)
                                 
                     e_aj = sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == emp_perfil and p.get('Estado') == 'Aprobada' and pf_in <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= pf_fi])
                     e_tp = 0
@@ -1135,11 +1158,13 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     nueva_tolerancia = st.number_input("Minutos tolerancia (llegada tarde):", value=int(config_app.get("tolerancia_minutos", 10)))
                     
                     st.markdown("---")
-                    v_salida_estricta = st.checkbox("🛑 Exigir GPS/Wi-Fi para Fichar Salida", value=config_app.get("salida_estricta", False), help="Si se activa, el empleado no podrá salir si no está físicamente dentro del local.")
+                    
+                    # ---> BOTÓN PARA EXIGIR O NO LA SALIDA MANUAL <---
+                    v_exigir_salida_manual = st.checkbox("🛑 Exigir Fichaje de Salida Manual", value=config_app.get("exigir_salida_manual", False), help="Si se desactiva, la salida es automática y no se les pedirá fichar al irse (El sistema asumirá 6 horas menos las llegadas tarde).")
                     v_mostrar_membresia = st.checkbox("👁️ Mostrar tipo de membresía contratada", value=config_app.get("mostrar_membresia", False), help="Muestra a todos los empleados el plan de software contratado en el menú lateral.")
                     
                     if st.form_submit_button("💾 Guardar Ajustes"):
-                        config_app.update({"autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "salida_estricta": v_salida_estricta, "mostrar_membresia": v_mostrar_membresia})
+                        config_app.update({"autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "mostrar_membresia": v_mostrar_membresia})
                         save_json("config", config_app); st.rerun()
                 
                 st.write("🔑 **Cambiar Clave de Gerencia**")
