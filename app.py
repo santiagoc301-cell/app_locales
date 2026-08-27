@@ -9,7 +9,7 @@ from supabase import create_client
 import base64
 
 # Configuración inicial de la página
-st.set_page_config(page_title="Gestión Corporativa", page_icon="🛍️", layout="centered")
+st.set_page_config(page_title="Gestión Corporativa", page_icon="🛍️", layout="wide")
 
 # ==========================================
 # 💎 ESTÉTICA PREMIUM COMERCIAL (CSS) Y MARCA BLANCA
@@ -111,16 +111,22 @@ def insert_row(table_name, row_dict):
 # ==========================================
 # 2. CARGA DE DATOS CENTRALIZADA
 # ==========================================
-config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "exigir_salida_manual": False, "mostrar_membresia": False, "autoregistro": False, "ip_wifi_oficial": "", "radio_metros": 50, "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
+zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
+ahora = datetime.datetime.now(zona_arg)
+fecha_hoy = ahora.strftime("%Y-%m-%d")
+hora_hoy = ahora.strftime("%I:%M:%S %p")
+
+config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "exigir_salida_manual": False, "autoregistro": False, "ip_wifi_oficial": "", "radio_metros": 50, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"), "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
 config_app = load_json("config", config_defecto)
 
+# ---> NUEVAS VARIABLES DEL DUEÑO (AVISOS Y MEMBRESÍA) <---
 owner_config_defecto = {
-    "estado_licencia": "Activo",
-    "plan_pago": "Mensual",
-    "fecha_vencimiento": "2030-12-31",
+    "estado_licencia": "Activo", "plan_pago": "Mensual", "fecha_vencimiento": "2030-12-31",
     "mensaje_bloqueo": "⚠️ SISTEMA SUSPENDIDO TEMPORALMENTE.\n\nPor favor, comuníquese con el proveedor del software para regularizar el estado de su cuenta.",
-    "empresa_nombre": "SyncroRetail Solutions",
-    "quienes_somos": "Nacimos con una misión clara: revolucionar la gestión del personal y potenciar el rendimiento de los equipos de trabajo...",
+    "mostrar_membresia": False,
+    "dias_aviso": 5,
+    "mensaje_aviso": "⚠️ Tu suscripción está próxima a vencer. Por favor, renová tu plan para evitar interrupciones en el servicio.",
+    "empresa_nombre": "SyncroRetail Solutions", "quienes_somos": "Nacimos con una misión clara: revolucionar la gestión del personal y potenciar el rendimiento de los equipos de trabajo...",
     "contactos": "🏢 Oficina Central: Salta Capital, Argentina\n🛠️ Soporte y Soluciones: soporte@syncroretail.com\n💡 Sugerencias y Nuevas Funciones: desarrollo@syncroretail.com"
 }
 owner_config = load_json("owner_config", owner_config_defecto)
@@ -141,6 +147,7 @@ reportes_log = load_json("reportes", [])
 salidas_pendientes = load_json("salidas_pendientes", [])
 sueldos_historico = load_json("sueldos_historico", [])
 cierres_caja = load_json("cierres_caja", [])
+planificacion_turnos = load_json("planificacion_turnos", {})
 
 ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A"]
 
@@ -149,11 +156,6 @@ def procesar_rango_fechas(rango):
         if len(rango) == 2: return rango[0], rango[1]
         elif len(rango) == 1: return rango[0], rango[0]
     return rango, rango
-
-zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
-ahora = datetime.datetime.now(zona_arg)
-fecha_hoy = ahora.strftime("%Y-%m-%d")
-hora_hoy = ahora.strftime("%I:%M:%S %p")
 
 def get_fechas_filtro(opcion, custom_rango=None):
     hoy = ahora.date()
@@ -239,20 +241,22 @@ if pestaña == "⏱️ Portal del Empleado":
                 del st.session_state['fichaje_exitoso']
 
             puntos_actuales = config_app["reglas_puntos"]["base"]
-            d1_mes = ahora.date().replace(day=1)
+            
+            f_inicio_str = config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d"))
+            d_inicio_puntos = datetime.datetime.strptime(f_inicio_str, "%Y-%m-%d").date()
             
             df_punt = load_df("asistencia")
             if not df_punt.empty:
                 df_punt['F_Obj'] = pd.to_datetime(df_punt['Fecha'], errors='coerce').dt.date
-                df_e = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt['F_Obj'] >= d1_mes)]
+                df_e = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt['F_Obj'] >= d_inicio_puntos)]
                 puntos_actuales += (len(df_e[df_e["Estado"] == "Tarde"]) * config_app["reglas_puntos"]["Tarde"]) + (len(df_e[df_e["Tipo"] == "Ausente"]) * config_app["reglas_puntos"]["Ausente"])
             
             df_tl = load_df("tareas_log")
             if not df_tl.empty: 
                 df_tl['F_Obj'] = pd.to_datetime(df_tl['Fecha'], errors='coerce').dt.date
-                puntos_actuales += pd.to_numeric(df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Estado"] == "Aprobada") & (df_tl['F_Obj'] >= d1_mes)]["Puntos"], errors='coerce').fillna(0).astype(int).sum()
+                puntos_actuales += pd.to_numeric(df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Estado"] == "Aprobada") & (df_tl['F_Obj'] >= d_inicio_puntos)]["Puntos"], errors='coerce').fillna(0).astype(int).sum()
             
-            puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada" and datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() >= d1_mes])
+            puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada" and datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() >= d_inicio_puntos])
 
             df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy() if not df_punt.empty else pd.DataFrame()
             estado_laboral = "Fuera"
@@ -270,7 +274,7 @@ if pestaña == "⏱️ Portal del Empleado":
                     datos_turno_activo = {"Sucursal": str(ultimo_reg["Sucursal"]), "Turno": str(ultimo_reg["Turno"]), "Distancia_m": dist_guardada}
             
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
-            st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts en {ahora.strftime('%B')})</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
 
             if rol_empleado in ["Cajero", "Encargado"]:
                 with st.expander("👑 Panel de Responsable de Turno", expanded=False):
@@ -412,7 +416,11 @@ if pestaña == "⏱️ Portal del Empleado":
                     if local_detectado:
                         nombres_turnos = list(lista_turnos.keys())
                         idx_defecto = 0
-                        if nombres_turnos:
+                        
+                        turno_planificado = planificacion_turnos.get(fecha_hoy, {}).get(empleado_en_celu, "Libre")
+                        if turno_planificado in nombres_turnos:
+                            idx_defecto = nombres_turnos.index(turno_planificado)
+                        elif nombres_turnos:
                             min_diff = float('inf')
                             for idx, t_name in enumerate(nombres_turnos):
                                 try:
@@ -428,6 +436,9 @@ if pestaña == "⏱️ Portal del Empleado":
                         
                         if nombres_turnos:
                             st.markdown("🕒 **Verificá y confirmá tu turno:**")
+                            if turno_planificado != "Libre" and turno_planificado in nombres_turnos:
+                                st.markdown(f"*(Turno asignado en tu planilla: **{turno_planificado}**)*")
+                            
                             turno_seleccionado = st.selectbox("Turno a fichar:", nombres_turnos, index=idx_defecto, label_visibility="collapsed")
                             st.markdown(f"<small style='color: gray;'>El horario oficial de este turno es de {lista_turnos[turno_seleccionado]['ingreso']} a {lista_turnos[turno_seleccionado]['salida']}</small>", unsafe_allow_html=True)
                             
@@ -464,7 +475,7 @@ if pestaña == "⏱️ Portal del Empleado":
                     st.success(f"🟢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
                     
                     if not config_app.get("exigir_salida_manual", False):
-                        st.info("🕒 **Salida Automática Activada:** No necesitás registrar tu salida. El sistema computará tu turno de 6 horas automáticamente (descontando llegadas tarde). Si te retirás antes de tiempo, pedile al Responsable de Turno que audite tu salida.")
+                        st.info("🕒 **Salida Automática Activada:** No necesitás registrar tu salida. El sistema computará tu turno automáticamente (descontando llegadas tarde). Si te retirás antes de tiempo, pedile al Responsable de Turno que audite tu salida.")
                     else:
                         puede_salir = True
                         distancia_salida = datos_turno_activo.get("Distancia_m", 0.0)
@@ -568,7 +579,8 @@ if pestaña == "⏱️ Portal del Empleado":
                 st.markdown("📞 **Contactos Útiles:**")
                 st.write(owner_config.get('contactos', ''))
                 
-                if config_app.get("mostrar_membresia", False):
+                # ---> ETIQUETA DE MEMBRESÍA CONTROLADA POR DUEÑO <---
+                if owner_config.get("mostrar_membresia", False):
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.markdown(f"<div style='text-align: center; padding: 10px; background-color: #F3F4F6; border-radius: 10px; border: 1px solid #E5E7EB;'><span style='font-size: 0.8rem; color: #6B7280;'>TIPO DE MEMBRESÍA</span><br><b style='color: #111827;'>⭐ Plan {owner_config.get('plan_pago', 'Mensual')}</b></div>", unsafe_allow_html=True)
         else:
@@ -618,15 +630,21 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
     if password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == "doremifasol":
         
-        tab_analytics, tab_caja, tab_sueldos, tab_puntos, tab_auditoria_tareas, tab_auditoria_horas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_espia = st.tabs([
-            "📈 Analytics", "💸 Cajas", "💰 Sueldos", "🏆 Ranking", "📋 Tareas", "📝 Horarios", "👤 Perfiles", "👥 Staff", "📍 Tiendas", "📢 Avisos", "⚙️ Ajustes", "🕵️ Espía"
+        # ---> AVISO DE VENCIMIENTO PRÓXIMO (SOLO VISIBLE PARA GERENCIA) <---
+        try:
+            f_venc = datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date()
+            dias_restantes = (f_venc - ahora.date()).days
+            if 0 <= dias_restantes <= owner_config.get("dias_aviso", 5) and owner_config.get("estado_licencia", "Activo") == "Activo":
+                st.markdown(f"<div class='task-pend' style='border-color: #F59E0B;'><b>🔔 Aviso del Proveedor de Software:</b><br>{owner_config.get('mensaje_aviso', '')} (Vence en {dias_restantes} días)</div>", unsafe_allow_html=True)
+        except: pass
+
+        tab_analytics, tab_caja, tab_sueldos, tab_horarios, tab_puntos, tab_tareas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_espia = st.tabs([
+            "📈 Analytics", "💸 Cajas", "💰 Sueldos", "📅 Horarios", "🏆 Ranking", "📋 Tareas", "👤 Perfiles", "👥 Staff", "📍 Tiendas", "📢 Avisos", "⚙️ Ajustes", "🕵️ Espía"
         ])
 
         with tab_analytics:
             st.markdown('<div class="main-title" style="font-size: 2rem;">📈 Analytics Globales</div>', unsafe_allow_html=True)
             
-            # ---> NUEVA SECCIÓN DE ALERTAS POR SUCURSAL <---
-            st.write("---")
             c_alrt1, c_alrt2 = st.columns([2, 1])
             c_alrt1.markdown(f"### 🚨 Alertas del Día ({fecha_hoy})")
             suc_alerta = c_alrt2.selectbox("🏢 Filtrar por Sucursal:", ["Todas las sucursales"] + list(lista_locales.keys()), key="filtro_alertas_dia")
@@ -708,9 +726,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     
                     df_dl = df_activos.copy()
                     df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
-                    
-                    if local_descarga != "Todas las sucursales":
-                        df_dl = df_dl[df_dl["Sucursal"] == local_descarga]
                     
                     datos_horas_dict = {}
                     
@@ -918,7 +933,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     val_s = st.number_input("Valor por Hora ($):", min_value=0.0, step=100.0)
                     
                     f_ini = st.date_input("Vigente Desde:", value=ahora.date())
-                    es_actual = st.checkbox("✅ Tarifa actual (Sin fecha de cierre)", value=True, help="Si está marcado, esta tarifa regirá para siempre hasta que le asignes una nueva.")
+                    es_actual = st.checkbox("✅ Tarifa actual (Sin fecha de cierre)", value=True)
                     if es_actual:
                         f_fin = datetime.date(2099, 12, 31)
                     else:
@@ -980,12 +995,177 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 else:
                     st.info("ℹ️ Todavía no configuraste ningún sueldo. Las horas se calcularán con un valor de $0 por defecto.")
 
+        with tab_horarios:
+            st.markdown('<div class="main-title" style="font-size: 2rem;">📅 Planificación y Horarios</div>', unsafe_allow_html=True)
+            
+            st.subheader("🗓️ Planilla Semanal de Turnos")
+            today_date = ahora.date()
+            lunes_actual = today_date - datetime.timedelta(days=today_date.weekday())
+            
+            c_plan1, c_plan2 = st.columns([1,3])
+            semana_sel = c_plan1.selectbox("Seleccionar Semana a organizar:", ["Esta Semana", "Semana Próxima", "Semana Anterior", "Elegir Fecha"])
+            
+            if semana_sel == "Esta Semana": start_date_plan = lunes_actual
+            elif semana_sel == "Semana Próxima": start_date_plan = lunes_actual + datetime.timedelta(days=7)
+            elif semana_sel == "Semana Anterior": start_date_plan = lunes_actual - datetime.timedelta(days=7)
+            else: 
+                start_date_plan = c_plan2.date_input("Elegir Lunes de inicio:", value=lunes_actual)
+            
+            if start_date_plan.weekday() != 0:
+                start_date_plan = start_date_plan - datetime.timedelta(days=start_date_plan.weekday())
+                
+            fechas_semana = [start_date_plan + datetime.timedelta(days=i) for i in range(7)]
+            nombres_dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+            cols_fechas = [f"{nombres_dias[i]} {fechas_semana[i].strftime('%d/%m')}" for i in range(7)]
+            str_fechas = [f.strftime("%Y-%m-%d") for f in fechas_semana]
+            
+            plan_data = []
+            opciones_turno = ["Libre"] + list(lista_turnos.keys())
+            
+            for emp in lista_empleados:
+                row = {"Empleado": emp}
+                for i, f_str in enumerate(str_fechas):
+                    val = planificacion_turnos.get(f_str, {}).get(emp, "Libre")
+                    if val not in opciones_turno: val = "Libre"
+                    row[cols_fechas[i]] = val
+                plan_data.append(row)
+                
+            df_plan = pd.DataFrame(plan_data)
+            
+            st.write("Modificá la tabla haciendo doble clic en las celdas y tocá Guardar abajo.")
+            config_cols = {"Empleado": st.column_config.TextColumn("Empleado", disabled=True)}
+            for c in cols_fechas:
+                config_cols[c] = st.column_config.SelectboxColumn(c, options=opciones_turno, default="Libre")
+                
+            df_editado = st.data_editor(df_plan, column_config=config_cols, hide_index=True, use_container_width=True, key="editor_plan")
+            
+            if st.button("💾 Guardar Planificación", use_container_width=True):
+                for idx, row in df_editado.iterrows():
+                    emp = row["Empleado"]
+                    for i, f_str in enumerate(str_fechas):
+                        if f_str not in planificacion_turnos: planificacion_turnos[f_str] = {}
+                        planificacion_turnos[f_str][emp] = row[cols_fechas[i]]
+                save_json("planificacion_turnos", planificacion_turnos)
+                st.success("✅ ¡Planificación semanal guardada con éxito!")
+                st.rerun()
+                
+            st.markdown("---")
+            st.subheader("⚖️ Comparativa: Planificado vs. Real")
+            st.write("Revisá automáticamente si el equipo cumplió con los horarios que armaste.")
+            
+            df_asist_comp = load_df("asistencia")
+            comp_data = []
+            for emp in lista_empleados:
+                row = {"Empleado": emp}
+                for i, f_str in enumerate(str_fechas):
+                    plan_val = planificacion_turnos.get(f_str, {}).get(emp, "Libre")
+                    
+                    real_estado = "No Fichó"
+                    real_turno = ""
+                    if not df_asist_comp.empty:
+                        f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Entrada")]
+                        if not f_asist.empty:
+                            real_estado = f_asist.iloc[-1]["Estado"]
+                            real_turno = f_asist.iloc[-1]["Turno"]
+                        else:
+                            f_aus = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Ausente")]
+                            if not f_aus.empty:
+                                real_estado = "Ausente Reportado"
+                    
+                    f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
+                    if f_date > today_date:
+                        cell_val = f"⏳ {plan_val}"
+                    else:
+                        if plan_val == "Libre":
+                            if real_estado == "No Fichó": cell_val = "✅ Libre"
+                            else: cell_val = f"⚠️ Vino igual ({real_estado})"
+                        else:
+                            if real_estado == "No Fichó":
+                                if f_date == today_date: cell_val = f"⏳ Pendiente / ❌ Faltó"
+                                else: cell_val = f"❌ Faltó sin aviso"
+                            elif real_estado == "Ausente Reportado": 
+                                cell_val = f"❌ Ausente"
+                            else:
+                                if real_turno != plan_val and real_turno in lista_turnos:
+                                    cell_val = f"⚠️ Vino en {real_turno}"
+                                else:
+                                    if real_estado == "A tiempo": cell_val = f"✅ A tiempo"
+                                    elif real_estado == "Tarde": cell_val = f"⚠️ Tarde"
+                                    else: cell_val = f"✅ Vino"
+                    row[cols_fechas[i]] = cell_val
+                comp_data.append(row)
+            
+            st.dataframe(pd.DataFrame(comp_data), hide_index=True, use_container_width=True)
+
+            st.markdown("---")
+            st.subheader("🛡️ Salidas Pendientes (Reportadas por Cajeros)")
+            if salidas_pendientes:
+                for idx, sp in enumerate(salidas_pendientes):
+                    c_sp1, c_sp2, c_sp3 = st.columns([4, 1, 1])
+                    c_sp1.markdown(f"**{sp['Autor']}** retiró a **{sp['Empleado']}** a las {sp['Hora']} ({sp['Nota']})")
+                    if c_sp2.button("✅ Aprobar", key=f"apr_sal_{idx}"):
+                        insert_row("asistencia", {"Fecha": sp["Fecha"], "Hora": sp["Hora"], "Empleado": sp["Empleado"], "Sucursal": sp["Sucursal"], "Turno": sp["Turno"], "Tipo": "Salida", "Estado": "Salida", "Distancia_m": 0.0, "Nota": sp["Nota"]})
+                        salidas_pendientes.pop(idx)
+                        save_json("salidas_pendientes", salidas_pendientes)
+                        st.rerun()
+                    if c_sp3.button("❌ Rechazar", key=f"rec_sal_{idx}"):
+                        salidas_pendientes.pop(idx)
+                        save_json("salidas_pendientes", salidas_pendientes)
+                        st.rerun()
+            else:
+                st.info("No hay solicitudes de salida pendientes de revisión.")
+
+            st.write("---")
+            
+            st.markdown('<div class="highlight-edit"><b>✏️ AUDITORÍA DIRECTA DE HORARIOS</b></div>', unsafe_allow_html=True)
+            col_ed1, col_ed2 = st.columns(2)
+            fecha_edicion = col_ed1.date_input("Fecha a auditar:", key="fecha_edit")
+            emp_edicion = col_ed2.selectbox("Personal a auditar:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_edit")
+            
+            if emp_edicion != "Seleccionar...":
+                df_edicion = load_df("asistencia")
+                if not df_edicion.empty:
+                    df_ed = df_edicion[(df_edicion["Fecha"] == fecha_edicion.strftime("%Y-%m-%d")) & (df_edicion["Empleado"] == emp_edicion)]
+                    if not df_ed.empty:
+                        for idx, row in df_ed.iterrows():
+                            db_id = int(row['id'])
+                            c1, c2, c3, c4 = st.columns([2,2,2,1])
+                            n_tipo = c1.selectbox("Tipo", ["Entrada", "Salida", "Ausente"], index=["Entrada", "Salida", "Ausente"].index(row['Tipo']) if row['Tipo'] in ["Entrada", "Salida", "Ausente"] else 0, key=f"t_{db_id}")
+                            n_hora = c2.text_input("Hora (Ej: 08:30 AM)", value=row['Hora'], key=f"h_{db_id}")
+                            n_estado = c3.selectbox("Estado", ESTADOS_POSIBLES, index=ESTADOS_POSIBLES.index(row['Estado']) if row['Estado'] in ESTADOS_POSIBLES else 7, key=f"e_{db_id}")
+                            if c4.button("💾", key=f"btn_{db_id}"):
+                                supabase.table("asistencia").update({'Tipo': str(n_tipo), 'Hora': str(n_hora), 'Estado': str(n_estado)}).eq('id', db_id).execute()
+                                st.rerun()
+                    else: st.warning("Sin movimientos ese día.")
+
+            st.write("---")
+            st.subheader("✍️ Carga Manual Total (Falta o Olvido)")
+            with st.form("form_fichaje_manual"):
+                c_f1, c_f2, c_f3 = st.columns(3)
+                fm_emp = c_f1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
+                fm_fecha = c_f2.date_input("Fecha:", ahora.date())
+                fm_hora_str = c_f3.time_input("Hora exacta:", ahora.time()).strftime("%I:%M:%S %p")
+                fm_tipo, fm_estado, fm_nota = c_f1.selectbox("Movimiento:", ["Entrada", "Salida", "Ausente"]), c_f2.selectbox("Estado final:", ESTADOS_POSIBLES), c_f3.text_input("Nota / Justificación:")
+                
+                if st.form_submit_button("➕ Cargar Movimiento") and fm_emp != "Seleccionar...":
+                    insert_row("asistencia", {"Fecha": str(fm_fecha.strftime("%Y-%m-%d")), "Hora": str(fm_hora_str), "Empleado": str(fm_emp), "Sucursal": "Manual", "Turno": "Manual", "Tipo": str(fm_tipo), "Estado": str(fm_estado), "Distancia_m": 0.0, "Nota": str(fm_nota)})
+                    st.rerun()
+
         with tab_puntos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Ranking de Puntos</div>', unsafe_allow_html=True)
             c_fil1, c_fil2 = st.columns([1,3])
-            filtro_p = c_fil1.selectbox("⏳ Filtrar Ranking:", ["Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_p")
+            
+            filtro_p = c_fil1.selectbox("⏳ Filtrar Ranking:", ["Período Activo (Desde Reseteo)", "Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_p")
             rango_punt = c_fil2.date_input("🗓️ Fechas:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_p == "Personalizado" else None
-            p_in, p_fi = get_fechas_filtro(filtro_p, rango_punt)
+            
+            if filtro_p == "Período Activo (Desde Reseteo)":
+                f_ini_pts = config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d"))
+                p_in = datetime.datetime.strptime(f_ini_pts, "%Y-%m-%d").date()
+                p_fi = ahora.date()
+            else:
+                p_in, p_fi = get_fechas_filtro(filtro_p, rango_punt)
+            
+            st.info(f"📊 Mostrando puntos generados desde: **{p_in.strftime('%d/%m/%Y')}** hasta **{p_fi.strftime('%d/%m/%Y')}**.")
             
             df_p, df_t = load_df("asistencia"), load_df("tareas_log")
             if not df_p.empty:
@@ -1027,7 +1207,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         st.success("✅ Bono/Multa aplicado y guardado en la nube.")
                         st.rerun()
 
-        with tab_auditoria_tareas:
+        with tab_tareas:
             st.subheader("🛡️ Tareas Pendientes de Aprobación")
             df_tl_all = load_df("tareas_log")
             if not df_tl_all.empty:
@@ -1061,61 +1241,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     if st.button("Marcar como Visto", key=f"visto_rep_{idx}"):
                         reportes_log[idx]["Estado"] = "Visto"; save_json("reportes", reportes_log); st.rerun()
 
-        with tab_auditoria_horas:
-            st.markdown('<div class="highlight-edit"><b>✏️ AUDITORÍA DE HORARIOS (NUBE)</b></div>', unsafe_allow_html=True)
-            
-            st.subheader("🛡️ Salidas Pendientes (Reportadas por Cajeros)")
-            if salidas_pendientes:
-                for idx, sp in enumerate(salidas_pendientes):
-                    c_sp1, c_sp2, c_sp3 = st.columns([4, 1, 1])
-                    c_sp1.markdown(f"**{sp['Autor']}** retiró a **{sp['Empleado']}** a las {sp['Hora']} ({sp['Nota']})")
-                    if c_sp2.button("✅ Aprobar", key=f"apr_sal_{idx}"):
-                        insert_row("asistencia", {"Fecha": sp["Fecha"], "Hora": sp["Hora"], "Empleado": sp["Empleado"], "Sucursal": sp["Sucursal"], "Turno": sp["Turno"], "Tipo": "Salida", "Estado": "Salida", "Distancia_m": 0.0, "Nota": sp["Nota"]})
-                        salidas_pendientes.pop(idx)
-                        save_json("salidas_pendientes", salidas_pendientes)
-                        st.rerun()
-                    if c_sp3.button("❌ Rechazar", key=f"rec_sal_{idx}"):
-                        salidas_pendientes.pop(idx)
-                        save_json("salidas_pendientes", salidas_pendientes)
-                        st.rerun()
-            else:
-                st.info("No hay solicitudes de salida pendientes de revisión.")
-
-            st.write("---")
-            
-            col_ed1, col_ed2 = st.columns(2)
-            fecha_edicion = col_ed1.date_input("Fecha a auditar:", key="fecha_edit")
-            emp_edicion = col_ed2.selectbox("Personal a auditar:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_edit")
-            
-            if emp_edicion != "Seleccionar...":
-                df_edicion = load_df("asistencia")
-                if not df_edicion.empty:
-                    df_ed = df_edicion[(df_edicion["Fecha"] == fecha_edicion.strftime("%Y-%m-%d")) & (df_edicion["Empleado"] == emp_edicion)]
-                    if not df_ed.empty:
-                        for idx, row in df_ed.iterrows():
-                            db_id = int(row['id'])
-                            c1, c2, c3, c4 = st.columns([2,2,2,1])
-                            n_tipo = c1.selectbox("Tipo", ["Entrada", "Salida", "Ausente"], index=["Entrada", "Salida", "Ausente"].index(row['Tipo']) if row['Tipo'] in ["Entrada", "Salida", "Ausente"] else 0, key=f"t_{db_id}")
-                            n_hora = c2.text_input("Hora (Ej: 08:30 AM)", value=row['Hora'], key=f"h_{db_id}")
-                            n_estado = c3.selectbox("Estado", ESTADOS_POSIBLES, index=ESTADOS_POSIBLES.index(row['Estado']) if row['Estado'] in ESTADOS_POSIBLES else 7, key=f"e_{db_id}")
-                            if c4.button("💾", key=f"btn_{db_id}"):
-                                supabase.table("asistencia").update({'Tipo': str(n_tipo), 'Hora': str(n_hora), 'Estado': str(n_estado)}).eq('id', db_id).execute()
-                                st.rerun()
-                    else: st.warning("Sin movimientos ese día.")
-
-            st.write("---")
-            st.subheader("✍️ Carga Manual Total (Falta o Olvido)")
-            with st.form("form_fichaje_manual"):
-                c_f1, c_f2, c_f3 = st.columns(3)
-                fm_emp = c_f1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
-                fm_fecha = c_f2.date_input("Fecha:", ahora.date())
-                fm_hora_str = c_f3.time_input("Hora exacta:", ahora.time()).strftime("%I:%M:%S %p")
-                fm_tipo, fm_estado, fm_nota = c_f1.selectbox("Movimiento:", ["Entrada", "Salida", "Ausente"]), c_f2.selectbox("Estado final:", ESTADOS_POSIBLES), c_f3.text_input("Nota / Justificación:")
-                
-                if st.form_submit_button("➕ Cargar Movimiento") and fm_emp != "Seleccionar...":
-                    insert_row("asistencia", {"Fecha": str(fm_fecha.strftime("%Y-%m-%d")), "Hora": str(fm_hora_str), "Empleado": str(fm_emp), "Sucursal": "Manual", "Turno": "Manual", "Tipo": str(fm_tipo), "Estado": str(fm_estado), "Distancia_m": 0.0, "Nota": str(fm_nota)})
-                    st.rerun()
-
         with tab_perfil:
             st.markdown('<div class="main-title" style="font-size: 2rem;">👤 Dossier Individual 360°</div>', unsafe_allow_html=True)
             col_pf1, col_pf2 = st.columns([1,3])
@@ -1133,7 +1258,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     e_atiempo, e_tardes, e_ausencias = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "A tiempo")]), len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "Tarde")]), len(df_e_p[df_e_p["Tipo"] == "Ausente"])
                     horas_totales = 0.0
                     
-                    # Unificador cronológico también para el Dossier Personal
                     for f in df_e_p["Fecha"].unique():
                         df_ef = df_e_p[df_e_p["Fecha"] == f].copy()
                         df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
@@ -1259,6 +1383,12 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                     if cc.get('Cajero') == emp_mod: cc['Cajero'] = nn
                                 save_json("cierres_caja", cierres_caja)
                                 
+                                if emp_mod in planificacion_turnos: planificacion_turnos[nn] = planificacion_turnos.pop(emp_mod)
+                                for fecha_plan, emps in planificacion_turnos.items():
+                                    if emp_mod in emps:
+                                        emps[nn] = emps.pop(emp_mod)
+                                save_json("planificacion_turnos", planificacion_turnos)
+                                
                                 try:
                                     supabase.table("asistencia").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
                                     supabase.table("tareas_log").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
@@ -1383,16 +1513,25 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     
                     st.markdown("---")
                     v_exigir_salida_manual = st.checkbox("🛑 Exigir Fichaje de Salida Manual", value=config_app.get("exigir_salida_manual", False), help="Si se desactiva, la salida es automática y no se les pedirá fichar al irse (El sistema asumirá 6 horas menos las llegadas tarde).")
-                    v_mostrar_membresia = st.checkbox("👁️ Mostrar tipo de membresía contratada", value=config_app.get("mostrar_membresia", False), help="Muestra a todos los empleados el plan de software contratado en el menú lateral.")
                     
                     if st.form_submit_button("💾 Guardar Ajustes"):
-                        config_app.update({"autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "mostrar_membresia": v_mostrar_membresia})
+                        config_app.update({"autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual})
                         save_json("config", config_app); st.rerun()
                 
                 st.write("🔑 **Cambiar Clave de Gerencia**")
                 nc = st.text_input("Nueva clave:", type="password")
                 if st.button("🔒 Cambiar Clave") and nc: config_app["admin_password"] = nc; save_json("config", config_app); st.success("Clave modificada.")
 
+            st.markdown("---")
+            st.subheader("♻️ Reiniciar Sistema de Puntos")
+            st.write("Fijá una nueva fecha de inicio. Los puntos se contarán de cero desde la fecha que elijas (Ideal para cortes semanales o mensuales).")
+            nueva_fecha_puntos = st.date_input("Nueva fecha de inicio:", value=ahora.date())
+            if st.button("♻️ Reiniciar Puntos Ahora", type="primary"):
+                config_app["fecha_inicio_puntos"] = nueva_fecha_puntos.strftime("%Y-%m-%d")
+                save_json("config", config_app)
+                st.success(f"✅ ¡Puntos reseteados! El contador arrancará desde el {nueva_fecha_puntos.strftime('%d/%m/%Y')}.")
+                st.rerun()
+                
             st.markdown("---")
             st.subheader("🧹 Reseteo Quirúrgico en Nube")
             c_cl1, c_cl2 = st.columns(2)
@@ -1442,13 +1581,28 @@ elif pestaña == "💻 Dueño del Software":
                 estado_actual = st.selectbox("Estado del Sistema:", ["Activo", "Suspendido"], index=["Activo", "Suspendido"].index(owner_config.get("estado_licencia", "Activo")))
                 plan_actual = st.selectbox("Plan de Pago contratado:", ["Mensual", "Anual", "Vitalicio"], index=["Mensual", "Anual", "Vitalicio"].index(owner_config.get("plan_pago", "Mensual")))
                 
-                fecha_venc = st.date_input("Fecha de Vencimiento Automático:", value=datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date())
+                v_mostrar_membresia = st.checkbox("👁️ Mostrar etiqueta de membresía a los empleados", value=owner_config.get("mostrar_membresia", False), help="Si se activa, todos verán el plan contratado en el menú lateral.")
+                
+                fecha_venc = st.date_input("Fecha de Vencimiento Automático:", value=datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date(), min_value=datetime.date(2000, 1, 1), max_value=datetime.date(2099, 12, 31))
                 msg_bloqueo = st.text_area("Mensaje de Bloqueo (Se muestra al suspender o vencer):", value=owner_config.get("mensaje_bloqueo", ""))
                 
+                st.markdown("---")
+                st.write("⏳ **Aviso de Vencimiento Próximo (Solo visible para Gerencia)**")
+                dias_aviso = st.number_input("Mostrar aviso preventivo cuántos días antes:", value=owner_config.get("dias_aviso", 5), min_value=0)
+                msg_aviso = st.text_area("Mensaje preventivo de vencimiento:", value=owner_config.get("mensaje_aviso", "⚠️ Tu suscripción está por vencer. Contactate con soporte para renovar."))
+                
                 if st.form_submit_button("💾 Guardar Estado"):
-                    owner_config.update({"estado_licencia": estado_actual, "plan_pago": plan_actual, "fecha_vencimiento": str(fecha_venc), "mensaje_bloqueo": msg_bloqueo})
+                    owner_config.update({
+                        "estado_licencia": estado_actual, 
+                        "plan_pago": plan_actual, 
+                        "fecha_vencimiento": str(fecha_venc), 
+                        "mensaje_bloqueo": msg_bloqueo,
+                        "mostrar_membresia": v_mostrar_membresia,
+                        "dias_aviso": dias_aviso,
+                        "mensaje_aviso": msg_aviso
+                    })
                     save_json("owner_config", owner_config)
-                    st.success("¡Licencia actualizada! El sistema obedecerá automáticamente.")
+                    st.success("¡Licencia y avisos actualizados! El sistema obedecerá automáticamente.")
                     st.rerun()
                     
         with tab_equipos:
@@ -1511,6 +1665,7 @@ elif pestaña == "💻 Dueño del Software":
                 save_json("salidas_pendientes", [])
                 save_json("sueldos_historico", [])
                 save_json("cierres_caja", [])
+                save_json("planificacion_turnos", {})
                 
                 supabase.table("asistencia").delete().neq("id", 0).execute()
                 supabase.table("tareas_log").delete().neq("id", 0).execute()
