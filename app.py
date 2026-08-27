@@ -271,7 +271,7 @@ if pestaña == "⏱️ Portal del Empleado":
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts en {ahora.strftime('%B')})</div></div>", unsafe_allow_html=True)
 
-            # ---> PANEL DEL CAJERO (FILTRADO INTELIGENTE POR SUCURSAL) <---
+            # ---> PANEL DEL CAJERO (FILTRADO INTELIGENTE POR SUCURSAL + ANTI-SPAM) <---
             if rol_empleado in ["Cajero", "Encargado"]:
                 with st.expander("👑 Panel de Responsable de Turno", expanded=False):
                     st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas y asignar puntos a tus compañeros.</div>", unsafe_allow_html=True)
@@ -281,7 +281,6 @@ if pestaña == "⏱️ Portal del Empleado":
                         suc_cajero = datos_turno_activo.get("Sucursal")
                         st.write(f"📍 Estás auditando la sucursal: **{suc_cajero}**")
                         
-                        # Filtra a los que marcaron entrada en la MISMA sucursal hoy
                         auditables = []
                         df_hoy_todos = df_punt[df_punt["Fecha"] == fecha_hoy] if not df_punt.empty else pd.DataFrame()
                         
@@ -294,7 +293,6 @@ if pestaña == "⏱️ Portal del Empleado":
                                     df_c = df_hoy_todos[df_hoy_todos["Empleado"] == e_comp]
                                     if not df_c.empty:
                                         ult_c = df_c.iloc[-1]
-                                        # Verifica que tengan entrada activa y que la sucursal sea la misma
                                         if ult_c["Tipo"] == "Entrada" and str(ult_c["Sucursal"]) == str(suc_cajero):
                                             auditables.append(e_comp)
                         
@@ -311,27 +309,36 @@ if pestaña == "⏱️ Portal del Empleado":
                                     elif not s_motivo_salida.strip():
                                         st.warning("⚠️ Escribí el motivo en la nota (Obligatorio para la auditoría).")
                                     else:
-                                        hora_str_salida = s_hora_salida.strftime("%I:%M:%S %p")
-                                        nota_final = f"[Auditado por {empleado_en_celu}] {s_motivo_salida}"
-                                        
-                                        # Busca el turno exacto del auditado
-                                        turno_del_auditado = "Manual"
-                                        df_aud_turno = df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Entrada")]
-                                        if not df_aud_turno.empty:
-                                            turno_del_auditado = df_aud_turno.iloc[-1]["Turno"]
-                                        
-                                        salidas_pendientes.append({
-                                            "Fecha": str(fecha_hoy), 
-                                            "Hora": str(hora_str_salida), 
-                                            "Empleado": str(s_emp_salida), 
-                                            "Sucursal": str(suc_cajero), 
-                                            "Turno": str(turno_del_auditado), 
-                                            "Nota": str(nota_final),
-                                            "Autor": str(empleado_en_celu)
-                                        })
-                                        save_json("salidas_pendientes", salidas_pendientes)
-                                        st.success(f"✅ Solicitud de salida de {s_emp_salida} enviada a Gerencia para revisión.")
-                                        st.rerun()
+                                        # ---> FILTRO ANTI-SPAM DE SALIDAS DUPLICADAS <---
+                                        ya_pedido = False
+                                        for sp in salidas_pendientes:
+                                            if sp.get("Empleado") == s_emp_salida and sp.get("Fecha") == str(fecha_hoy):
+                                                ya_pedido = True
+                                                break
+                                                
+                                        if ya_pedido:
+                                            st.error(f"⚠️ Ya enviaste una solicitud de salida para {s_emp_salida} hoy. Gerencia la está revisando, no es necesario enviarla de nuevo.")
+                                        else:
+                                            hora_str_salida = s_hora_salida.strftime("%I:%M:%S %p")
+                                            nota_final = f"[Auditado por {empleado_en_celu}] {s_motivo_salida}"
+                                            
+                                            turno_del_auditado = "Manual"
+                                            df_aud_turno = df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Entrada")]
+                                            if not df_aud_turno.empty:
+                                                turno_del_auditado = df_aud_turno.iloc[-1]["Turno"]
+                                            
+                                            salidas_pendientes.append({
+                                                "Fecha": str(fecha_hoy), 
+                                                "Hora": str(hora_str_salida), 
+                                                "Empleado": str(s_emp_salida), 
+                                                "Sucursal": str(suc_cajero), 
+                                                "Turno": str(turno_del_auditado), 
+                                                "Nota": str(nota_final),
+                                                "Autor": str(empleado_en_celu)
+                                            })
+                                            save_json("salidas_pendientes", salidas_pendientes)
+                                            st.success(f"✅ Solicitud de salida de {s_emp_salida} enviada a Gerencia para revisión.")
+                                            st.rerun()
                         else:
                             st.info("ℹ️ No hay otros compañeros trabajando en esta sucursal en este momento.")
                     else:
