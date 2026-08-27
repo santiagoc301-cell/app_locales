@@ -11,10 +11,17 @@ from supabase import create_client
 st.set_page_config(page_title="Gestión Corporativa - Retail", page_icon="🛍️", layout="wide", initial_sidebar_state="expanded")
 
 # ==========================================
-# 💎 ESTÉTICA PREMIUM COMERCIAL (CSS)
+# 💎 ESTÉTICA PREMIUM COMERCIAL (CSS) Y MARCA BLANCA
 # ==========================================
 st.markdown("""
 <style>
+    /* ---> MODO MARCA BLANCA: OCULTA EL GATITO, EL FORK Y EL FOOTER <--- */
+    [data-testid="stToolbar"] { visibility: hidden !important; }
+    footer { visibility: hidden !important; }
+    #MainMenu { visibility: hidden !important; }
+    header { background: transparent !important; }
+
+    /* ---> DISEÑO DE LA APP <--- */
     .main-title { font-size: 2.8rem; font-weight: 800; color: #111827; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: -0.5px;}
     .sub-text { font-size: 1.15rem; color: #4B5563; margin-bottom: 2rem; }
     div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #2563EB; transition: transform 0.2s ease-in-out;}
@@ -469,7 +476,6 @@ if pestaña == "⏱️ Portal del Empleado":
                         save_json("roles", roles_empleados)
                         save_json("tareas_individuales", tareas_individuales)
                     else:
-                        # Si ya existía pero no tenía cel vinculado, actualizamos su rol por si acaso
                         roles_empleados[n_emp] = rol_elegido_auto
                         save_json("roles", roles_empleados)
                     
@@ -516,7 +522,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 df_activos = df_activos[df_activos["Empleado"].isin(lista_empleados)].copy()
                 df_activos['Fecha_Obj'] = pd.to_datetime(df_activos['Fecha'], errors='coerce')
                 
-                # --- NUEVO MONITOR EN VIVO: ¿QUIÉNES ESTÁN EN EL LOCAL AHORA? ---
                 st.markdown(f"### 🟢 Personal Trabajando en Este Momento ({fecha_hoy})")
                 df_hoy_gerencia = df_activos[df_activos["Fecha"] == fecha_hoy].copy()
                 activos_en_local = []
@@ -702,7 +707,9 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         supabase.table("tareas_log").update({"Estado": "Rechazada"}).eq("id", int(row['id'])).execute()
                         st.rerun()
 
-            puntos_pendientes = [p for p in lista_puntos if p.get("Estado"] == "Pendiente"]
+            # ---> AQUÍ ESTABA EL ERROR DEL CORCHETE. AHORA CORREGIDO CON PARÉNTESIS <---
+            puntos_pendientes = [p for p in lista_puntos if p.get("Estado") == "Pendiente"]
+            
             if puntos_pendientes:
                 st.write("**Evaluaciones Pendientes (De Supervisores):**")
                 for idx, p in enumerate(lista_puntos):
