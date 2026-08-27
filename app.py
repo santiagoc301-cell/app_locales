@@ -64,7 +64,6 @@ def init_connection():
 
 supabase = init_connection()
 
-# ---> MOTOR TURBO (SISTEMA DE CACHÉ DE CONFIGURACIONES) <---
 @st.cache_data(ttl=60)
 def get_all_settings():
     try:
@@ -122,9 +121,9 @@ owner_config_defecto = {
     "plan_pago": "Mensual",
     "fecha_vencimiento": "2030-12-31",
     "mensaje_bloqueo": "⚠️ SISTEMA SUSPENDIDO TEMPORALMENTE.\n\nPor favor, comuníquese con el proveedor del software para regularizar el estado de su cuenta.",
-    "empresa_nombre": "Mi Tienda Oficial",
-    "quienes_somos": "Somos una empresa dedicada a ofrecer la mejor calidad y atención a nuestros clientes. Trabajamos en equipo para lograr nuestros objetivos diarios.",
-    "contactos": "📍 Dirección Central\n📞 RRHH: +54 9 000 0000\n✉️ soporte@mitienda.com"
+    "empresa_nombre": "SyncroRetail Solutions",
+    "quienes_somos": "Nacimos con una misión clara: revolucionar la gestión del personal y potenciar el rendimiento de los equipos de trabajo...",
+    "contactos": "🏢 Oficina Central: Salta Capital, Argentina\n🛠️ Soporte y Soluciones: soporte@syncroretail.com\n💡 Sugerencias y Nuevas Funciones: desarrollo@syncroretail.com"
 }
 owner_config = load_json("owner_config", owner_config_defecto)
 
@@ -182,7 +181,6 @@ st.markdown('<div class="main-title">🌟 Portal Corporativo</div>', unsafe_allo
 pestaña = st.selectbox("Navegación:", ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia", "💻 Dueño del Software"], label_visibility="collapsed")
 st.write("---")
 
-# ---> CORRECCIÓN DEL ERROR DE NOMBRE (VARIABLE GLOBAL SEGURA) <---
 empleado_en_celu = None
 if 'device_id' in st.session_state:
     for emp, dev in dispositivos_vinculados.items():
@@ -267,8 +265,8 @@ if pestaña == "⏱️ Portal del Empleado":
                         s_mot = st.text_input("Motivo:")
                         
                         if st.form_submit_button("Enviar a Gerencia"):
-                            if s_emp == "Seleccionar..." or s_pts == 0 or not s_mot.strip():
-                                st.warning("⚠️ ¡Completá todos los campos! (Elegí un compañero, poné un puntaje distinto a 0 y escribí el motivo).")
+                            if s_emp == "Seleccionar... or s_pts == 0 or not s_mot.strip()":
+                                st.warning("⚠️ ¡Completá todos los campos!")
                             else:
                                 lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot.strip(), "Autor": empleado_en_celu, "Estado": "Pendiente"})
                                 save_json("ajustes_puntos", lista_puntos)
@@ -959,8 +957,17 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 for loc, d_loc in lista_locales.items(): st.write(f"- **{loc}** | IP: `{d_loc.get('ip', 'Ninguna')}`")
                 
                 st.markdown("---")
-                if client_ip and client_ip != 'Error':
-                    st.info(f"💡 **Ayuda de Configuración:** La IP actual de tu conexión es `{client_ip}`. (Si estás físicamente en la sucursal nueva, podés copiar y pegar este número abajo).")
+                
+                # ---> LÓGICA SEGURA DE IP PARA GERENCIA <---
+                ip_gerencia = st.session_state.get('client_ip')
+                if not ip_gerencia:
+                    ip_eval = streamlit_js_eval(js_expressions="fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')", want_output=True, key="ip_manager")
+                    if ip_eval:
+                        st.session_state['client_ip'] = ip_eval
+                        ip_gerencia = ip_eval
+
+                if ip_gerencia and ip_gerencia != 'Error':
+                    st.info(f"💡 **Ayuda de Configuración:** La IP actual de tu conexión es `{ip_gerencia}`. (Si estás físicamente en la sucursal nueva, podés copiar y pegar este número abajo).")
                 else:
                     st.info("💡 Buscando tu IP actual para ayudarte a configurar...")
 
