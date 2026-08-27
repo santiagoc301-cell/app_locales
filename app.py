@@ -52,6 +52,7 @@ def init_connection():
 
 supabase = init_connection()
 
+# MODO DIAGNÓSTICO ACTIVADO: Ahora los errores de base de datos saltan a la pantalla
 def load_json(key_name, default_data):
     try:
         res = supabase.table('app_data').select('data').eq('id', key_name).execute()
@@ -59,24 +60,33 @@ def load_json(key_name, default_data):
         else:
             supabase.table('app_data').insert({'id': key_name, 'data': default_data}).execute()
             return default_data
-    except: return default_data
+    except Exception as e:
+        st.error(f"🚨 Error cargando configuración '{key_name}': {e}")
+        st.stop()
 
 def save_json(key_name, data):
     try:
         res = supabase.table('app_data').select('id').eq('id', key_name).execute()
         if res.data: supabase.table('app_data').update({'data': data}).eq('id', key_name).execute()
         else: supabase.table('app_data').insert({'id': key_name, 'data': data}).execute()
-    except: pass
+    except Exception as e:
+        st.error(f"🚨 Error guardando configuración '{key_name}': {e}")
+        st.stop()
 
 def load_df(table_name):
     try:
         res = supabase.table(table_name).select('*').execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
-    except: return pd.DataFrame()
+    except Exception as e:
+        st.error(f"🚨 Error leyendo la tabla '{table_name}': {e}")
+        st.stop()
 
 def insert_row(table_name, row_dict):
-    try: supabase.table(table_name).insert(row_dict).execute()
-    except: pass
+    try: 
+        supabase.table(table_name).insert(row_dict).execute()
+    except Exception as e:
+        st.error(f"🚨 Error guardando en la tabla '{table_name}': {e}")
+        st.stop()
 
 # ==========================================
 # 2. CARGA DE DATOS CENTRALIZADA
@@ -226,18 +236,13 @@ if pestaña == "⏱️ Portal del Empleado":
                     else:
                         st.info("📋 Ya tenés turnos finalizados hoy. Podés registrar un nuevo ingreso si es necesario.")
 
-                # ==========================================================
-                # 🤖 MOTOR DE AUTODETECCIÓN (SMART CHECK-IN)
-                # ==========================================================
                 if estado_laboral == "Fuera":
                     st.markdown("### 🤖 Radar Automático")
-                    
                     local_detectado = None
                     distancia_real = 0.0
                     metodo_det = ""
                     ubicacion = get_geolocation() if config_app.get("verificar_gps", True) else None
 
-                    # 1. Escaneo de Wi-Fi
                     if config_app.get("verificar_wifi", False) and client_ip and client_ip != 'Error':
                         for loc, d_loc in lista_locales.items():
                             if d_loc.get("ip", "").strip() == client_ip:
@@ -245,7 +250,6 @@ if pestaña == "⏱️ Portal del Empleado":
                                 metodo_det = "📶 Red Wi-Fi de la tienda"
                                 break
 
-                    # 2. Escaneo Satelital (Si falla el Wi-Fi o está apagado)
                     if not local_detectado and config_app.get("verificar_gps", True):
                         if ubicacion and 'coords' in ubicacion:
                             coord_usuario = (ubicacion['coords']['latitude'], ubicacion['coords']['longitude'])
@@ -259,7 +263,6 @@ if pestaña == "⏱️ Portal del Empleado":
                                     break
                     
                     if local_detectado:
-                        # 3. Detectar el Turno (El más cercano a la hora actual)
                         turno_detectado = None
                         min_diff = float('inf')
                         for t_name, t_data in lista_turnos.items():
@@ -295,11 +298,7 @@ if pestaña == "⏱️ Portal del Empleado":
                             st.info("⏳ Detectando ubicación satelital... Por favor, permití el acceso al GPS en tu celular.")
                         else:
                             st.error(f"❌ Estás fuera del rango de todas las sucursales. Acercate al local para habilitar el fichaje.")
-
                 else:
-                    # ==========================================================
-                    # REGISTRO DE SALIDA AUTOMÁTICO
-                    # ==========================================================
                     st.markdown("### 🏃‍♂️ Finalizar Turno")
                     local_actual = datos_turno_activo.get("Sucursal", "N/A")
                     turno_actual = datos_turno_activo.get("Turno", "N/A")
