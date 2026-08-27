@@ -93,13 +93,13 @@ def insert_row(table_name, row_dict):
 # ==========================================
 # 2. CARGA DE DATOS CENTRALIZADA
 # ==========================================
-config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "ip_wifi_oficial": "", "radio_metros": 50, "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
+config_defecto = {"admin_password": "1234", "tolerancia_minutos": 10, "mensaje_llegada_tarde": "⚠️ Llegada fuera del margen de tolerancia.", "verificar_gps": True, "verificar_wifi": False, "salida_estricta": False, "mostrar_membresia": False, "autoregistro": False, "ip_wifi_oficial": "", "radio_metros": 50, "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}}
 config_app = load_json("config", config_defecto)
 
-# ---> CONFIGURACIÓN DEL DUEÑO DEL SOFTWARE <---
 owner_config_defecto = {
     "estado_licencia": "Activo",
     "plan_pago": "Mensual",
+    "fecha_vencimiento": "2030-12-31",
     "mensaje_bloqueo": "⚠️ SISTEMA SUSPENDIDO TEMPORALMENTE.\n\nPor favor, comuníquese con el proveedor del software para regularizar el estado de su cuenta.",
     "empresa_nombre": "Mi Tienda Oficial",
     "quienes_somos": "Somos una empresa dedicada a ofrecer la mejor calidad y atención a nuestros clientes. Trabajamos en equipo para lograr nuestros objetivos diarios.",
@@ -176,7 +176,6 @@ def calcular_nivel(puntos):
 st.sidebar.title("🛍️ Menú Principal")
 pestaña = st.sidebar.radio("Navegar a:", ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia", "💻 Dueño del Software"])
 
-# --- SECCIÓN: QUIÉNES SOMOS (Visible para todos en el menú) ---
 with st.sidebar.expander("🏢 Quiénes Somos / Contactos", expanded=False):
     st.markdown(f"### {owner_config.get('empresa_nombre', 'Nuestra Empresa')}")
     st.write(owner_config.get('quienes_somos', ''))
@@ -184,18 +183,29 @@ with st.sidebar.expander("🏢 Quiénes Somos / Contactos", expanded=False):
     st.markdown("📞 **Contactos Útiles:**")
     st.write(owner_config.get('contactos', ''))
 
+if config_app.get("mostrar_membresia", False):
+    st.sidebar.markdown("<br>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<div style='text-align: center; padding: 10px; background-color: #F3F4F6; border-radius: 10px; border: 1px solid #E5E7EB;'><span style='font-size: 0.8rem; color: #6B7280;'>TIPO DE MEMBRESÍA</span><br><b style='color: #111827;'>⭐ Plan {owner_config.get('plan_pago', 'Mensual')}</b></div>", unsafe_allow_html=True)
+
 # ==========================================
-# 🛑 SISTEMA ANTIFRAUDE (KILL SWITCH)
+# 🛑 SISTEMA ANTIFRAUDE (KILL SWITCH Y VENCIMIENTO)
 # ==========================================
-# Si la licencia está suspendida, bloquea a Empleados y Gerencia. Solo pasa el Dueño.
-if pestaña in ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia"] and owner_config.get("estado_licencia") == "Suspendido":
-    st.markdown(f"""
-        <div class="bloqueo-pantalla">
-            <div class="bloqueo-titulo">⛔ ACCESO BLOQUEADO</div>
-            <p style="font-size: 1.5rem; color: #7F1D1D;">{owner_config.get("mensaje_bloqueo")}</p>
-        </div>
-    """, unsafe_allow_html=True)
-    st.stop()  # 🛑 Detiene absolutamente toda la aplicación acá mismo.
+licencia_vencida = False
+try:
+    if ahora.date() > datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date():
+        licencia_vencida = True
+except: pass
+
+if pestaña in ["⏱️ Portal del Empleado", "⚙️ Panel de Gerencia"]:
+    if owner_config.get("estado_licencia") == "Suspendido" or licencia_vencida:
+        msg_motivo = owner_config.get("mensaje_bloqueo") if owner_config.get("estado_licencia") == "Suspendido" else "⚠️ EL PERÍODO DE LICENCIA HA VENCIDO.\n\nPor favor, contacte a soporte para renovar su suscripción."
+        st.markdown(f"""
+            <div class="bloqueo-pantalla">
+                <div class="bloqueo-titulo">⛔ ACCESO BLOQUEADO</div>
+                <p style="font-size: 1.5rem; color: #7F1D1D;">{msg_motivo}</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.stop()
 
 # ==========================================
 # 5. INTERFAZ PRINCIPAL
@@ -253,7 +263,6 @@ if pestaña == "⏱️ Portal del Empleado":
                                 save_json("ajustes_puntos", lista_puntos)
                                 st.success("✅ Evaluación enviada a Gerencia correctamente.")
 
-            # --- SISTEMA DE MENSAJES CON SOPORTE PARA ROLES ---
             mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu, rol_empleado]]
             if mensajes_usuario:
                 for m in mensajes_usuario:
@@ -444,11 +453,30 @@ if pestaña == "⏱️ Portal del Empleado":
                     else: st.write("Sin fichajes recientes.")
         else:
             st.warning("⚠️ **Equipo no autorizado.**")
-            emp_vincular = st.selectbox("Identificate:", ["Seleccionar..."] + [e for e in sorted(lista_empleados) if e not in dispositivos_vinculados.keys()])
-            if st.button("🔗 Enlazar mi teléfono") and emp_vincular != "Seleccionar...":
-                dispositivos_vinculados[emp_vincular] = device_id
-                save_json("dispositivos", dispositivos_vinculados)
-                st.rerun()
+            
+            if config_app.get("autoregistro", False):
+                st.info("📝 **El Auto-registro está habilitado.** Escribí tu nombre y apellido para darte de alta en el sistema y enlazar este celular.")
+                nuevo_nombre_emp = st.text_input("Tu Nombre Completo:")
+                if st.button("🔗 Registrar y Enlazar mi teléfono") and nuevo_nombre_emp.strip():
+                    n_emp = nuevo_nombre_emp.strip()
+                    if n_emp not in lista_empleados:
+                        lista_empleados.append(n_emp)
+                        roles_empleados[n_emp] = "Otro"
+                        tareas_individuales[n_emp] = []
+                        save_json("empleados", lista_empleados)
+                        save_json("roles", roles_empleados)
+                        save_json("tareas_individuales", tareas_individuales)
+                    
+                    dispositivos_vinculados[n_emp] = device_id
+                    save_json("dispositivos", dispositivos_vinculados)
+                    st.rerun()
+            else:
+                st.info("🔒 **Auto-registro deshabilitado.** Pedile a gerencia que te dé de alta en la lista o seleccioná tu nombre si ya existís.")
+                emp_vincular = st.selectbox("Identificate:", ["Seleccionar..."] + [e for e in sorted(lista_empleados) if e not in dispositivos_vinculados.keys()])
+                if st.button("🔗 Enlazar mi teléfono") and emp_vincular != "Seleccionar...":
+                    dispositivos_vinculados[emp_vincular] = device_id
+                    save_json("dispositivos", dispositivos_vinculados)
+                    st.rerun()
 
 # ==========================================
 # 6. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
@@ -516,6 +544,9 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     fecha_in_dl = c_dl2.date_input("📅 Desde el día:", value=ahora.date() - datetime.timedelta(days=7), key="dl_in")
                     fecha_fi_dl = c_dl3.date_input("📅 Hasta el día:", value=ahora.date(), key="dl_fi")
                     
+                    # ---> ACÁ ESTÁ EL NUEVO RECORTE DE HORAS <---
+                    v_recortar_salida = st.checkbox("✂️ Recortar horas extra (Topar el pago hasta el horario de salida oficial del turno)", value=False)
+                    
                     df_dl = df_activos.copy()
                     df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
                     
@@ -539,8 +570,24 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                         if sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
                                             h_in = ent.iloc[0]["Hora_dt"]
                                             h_out = sal.iloc[-1]["Hora_dt"]
+                                            turno_actual_eval = ent.iloc[0]["Turno"]
+                                            
                                             diff = (h_out - h_in).total_seconds() / 3600.0
-                                            horas_totales += diff if diff >= 0 else (diff + 24.0)
+                                            diff = diff if diff >= 0 else (diff + 24.0)
+                                            
+                                            # --- APLICACIÓN DEL RECORTE ANTIFRAUDE SALARIAL ---
+                                            if v_recortar_salida and turno_actual_eval in lista_turnos:
+                                                h_oficial_out_str = lista_turnos[turno_actual_eval].get("salida")
+                                                if h_oficial_out_str:
+                                                    h_oficial_out = pd.to_datetime(h_oficial_out_str, errors='coerce')
+                                                    if not pd.isna(h_oficial_out):
+                                                        diff_oficial = (h_oficial_out - h_in).total_seconds() / 3600.0
+                                                        diff_oficial = diff_oficial if diff_oficial >= 0 else (diff_oficial + 24.0)
+                                                        # Si se quedó más tiempo, se corta al tiempo oficial
+                                                        if diff > diff_oficial:
+                                                            diff = diff_oficial
+
+                                            horas_totales += diff
                                 
                                 if horas_totales > 0:
                                     datos_horas.append({
@@ -736,20 +783,71 @@ elif pestaña == "⚙️ Panel de Gerencia":
             with col_s1:
                 st.subheader("👥 Alta y Modificación")
                 with st.form("form_alta_emp"):
-                    nuevo_emp = st.text_input("Nuevo Empleado:")
+                    nuevo_emp = st.text_input("Nuevo Empleado (Carga manual):")
                     rol_asignar = st.selectbox("Rol:", lista_roles_disponibles)
-                    if st.form_submit_button("➕ Agregar") and nuevo_emp and nuevo_emp not in lista_empleados:
-                        lista_empleados.append(nuevo_emp); roles_empleados[nuevo_emp] = rol_asignar; tareas_individuales[nuevo_emp] = []
+                    if st.form_submit_button("➕ Agregar a la lista") and nuevo_emp and nuevo_emp not in lista_empleados:
+                        lista_empleados.append(nuevo_emp.strip()); roles_empleados[nuevo_emp.strip()] = rol_asignar; tareas_individuales[nuevo_emp.strip()] = []
                         save_json("empleados", lista_empleados); save_json("roles", roles_empleados); save_json("tareas_individuales", tareas_individuales)
                         st.rerun()
                 
                 if lista_empleados:
-                    emp_mod = st.selectbox("Editar/Borrar:", sorted(lista_empleados))
+                    st.markdown("---")
+                    st.markdown("**✏️ Editar Empleado Existente**")
+                    emp_mod = st.selectbox("Seleccionar empleado:", sorted(lista_empleados))
+                    nuevo_nombre_mod = st.text_input("Modificar Nombre (Si querés corregirlo):", value=emp_mod)
                     nuevo_rol = st.selectbox("Cambiar Rol a:", lista_roles_disponibles, index=lista_roles_disponibles.index(roles_empleados.get(emp_mod, lista_roles_disponibles[0])) if roles_empleados.get(emp_mod) in lista_roles_disponibles else 0)
+                    
                     c_mod1, c_mod2, c_mod3 = st.columns(3)
-                    if c_mod1.button("✏️ Guardar Rol"): roles_empleados[emp_mod] = nuevo_rol; save_json("roles", roles_empleados); st.rerun()
+                    if c_mod1.button("💾 Guardar Cambios"):
+                        nn = nuevo_nombre_mod.strip()
+                        if nn and nn != emp_mod:
+                            if nn not in lista_empleados:
+                                lista_empleados.remove(emp_mod)
+                                lista_empleados.append(nn)
+                                roles_empleados[nn] = nuevo_rol
+                                roles_empleados.pop(emp_mod, None)
+                                if emp_mod in tareas_individuales: tareas_individuales[nn] = tareas_individuales.pop(emp_mod)
+                                if emp_mod in dispositivos_vinculados: dispositivos_vinculados[nn] = dispositivos_vinculados.pop(emp_mod)
+                                
+                                save_json("empleados", lista_empleados)
+                                save_json("roles", roles_empleados)
+                                save_json("tareas_individuales", tareas_individuales)
+                                save_json("dispositivos", dispositivos_vinculados)
+                                
+                                for p in lista_puntos:
+                                    if p.get('Empleado') == emp_mod: p['Empleado'] = nn
+                                    if p.get('Autor') == emp_mod: p['Autor'] = nn
+                                save_json("ajustes_puntos", lista_puntos)
+                                
+                                for r in reportes_log:
+                                    if r.get('Emisor') == emp_mod: r['Emisor'] = nn
+                                    if r.get('Implicado') == emp_mod: r['Implicado'] = nn
+                                save_json("reportes", reportes_log)
+                                
+                                for a in alertas_ingreso:
+                                    if a.get('destinatario') == emp_mod: a['destinatario'] = nn
+                                save_json("alertas_ingreso", alertas_ingreso)
+                                
+                                for m in lista_mensajes:
+                                    if m.get('destinatario') == emp_mod: m['destinatario'] = nn
+                                save_json("mensajes", lista_mensajes)
+                                
+                                try:
+                                    supabase.table("asistencia").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    supabase.table("tareas_log").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                except: pass
+                                
+                                st.success(f"Nombre actualizado a {nn} en toda la base de datos.")
+                            else:
+                                st.warning("Ese nombre ya existe.")
+                        else:
+                            roles_empleados[emp_mod] = nuevo_rol
+                            save_json("roles", roles_empleados)
+                            st.success("Rol actualizado.")
+                        st.rerun()
+                        
                     if c_mod2.button("📱 Liberar Celular") and emp_mod in dispositivos_vinculados: del dispositivos_vinculados[emp_mod]; save_json("dispositivos", dispositivos_vinculados); st.rerun()
-                    if c_mod3.button("🗑️ Borrar"):
+                    if c_mod3.button("🗑️ Borrar Empleado"):
                         lista_empleados.remove(emp_mod); roles_empleados.pop(emp_mod, None); tareas_individuales.pop(emp_mod, None); dispositivos_vinculados.pop(emp_mod, None)
                         save_json("empleados", lista_empleados); save_json("roles", roles_empleados); save_json("tareas_individuales", tareas_individuales); save_json("dispositivos", dispositivos_vinculados)
                         st.rerun()
@@ -843,6 +941,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
             with col_aj2:
                 st.subheader("⚙️ Seguridad de Red y Ajustes")
                 with st.form("form_seguridad"):
+                    v_autoregistro = st.checkbox("📝 Permitir Auto-registro de empleados", value=config_app.get("autoregistro", False), help="Los empleados podrán escribir su propio nombre al abrir la app por primera vez.")
                     v_gps = st.checkbox("📡 Requerir GPS para Entrada", value=config_app.get("verificar_gps", True))
                     radio_m = st.number_input("Radio en metros:", value=int(config_app.get("radio_metros", 50)))
                     v_wifi = st.checkbox("📶 Requerir Wi-Fi para Entrada", value=config_app.get("verificar_wifi", False))
@@ -850,9 +949,10 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     
                     st.markdown("---")
                     v_salida_estricta = st.checkbox("🛑 Exigir GPS/Wi-Fi para Fichar Salida", value=config_app.get("salida_estricta", False), help="Si se activa, el empleado no podrá salir si no está físicamente dentro del local.")
+                    v_mostrar_membresia = st.checkbox("👁️ Mostrar tipo de membresía contratada", value=config_app.get("mostrar_membresia", False), help="Muestra a todos los empleados el plan de software contratado en el menú lateral.")
                     
                     if st.form_submit_button("💾 Guardar Ajustes"):
-                        config_app.update({"verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "salida_estricta": v_salida_estricta})
+                        config_app.update({"autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "salida_estricta": v_salida_estricta, "mostrar_membresia": v_mostrar_membresia})
                         save_json("config", config_app); st.rerun()
                 
                 st.write("🔑 **Cambiar Clave de Gerencia**")
@@ -895,25 +995,53 @@ elif pestaña == "💻 Dueño del Software":
     
     pass_dueño = st.text_input("Ingrese la Clave Maestra:", type="password")
     
-    # LA CLAVE MAESTRA INHACKEABLE (Podes cambiar la palabra SantiMaster2026 por la que quieras)
     if pass_dueño == "SantiMaster2026":
         st.success("✅ Acceso Maestro Concedido")
         
-        tab_licencia, tab_empresa = st.tabs(["🔴 Control de Licencia", "🏢 Información de la Empresa"])
+        tab_licencia, tab_equipos, tab_empresa, tab_reset = st.tabs([
+            "🔴 Control de Licencia", "📱 Gestión de Sesiones", "🏢 Empresa", "☢️ Botón Nuclear"
+        ])
         
         with tab_licencia:
             st.subheader("Estado de la Licencia del Cliente")
             with st.form("form_licencia"):
                 estado_actual = st.selectbox("Estado del Sistema:", ["Activo", "Suspendido"], index=["Activo", "Suspendido"].index(owner_config.get("estado_licencia", "Activo")))
                 plan_actual = st.selectbox("Plan de Pago contratado:", ["Mensual", "Anual", "Vitalicio"], index=["Mensual", "Anual", "Vitalicio"].index(owner_config.get("plan_pago", "Mensual")))
-                msg_bloqueo = st.text_area("Mensaje de Bloqueo (Se muestra al suspender):", value=owner_config.get("mensaje_bloqueo", ""))
+                
+                fecha_venc = st.date_input("Fecha de Vencimiento Automático:", value=datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date())
+                msg_bloqueo = st.text_area("Mensaje de Bloqueo (Se muestra al suspender o vencer):", value=owner_config.get("mensaje_bloqueo", ""))
                 
                 if st.form_submit_button("💾 Guardar Estado"):
-                    owner_config.update({"estado_licencia": estado_actual, "plan_pago": plan_actual, "mensaje_bloqueo": msg_bloqueo})
+                    owner_config.update({"estado_licencia": estado_actual, "plan_pago": plan_actual, "fecha_vencimiento": str(fecha_venc), "mensaje_bloqueo": msg_bloqueo})
                     save_json("owner_config", owner_config)
-                    st.success("¡Cambios aplicados! Si suspendiste el sistema, nadie más podrá acceder.")
+                    st.success("¡Licencia actualizada! El sistema obedecerá automáticamente.")
                     st.rerun()
                     
+        with tab_equipos:
+            st.subheader("🔌 Desconectar Dispositivos Remotamente")
+            st.write("Acá podés ver quién está logueado en la aplicación y forzar el cierre de sesión.")
+            
+            if dispositivos_vinculados:
+                for emp, dev in dispositivos_vinculados.items():
+                    st.markdown(f"- 👤 **{emp}** (ID Interno: `{dev[:10]}...`)")
+                
+                emp_desvincular = st.selectbox("Seleccionar empleado para cerrar sesión:", ["Seleccionar..."] + list(dispositivos_vinculados.keys()))
+                
+                c_eq1, c_eq2 = st.columns(2)
+                if c_eq1.button("🔌 Desconectar a este empleado") and emp_desvincular != "Seleccionar...":
+                    del dispositivos_vinculados[emp_desvincular]
+                    save_json("dispositivos", dispositivos_vinculados)
+                    st.success(f"✅ Sesión cerrada para {emp_desvincular}.")
+                    st.rerun()
+                    
+                if c_eq2.button("⚠️ CERRAR TODAS LAS SESIONES"):
+                    dispositivos_vinculados.clear()
+                    save_json("dispositivos", {})
+                    st.success("✅ ¡Todos los empleados han sido desconectados!")
+                    st.rerun()
+            else:
+                st.info("No hay ningún empleado logueado en este momento.")
+
         with tab_empresa:
             st.subheader("Personalizar Información 'Quiénes Somos'")
             st.write("Esta información aparecerá en el menú lateral izquierdo para que todos los empleados la vean.")
@@ -927,3 +1055,28 @@ elif pestaña == "💻 Dueño del Software":
                     save_json("owner_config", owner_config)
                     st.success("¡Información actualizada con éxito!")
                     st.rerun()
+                    
+        with tab_reset:
+            st.subheader("🚀 Instalación 0KM para Nuevo Cliente")
+            st.error("¡CUIDADO! Este botón borra ABSOLUTAMENTE TODO (Empleados, roles, tareas, mensajes, fichajes y tiendas). Deja la aplicación en blanco para instalarla en una empresa nueva.")
+            
+            check_seguridad = st.checkbox("Estoy seguro que quiero borrar toda la empresa actual.")
+            if st.button("☢️ INICIAR DE FÁBRICA (FACTORY RESET)") and check_seguridad:
+                save_json("empleados", [])
+                save_json("roles", {})
+                save_json("tareas_roles", {})
+                save_json("tareas_individuales", {})
+                save_json("dispositivos", {})
+                save_json("locales", {})
+                save_json("turnos", {})
+                save_json("mensajes", [])
+                save_json("alertas_ingreso", [])
+                save_json("intentos_seguridad", [])
+                save_json("ajustes_puntos", [])
+                save_json("reportes", [])
+                
+                supabase.table("asistencia").delete().neq("id", 0).execute()
+                supabase.table("tareas_log").delete().neq("id", 0).execute()
+                
+                st.success("¡SISTEMA BORRADO! La aplicación está lista para un nuevo cliente.")
+                st.rerun()
