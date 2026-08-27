@@ -235,7 +235,18 @@ if pestaña == "⏱️ Portal del Empleado":
                     ultimo_reg = df_hoy.iloc[-1]
                     if ultimo_reg["Tipo"] == "Entrada":
                         estado_laboral = "Adentro"
-                        datos_turno_activo = {"Sucursal": ultimo_reg["Sucursal"], "Turno": ultimo_reg["Turno"], "Distancia_m": ultimo_reg.get("Distancia_m", 0.0)}
+                        
+                        # --- CORRECCIÓN INT64: Conversión a formato nativo de Python ---
+                        try:
+                            dist_guardada = float(ultimo_reg.get("Distancia_m", 0.0))
+                        except:
+                            dist_guardada = 0.0
+                            
+                        datos_turno_activo = {
+                            "Sucursal": str(ultimo_reg["Sucursal"]), 
+                            "Turno": str(ultimo_reg["Turno"]), 
+                            "Distancia_m": dist_guardada
+                        }
                     else:
                         st.info("📋 Ya tenés turnos finalizados hoy. Podés registrar un nuevo ingreso si es necesario.")
 
@@ -261,7 +272,7 @@ if pestaña == "⏱️ Portal del Empleado":
                                 dist = geodesic(coord_usuario, coord_local).meters
                                 if dist <= int(config_app.get("radio_metros", 50)):
                                     local_detectado = loc
-                                    distancia_real = dist
+                                    distancia_real = float(dist) # Obligamos formato float
                                     metodo_det = f"🛰️ GPS Satelital ({dist:.1f} metros)"
                                     break
                     
@@ -290,7 +301,7 @@ if pestaña == "⏱️ Portal del Empleado":
                             dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
                             estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
 
-                            insert_row("asistencia", {"Fecha": fecha_hoy, "Hora": hora_hoy, "Empleado": empleado_en_celu, "Sucursal": local_detectado, "Turno": turno_detectado, "Tipo": "Entrada", "Estado": estado_llegada, "Distancia_m": round(distancia_real, 1), "Nota": nota_empleado})
+                            insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_detectado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": str(nota_empleado)})
                             
                             msg_final = f"¡Entrada registrada a las {hora_hoy}!"
                             if estado_llegada == "Tarde": msg_final += f"\n\n🔴 {config_app.get('mensaje_llegada_tarde')}"
@@ -309,7 +320,8 @@ if pestaña == "⏱️ Portal del Empleado":
                     nota_empleado = st.text_input("📝 Novedad al salir (Opcional):")
                     
                     if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
-                        insert_row("asistencia", {"Fecha": fecha_hoy, "Hora": hora_hoy, "Empleado": empleado_en_celu, "Sucursal": local_actual, "Turno": turno_actual, "Tipo": "Salida", "Estado": "Salida", "Distancia_m": datos_turno_activo.get("Distancia_m", 0.0), "Nota": nota_empleado})
+                        # --- CORRECCIÓN INT64 APLICADA AQUÍ TAMBIÉN ---
+                        insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(datos_turno_activo.get("Distancia_m", 0.0)), 1), "Nota": str(nota_empleado)})
                         st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
                         st.rerun() 
 
@@ -345,7 +357,7 @@ if pestaña == "⏱️ Portal del Empleado":
                             c_t1, c_t2 = st.columns([3, 1])
                             c_t1.write(f"🔸 {t_nombre} (+{t_puntos} pts)")
                             if c_t2.button("✔️ Listo", key=f"btn_t_{t_nombre}"):
-                                insert_row("tareas_log", {"Fecha": fecha_hoy, "Hora": hora_hoy, "Empleado": empleado_en_celu, "Tarea": t_nombre, "Puntos": str(t_puntos), "Estado": "Pendiente"})
+                                insert_row("tareas_log", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Tarea": str(t_nombre), "Puntos": str(t_puntos), "Estado": "Pendiente"})
                                 st.rerun()
 
             with st.expander("📜 Mi historial reciente"):
@@ -583,7 +595,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                             n_hora = c2.text_input("Hora (Ej: 08:30 AM)", value=row['Hora'], key=f"h_{db_id}")
                             n_estado = c3.selectbox("Estado", ESTADOS_POSIBLES, index=ESTADOS_POSIBLES.index(row['Estado']) if row['Estado'] in ESTADOS_POSIBLES else 7, key=f"e_{db_id}")
                             if c4.button("💾", key=f"btn_{db_id}"):
-                                supabase.table("asistencia").update({'Tipo': n_tipo, 'Hora': n_hora, 'Estado': n_estado}).eq('id', db_id).execute()
+                                supabase.table("asistencia").update({'Tipo': str(n_tipo), 'Hora': str(n_hora), 'Estado': str(n_estado)}).eq('id', db_id).execute()
                                 st.rerun()
                     else: st.warning("Sin movimientos ese día.")
 
@@ -597,7 +609,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 fm_tipo, fm_estado, fm_nota = c_f1.selectbox("Movimiento:", ["Entrada", "Salida", "Ausente"]), c_f2.selectbox("Estado final:", ESTADOS_POSIBLES), c_f3.text_input("Nota / Justificación:")
                 
                 if st.form_submit_button("➕ Cargar Movimiento") and fm_emp != "Seleccionar...":
-                    insert_row("asistencia", {"Fecha": fm_fecha.strftime("%Y-%m-%d"), "Hora": fm_hora_str, "Empleado": fm_emp, "Sucursal": "Manual", "Turno": "Manual", "Tipo": fm_tipo, "Estado": fm_estado, "Distancia_m": 0.0, "Nota": fm_nota})
+                    insert_row("asistencia", {"Fecha": str(fm_fecha.strftime("%Y-%m-%d")), "Hora": str(fm_hora_str), "Empleado": str(fm_emp), "Sucursal": "Manual", "Turno": "Manual", "Tipo": str(fm_tipo), "Estado": str(fm_estado), "Distancia_m": 0.0, "Nota": str(fm_nota)})
                     st.rerun()
 
         with tab_perfil:
