@@ -624,56 +624,73 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
         with tab_analytics:
             st.markdown('<div class="main-title" style="font-size: 2rem;">📈 Analytics Globales</div>', unsafe_allow_html=True)
-            c_fil1, c_fil2 = st.columns([1,3])
-            filtro_a = c_fil1.selectbox("⏳ KPI Dashboard (Métricas Rápidas):", ["Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_a")
-            rango_stats = c_fil2.date_input("🗓️ Fechas del Dashboard:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_a == "Personalizado" else None
-            s_in, s_fi = get_fechas_filtro(filtro_a, rango_stats)
+            
+            # ---> NUEVA SECCIÓN DE ALERTAS POR SUCURSAL <---
+            st.write("---")
+            c_alrt1, c_alrt2 = st.columns([2, 1])
+            c_alrt1.markdown(f"### 🚨 Alertas del Día ({fecha_hoy})")
+            suc_alerta = c_alrt2.selectbox("🏢 Filtrar por Sucursal:", ["Todas las sucursales"] + list(lista_locales.keys()), key="filtro_alertas_dia")
 
             df_activos = load_df("asistencia")
-            if df_activos.empty: st.info("📊 Base de datos limpia.")
+            if df_activos.empty: 
+                st.info("📊 Base de datos limpia.")
             else:
                 df_activos = df_activos[df_activos["Empleado"].isin(lista_empleados)].copy()
                 df_activos['Fecha_Obj'] = pd.to_datetime(df_activos['Fecha'], errors='coerce')
                 
-                st.markdown(f"### 🟢 Personal Trabajando en Este Momento ({fecha_hoy})")
-                df_hoy_gerencia = df_activos[df_activos["Fecha"] == fecha_hoy].copy()
-                activos_en_local = []
-                if not df_hoy_gerencia.empty:
-                    if 'id' in df_hoy_gerencia.columns:
-                        df_hoy_gerencia['id_num'] = pd.to_numeric(df_hoy_gerencia['id'], errors='coerce')
-                        df_hoy_gerencia = df_hoy_gerencia.sort_values(by="id_num")
-                    for emp in lista_empleados:
-                        df_e_h = df_hoy_gerencia[df_hoy_gerencia["Empleado"] == emp]
-                        if not df_e_h.empty:
-                            ultimo_m = df_e_h.iloc[-1]
-                            if ultimo_m["Tipo"] == "Entrada":
-                                activos_en_local.append(f"• **{emp}** (Rol: {roles_empleados.get(emp, 'Staff')}) ➔ Sucursal: *{ultimo_m['Sucursal']}* (Ingresó a las {ultimo_m['Hora']})")
+                df_hoy_alertas = df_activos[df_activos["Fecha"] == fecha_hoy].copy()
                 
-                if activos_en_local:
-                    st.markdown("<div class='task-box'>" + "<br>".join(activos_en_local) + "</div>", unsafe_allow_html=True)
+                if suc_alerta != "Todas las sucursales":
+                    df_hoy_filtrado = df_hoy_alertas[df_hoy_alertas["Sucursal"] == suc_alerta]
                 else:
-                    st.info("ℹ️ No hay personal con entrada activa en este momento.")
+                    df_hoy_filtrado = df_hoy_alertas
 
-                st.write("---")
-                st.markdown(f"### 🚨 Alertas del Día ({fecha_hoy})")
-                df_hoy = df_activos[df_activos["Fecha"] == fecha_hoy]
-                entradas_hoy = df_hoy[df_hoy["Tipo"] == "Entrada"]["Empleado"].unique().tolist()
-                ausentes = df_hoy[df_hoy["Tipo"] == "Ausente"]["Empleado"].unique().tolist()
-                llegadas_tarde = df_hoy[(df_hoy["Tipo"] == "Entrada") & (df_hoy["Estado"] == "Tarde")]["Empleado"].unique().tolist()
-                sin_fichar = [e for e in lista_empleados if e not in entradas_hoy and e not in ausentes]
+                ult_suc_hoy = {}
+                if not df_hoy_filtrado.empty:
+                    if 'id' in df_hoy_filtrado.columns:
+                        df_hoy_filtrado['id_num'] = pd.to_numeric(df_hoy_filtrado['id'], errors='coerce')
+                        df_hoy_filtrado = df_hoy_filtrado.sort_values(by="id_num")
+                    for idx, row in df_hoy_filtrado.iterrows():
+                        ult_suc_hoy[row["Empleado"]] = row["Sucursal"]
 
+                entradas_hoy = df_hoy_filtrado[df_hoy_filtrado["Tipo"] == "Entrada"]["Empleado"].unique().tolist()
+                ausentes = df_hoy_filtrado[df_hoy_filtrado["Tipo"] == "Ausente"]["Empleado"].unique().tolist()
+                llegadas_tarde = df_hoy_filtrado[(df_hoy_filtrado["Tipo"] == "Entrada") & (df_hoy_filtrado["Estado"] == "Tarde")]["Empleado"].unique().tolist()
+                
+                entradas_hoy_global = df_hoy_alertas[df_hoy_alertas["Tipo"] == "Entrada"]["Empleado"].unique().tolist()
+                ausentes_global = df_hoy_alertas[df_hoy_alertas["Tipo"] == "Ausente"]["Empleado"].unique().tolist()
+                sin_fichar = [e for e in lista_empleados if e not in entradas_hoy_global and e not in ausentes_global]
+
+                def format_nombres(lista_emps):
+                    if not lista_emps: return "Ninguno"
+                    if suc_alerta == "Todas las sucursales":
+                        return "<br>".join([f"• {e} <small style='color:gray;'>({ult_suc_hoy.get(e, 'Desconocida')})</small>" for e in lista_emps])
+                    else:
+                        return "<br>".join([f"• {e}" for e in lista_emps])
+
+                txt_presentes = format_nombres(entradas_hoy)
+                txt_tardes = format_nombres(llegadas_tarde)
+                txt_ausentes = format_nombres(ausentes)
+                txt_sinfichar = "<br>".join([f"• {e}" for e in sin_fichar]) if sin_fichar else "Todos OK"
+                
                 c_h1, c_h2, c_h3, c_h4 = st.columns(4)
-                c_h1.markdown("<div class='task-box'><b>✅ Presentes</b><br>" + ("<br>".join(entradas_hoy) if entradas_hoy else "Nadie") + "</div>", unsafe_allow_html=True)
-                c_h2.markdown("<div class='alert-box' style='border-color: #F59E0B; background-color: #FFFBEB; color: #B45309;'><b>⚠️ Tarde</b><br>" + ("<br>".join(llegadas_tarde) if llegadas_tarde else "Ninguno") + "</div>", unsafe_allow_html=True)
-                c_h3.markdown("<div class='alert-box'><b>❌ Ausentes</b><br>" + ("<br>".join(ausentes) if ausentes else "Ninguno") + "</div>", unsafe_allow_html=True)
-                c_h4.markdown("<div class='validation-box'><b>⚪ Sin Fichar</b><br>" + ("<br>".join(sin_fichar) if sin_fichar else "Todos OK") + "</div>", unsafe_allow_html=True)
+                c_h1.markdown(f"<div class='task-box'><b>✅ Presentes</b><br>{txt_presentes}</div>", unsafe_allow_html=True)
+                c_h2.markdown(f"<div class='alert-box' style='border-color: #F59E0B; background-color: #FFFBEB; color: #B45309;'><b>⚠️ Tarde</b><br>{txt_tardes}</div>", unsafe_allow_html=True)
+                c_h3.markdown(f"<div class='alert-box'><b>❌ Ausentes</b><br>{txt_ausentes}</div>", unsafe_allow_html=True)
+                c_h4.markdown(f"<div class='validation-box'><b>⚪ Sin Fichar (Global)</b><br>{txt_sinfichar}</div>", unsafe_allow_html=True)
+                
+                st.write("---")
+                
+                c_fil1_2, c_fil2_2 = st.columns([1,3])
+                filtro_a = c_fil1_2.selectbox("⏳ KPI Dashboard (Métricas Rápidas):", ["Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_a")
+                rango_stats = c_fil2_2.date_input("🗓️ Fechas del Dashboard:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_a == "Personalizado" else None
+                s_in, s_fi = get_fechas_filtro(filtro_a, rango_stats)
                 
                 df_per = df_activos[(df_activos['Fecha_Obj'].dt.date >= s_in) & (df_activos['Fecha_Obj'].dt.date <= s_fi)]
                 if not df_per.empty:
                     atiempo, tardes, ausencias_tot = len(df_per[(df_per["Tipo"] == "Entrada") & (df_per["Estado"] == "A tiempo")]), len(df_per[(df_per["Tipo"] == "Entrada") & (df_per["Estado"] == "Tarde")]), len(df_per[df_per["Tipo"] == "Ausente"])
                     tot_ingresos = atiempo + tardes
                     
-                    st.write("---")
                     c1, c2, c3, c4 = st.columns(4)
                     c1.metric("🎯 Puntualidad Promedio", f"{round((atiempo / tot_ingresos) * 100, 1) if tot_ingresos > 0 else 0}%")
                     c2.metric("✅ Ingresos A Tiempo", atiempo)
@@ -695,65 +712,77 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     if local_descarga != "Todas las sucursales":
                         df_dl = df_dl[df_dl["Sucursal"] == local_descarga]
                     
-                    datos_horas = []
+                    datos_horas_dict = {}
+                    
                     if not df_dl.empty:
                         for emp in df_dl["Empleado"].unique():
                             df_e = df_dl[df_dl["Empleado"] == emp]
-                            for loc in df_e["Sucursal"].unique():
-                                df_e_loc = df_e[df_e["Sucursal"] == loc]
-                                horas_totales = 0.0
-                                pago_total = 0.0
+                            
+                            for f in df_e["Fecha"].unique():
+                                df_ef = df_e[df_e["Fecha"] == f].copy()
+                                df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
+                                df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
+                                ent = df_ef[df_ef["Tipo"] == "Entrada"]
+                                sal = df_ef[df_ef["Tipo"] == "Salida"]
                                 
-                                for f in df_e_loc["Fecha"].unique():
-                                    df_ef = df_e_loc[df_e_loc["Fecha"] == f].copy()
-                                    df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
-                                    df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
-                                    ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
+                                loc_dia = ent.iloc[0]["Sucursal"] if not ent.empty else (sal.iloc[0]["Sucursal"] if not sal.empty else "N/A")
+                                
+                                if local_descarga != "Todas las sucursales" and loc_dia != local_descarga:
+                                    continue
+                                
+                                horas_dia = 0.0
+                                if not ent.empty:
+                                    h_in = ent.iloc[0]["Hora_dt"]
+                                    turno_actual_eval = ent.iloc[0]["Turno"]
+                                    horas_dia = 6.0
                                     
-                                    horas_dia = 0.0
-                                    # ---> HORAS FIJAS AUTOMÁTICAS (MENOS TARDANZAS) <---
-                                    if not ent.empty:
-                                        h_in = ent.iloc[0]["Hora_dt"]
-                                        turno_actual_eval = ent.iloc[0]["Turno"]
-                                        horas_dia = 6.0
+                                    if turno_actual_eval in lista_turnos:
+                                        h_oficial_in_str = lista_turnos[turno_actual_eval].get("ingreso")
+                                        if h_oficial_in_str:
+                                            h_oficial_in = pd.to_datetime(h_oficial_in_str, errors='coerce')
+                                            if not pd.isna(h_oficial_in):
+                                                h_oficial_in = h_oficial_in.replace(year=h_in.year, month=h_in.month, day=h_in.day)
+                                                diff_tarde = (h_in - h_oficial_in).total_seconds() / 3600.0
+                                                if diff_tarde > 0:
+                                                    horas_dia -= diff_tarde
+                                    
+                                    if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
+                                        h_out = sal.iloc[-1]["Hora_dt"]
+                                        diff_trabajado = (h_out - h_in).total_seconds() / 3600.0
                                         
-                                        if turno_actual_eval in lista_turnos:
-                                            h_oficial_in_str = lista_turnos[turno_actual_eval].get("ingreso")
-                                            if h_oficial_in_str:
-                                                h_oficial_in = pd.to_datetime(h_oficial_in_str, errors='coerce')
-                                                if not pd.isna(h_oficial_in):
-                                                    h_oficial_in = h_oficial_in.replace(year=h_in.year, month=h_in.month, day=h_in.day)
-                                                    diff_tarde = (h_in - h_oficial_in).total_seconds() / 3600.0
-                                                    if diff_tarde > 0:
-                                                        horas_dia -= diff_tarde
-                                        
-                                        if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
-                                            h_out = sal.iloc[-1]["Hora_dt"]
-                                            diff_trabajado = (h_out - h_in).total_seconds() / 3600.0
-                                            diff_trabajado = diff_trabajado if diff_trabajado >= 0 else (diff_trabajado + 24.0)
-                                            
-                                            if diff_trabajado < horas_dia:
-                                                horas_dia = diff_trabajado
+                                        if diff_trabajado < 0:
+                                            if diff_trabajado > -12:
+                                                diff_trabajado = 0.0
+                                            else:
+                                                diff_trabajado += 24.0
+                                                
+                                        if diff_trabajado < horas_dia:
+                                            horas_dia = diff_trabajado
 
-                                        horas_dia = max(0.0, horas_dia)
-                                        horas_totales += horas_dia
-                                        
-                                        sueldo_hora = 0.0
-                                        for s in sueldos_historico:
-                                            if s["Empleado"] == emp and s["Fecha_Desde"] <= str(f) <= s["Fecha_Hasta"]:
-                                                sueldo_hora = float(s["Valor_Hora"])
-                                                break
-                                        
-                                        pago_total += (horas_dia * sueldo_hora)
+                                    horas_dia = max(0.0, horas_dia)
+                                    
+                                    sueldo_hora = 0.0
+                                    for s in sueldos_historico:
+                                        if s["Empleado"] == emp and s["Fecha_Desde"] <= str(f) <= s["Fecha_Hasta"]:
+                                            sueldo_hora = float(s["Valor_Hora"])
+                                            break
+                                    
+                                    key_datos = (emp, loc_dia)
+                                    if key_datos not in datos_horas_dict:
+                                        datos_horas_dict[key_datos] = {"Horas": 0.0, "Pago": 0.0}
+                                    datos_horas_dict[key_datos]["Horas"] += horas_dia
+                                    datos_horas_dict[key_datos]["Pago"] += (horas_dia * sueldo_hora)
                                 
-                                if horas_totales > 0:
-                                    datos_horas.append({
-                                        "Personal": emp, 
-                                        "Rol": roles_empleados.get(emp, "Staff"), 
-                                        "Sucursal": loc, 
-                                        "⏱️ Horas Computadas": round(horas_totales, 2),
-                                        "💰 Pago Est.": round(pago_total, 2)
-                                    })
+                    datos_horas = []
+                    for (emp, loc), vals in datos_horas_dict.items():
+                        if vals["Horas"] > 0:
+                            datos_horas.append({
+                                "Personal": emp, 
+                                "Rol": roles_empleados.get(emp, "Staff"), 
+                                "Sucursal": loc, 
+                                "⏱️ Horas Computadas": round(vals["Horas"], 2),
+                                "💰 Pago Est.": round(vals["Pago"], 2)
+                            })
                             
                     if datos_horas:
                         df_horas_final = pd.DataFrame(datos_horas).sort_values(by=["Personal", "⏱️ Horas Computadas"], ascending=[True, False])
@@ -788,7 +817,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     else:
                         st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
 
-        # ---> NUEVA PESTAÑA: CIERRES DE CAJA EN GERENCIA <---
         with tab_caja:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💸 Control de Caja</div>', unsafe_allow_html=True)
             
@@ -1104,12 +1132,16 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     
                     e_atiempo, e_tardes, e_ausencias = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "A tiempo")]), len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "Tarde")]), len(df_e_p[df_e_p["Tipo"] == "Ausente"])
                     horas_totales = 0.0
+                    
+                    # Unificador cronológico también para el Dossier Personal
                     for f in df_e_p["Fecha"].unique():
                         df_ef = df_e_p[df_e_p["Fecha"] == f].copy()
                         df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
                         df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
-                        ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
+                        ent = df_ef[df_ef["Tipo"] == "Entrada"]
+                        sal = df_ef[df_ef["Tipo"] == "Salida"]
                         
+                        horas_dia = 0.0
                         if not ent.empty:
                             h_in = ent.iloc[0]["Hora_dt"]
                             turno_actual_eval = ent.iloc[0]["Turno"]
@@ -1128,8 +1160,13 @@ elif pestaña == "⚙️ Panel de Gerencia":
                             if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
                                 h_out = sal.iloc[-1]["Hora_dt"]
                                 diff_trabajado = (h_out - h_in).total_seconds() / 3600.0
-                                diff_trabajado = diff_trabajado if diff_trabajado >= 0 else (diff_trabajado + 24.0)
                                 
+                                if diff_trabajado < 0:
+                                    if diff_trabajado > -12:
+                                        diff_trabajado = 0.0
+                                    else:
+                                        diff_trabajado += 24.0
+                                        
                                 if diff_trabajado < horas_dia:
                                     horas_dia = diff_trabajado
 
