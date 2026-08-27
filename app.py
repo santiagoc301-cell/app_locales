@@ -52,7 +52,7 @@ def init_connection():
 
 supabase = init_connection()
 
-# MODO DIAGNÓSTICO ACTIVADO: Ahora los errores de base de datos saltan a la pantalla
+# MODO DIAGNÓSTICO ACTIVADO
 def load_json(key_name, default_data):
     try:
         res = supabase.table('app_data').select('data').eq('id', key_name).execute()
@@ -61,7 +61,7 @@ def load_json(key_name, default_data):
             supabase.table('app_data').insert({'id': key_name, 'data': default_data}).execute()
             return default_data
     except Exception as e:
-        st.error(f"🚨 Error cargando configuración '{key_name}': {e}")
+        st.error(f"🚨 Error cargando '{key_name}': {e}")
         st.stop()
 
 def save_json(key_name, data):
@@ -70,7 +70,7 @@ def save_json(key_name, data):
         if res.data: supabase.table('app_data').update({'data': data}).eq('id', key_name).execute()
         else: supabase.table('app_data').insert({'id': key_name, 'data': data}).execute()
     except Exception as e:
-        st.error(f"🚨 Error guardando configuración '{key_name}': {e}")
+        st.error(f"🚨 Error guardando '{key_name}': {e}")
         st.stop()
 
 def load_df(table_name):
@@ -207,11 +207,15 @@ if pestaña == "⏱️ Portal del Empleado":
                         s_emp = st.selectbox("Compañero:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
                         s_pts = st.number_input("Puntos (+/-):", value=0, step=1)
                         s_mot = st.text_input("Motivo:")
+                        
+                        # ---> ACÁ ESTABA EL ERROR SILENCIOSO QUE NO AVISABA <---
                         if st.form_submit_button("Enviar a Gerencia"):
-                            if s_emp != "Seleccionar..." and s_pts != 0 and s_mot:
-                                lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot, "Autor": empleado_en_celu, "Estado": "Pendiente"})
+                            if s_emp == "Seleccionar..." or s_pts == 0 or not s_mot.strip():
+                                st.warning("⚠️ ¡Completá todos los campos! (Elegí un compañero, poné un puntaje distinto a 0 y escribí el motivo).")
+                            else:
+                                lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot.strip(), "Autor": empleado_en_celu, "Estado": "Pendiente"})
                                 save_json("ajustes_puntos", lista_puntos)
-                                st.success("Evaluación enviada a Gerencia.")
+                                st.success("✅ Evaluación enviada a Gerencia correctamente.")
 
             mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu]]
             if mensajes_usuario:
@@ -314,10 +318,17 @@ if pestaña == "⏱️ Portal del Empleado":
                 tipo_rep = st.selectbox("Tipo:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
                 implicado = st.selectbox("Compañero implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu]) if tipo_rep == "Incumplimiento de un compañero" else "N/A"
                 detalle_rep = st.text_area("Detalle:")
-                if st.button("📤 Enviar a Gerencia") and detalle_rep:
-                    reportes_log.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Emisor": empleado_en_celu, "Tipo": tipo_rep, "Implicado": implicado, "Detalle": detalle_rep, "Estado": "Pendiente de lectura"})
-                    save_json("reportes", reportes_log)
-                    st.success("¡Reporte enviado confidencialmente!")
+                
+                # ---> OTRO ERROR SILENCIOSO ARREGLADO <---
+                if st.button("📤 Enviar a Gerencia"):
+                    if not detalle_rep.strip():
+                        st.warning("⚠️ Error: Tenés que escribir el detalle del reporte para poder enviarlo.")
+                    elif tipo_rep == "Incumplimiento de un compañero" and implicado == "Seleccionar...":
+                        st.warning("⚠️ Error: Tenés que seleccionar al compañero implicado.")
+                    else:
+                        reportes_log.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Emisor": empleado_en_celu, "Tipo": tipo_rep, "Implicado": implicado, "Detalle": detalle_rep.strip(), "Estado": "Pendiente de lectura"})
+                        save_json("reportes", reportes_log)
+                        st.success("✅ ¡Reporte enviado confidencialmente a Gerencia!")
 
             tareas_totales = tareas_roles.get(rol_empleado, []) + tareas_individuales.get(empleado_en_celu, [])
             if tareas_totales:
@@ -512,10 +523,16 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 ap_fecha = c_b2.date_input("Fecha:", ahora.date())
                 ap_puntos = c_b3.number_input("Puntos (+/-):", value=0, step=1)
                 ap_motivo = c_b4.text_input("Motivo:")
-                if st.form_submit_button("Aplicar a Puntuación") and ap_emp != "Seleccionar...":
-                    lista_puntos.append({"Fecha": ap_fecha.strftime("%Y-%m-%d"), "Empleado": ap_emp, "Puntos": ap_puntos, "Motivo": ap_motivo, "Autor": "Gerencia", "Estado": "Aprobada"})
-                    save_json("ajustes_puntos", lista_puntos)
-                    st.rerun()
+                
+                # ---> TAMBIÉN ARREGLADO ACÁ EN GERENCIA <---
+                if st.form_submit_button("Aplicar a Puntuación"):
+                    if ap_emp == "Seleccionar..." or ap_puntos == 0 or not ap_motivo.strip():
+                        st.warning("⚠️ Error: Faltan completar datos (Asegurate de elegir un empleado, que los puntos no sean 0 y escribir un motivo).")
+                    else:
+                        lista_puntos.append({"Fecha": ap_fecha.strftime("%Y-%m-%d"), "Empleado": ap_emp, "Puntos": ap_puntos, "Motivo": ap_motivo.strip(), "Autor": "Gerencia", "Estado": "Aprobada"})
+                        save_json("ajustes_puntos", lista_puntos)
+                        st.success("✅ Bono/Multa aplicado y guardado en la nube.")
+                        st.rerun()
 
         with tab_auditoria_tareas:
             st.subheader("🛡️ Tareas Pendientes de Aprobación")
