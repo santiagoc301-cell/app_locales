@@ -209,7 +209,7 @@ if pestaña == "⏱️ Portal del Empleado":
                     if m['destinatario'] == 'Todos': st.markdown(f"<div class='msg-global'>🏷️ <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
                     else: st.markdown(f"<div class='msg-individual'>📩 <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
 
-            with st.expander("📍 Panel de Asistencia", expanded=True):
+            with st.expander("📍 Smart Check-In", expanded=True):
                 df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy() if not df_punt.empty else pd.DataFrame()
                 estado_laboral = "Fuera"
                 datos_turno_activo = {}
@@ -222,78 +222,94 @@ if pestaña == "⏱️ Portal del Empleado":
                     ultimo_reg = df_hoy.iloc[-1]
                     if ultimo_reg["Tipo"] == "Entrada":
                         estado_laboral = "Adentro"
-                        datos_turno_activo = {"Sucursal": ultimo_reg["Sucursal"], "Turno": ultimo_reg["Turno"]}
+                        datos_turno_activo = {"Sucursal": ultimo_reg["Sucursal"], "Turno": ultimo_reg["Turno"], "Distancia_m": ultimo_reg.get("Distancia_m", 0.0)}
                     else:
                         st.info("📋 Ya tenés turnos finalizados hoy. Podés registrar un nuevo ingreso si es necesario.")
 
+                # ==========================================================
+                # 🤖 MOTOR DE AUTODETECCIÓN (SMART CHECK-IN)
+                # ==========================================================
                 if estado_laboral == "Fuera":
-                    st.markdown("### 👋 Iniciar Nuevo Turno")
-                    col_sel1, col_sel2 = st.columns(2)
-                    with col_sel1: local_seleccionado = st.selectbox("Tienda actual:", ["Seleccionar..."] + list(lista_locales.keys()))
-                    with col_sel2: turno_seleccionado = st.selectbox("Horario:", ["Seleccionar..."] + list(lista_turnos.keys()))
-                    nota_empleado = st.text_input("📝 Dejar justificación (Opcional):")
-                    tipo_movimiento = "Entrada"
-                else:
-                    st.markdown("### 🏃‍♂️ Finalizar Turno Activo")
-                    local_seleccionado = datos_turno_activo.get("Sucursal", "Seleccionar...")
-                    turno_seleccionado = datos_turno_activo.get("Turno", "Seleccionar...")
-                    st.success(f"🟢 Estás trabajando en **{local_seleccionado}** (Horario: {turno_seleccionado}).")
-                    nota_empleado = st.text_input("📝 Novedad al salir (Opcional):")
-                    tipo_movimiento = "Salida"
-
-                if local_seleccionado != "Seleccionar..." and turno_seleccionado != "Seleccionar...":
-                    en_rango = True
-                    wifi_aprobado = True
+                    st.markdown("### 🤖 Radar Automático")
+                    
+                    local_detectado = None
                     distancia_real = 0.0
-                    radio_permitido = int(config_app.get("radio_metros", 50))
+                    metodo_det = ""
+                    ubicacion = get_geolocation() if config_app.get("verificar_gps", True) else None
 
-                    if config_app.get("verificar_gps", True):
-                        ubicacion = get_geolocation()
+                    # 1. Escaneo de Wi-Fi
+                    if config_app.get("verificar_wifi", False) and client_ip and client_ip != 'Error':
+                        for loc, d_loc in lista_locales.items():
+                            if d_loc.get("ip", "").strip() == client_ip:
+                                local_detectado = loc
+                                metodo_det = "📶 Red Wi-Fi de la tienda"
+                                break
+
+                    # 2. Escaneo Satelital (Si falla el Wi-Fi o está apagado)
+                    if not local_detectado and config_app.get("verificar_gps", True):
                         if ubicacion and 'coords' in ubicacion:
                             coord_usuario = (ubicacion['coords']['latitude'], ubicacion['coords']['longitude'])
-                            coord_local = (lista_locales[local_seleccionado]["lat"], lista_locales[local_seleccionado]["lon"])
-                            distancia_real = geodesic(coord_usuario, coord_local).meters
-                            if distancia_real <= radio_permitido:
-                                st.markdown(f"<div class='validation-box'>✅ <b>GPS Aprobado:</b> Estás en el local ({distancia_real:.1f} m).</div>", unsafe_allow_html=True)
-                            else:
-                                en_rango = False
-                                st.markdown(f"<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Fuera de rango:</b> Estás a {distancia_real:.1f} m. (Límite: {radio_permitido}m).</div>", unsafe_allow_html=True)
+                            for loc, d_loc in lista_locales.items():
+                                coord_local = (d_loc["lat"], d_loc["lon"])
+                                dist = geodesic(coord_usuario, coord_local).meters
+                                if dist <= int(config_app.get("radio_metros", 50)):
+                                    local_detectado = loc
+                                    distancia_real = dist
+                                    metodo_det = f"🛰️ GPS Satelital ({dist:.1f} metros)"
+                                    break
+                    
+                    if local_detectado:
+                        # 3. Detectar el Turno (El más cercano a la hora actual)
+                        turno_detectado = None
+                        min_diff = float('inf')
+                        for t_name, t_data in lista_turnos.items():
+                            try:
+                                h_ing = pd.to_datetime(t_data["ingreso"]).time()
+                                dt_ing = datetime.datetime.combine(ahora.date(), h_ing).replace(tzinfo=zona_arg)
+                                diff = abs((ahora - dt_ing).total_seconds())
+                                if diff < min_diff:
+                                    min_diff = diff
+                                    turno_detectado = t_name
+                            except: pass
+                            
+                        st.markdown(f"<div class='task-box'>✅ <b>Sucursal Detectada:</b> {local_detectado}<br><small>Verificado por: {metodo_det}</small></div>", unsafe_allow_html=True)
+                        if turno_detectado:
+                            st.markdown(f"<div class='super-box'>🕒 <b>Turno Asignado:</b> {turno_detectado}<br><small>({lista_turnos[turno_detectado]['ingreso']} a {lista_turnos[turno_detectado]['salida']})</small></div>", unsafe_allow_html=True)
+                        
+                        nota_empleado = st.text_input("📝 Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
+                        
+                        if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True) and turno_detectado:
+                            hora_t_str = lista_turnos[turno_detectado]["ingreso"]
+                            hora_t_obj = pd.to_datetime(hora_t_str).time()
+                            dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                            estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
+
+                            insert_row("asistencia", {"Fecha": fecha_hoy, "Hora": hora_hoy, "Empleado": empleado_en_celu, "Sucursal": local_detectado, "Turno": turno_detectado, "Tipo": "Entrada", "Estado": estado_llegada, "Distancia_m": round(distancia_real, 1), "Nota": nota_empleado})
+                            
+                            msg_final = f"¡Entrada registrada a las {hora_hoy}!"
+                            if estado_llegada == "Tarde": msg_final += f"\n\n🔴 {config_app.get('mensaje_llegada_tarde')}"
+                            st.session_state['fichaje_exitoso'] = msg_final
+                            st.rerun()
+                    else:
+                        if config_app.get("verificar_gps", True) and (not ubicacion or 'coords' not in ubicacion):
+                            st.info("⏳ Detectando ubicación satelital... Por favor, permití el acceso al GPS en tu celular.")
                         else:
-                            en_rango = False
-                            st.markdown("<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⏳ <b>Obteniendo GPS...</b> (Activá la ubicación)</div>", unsafe_allow_html=True)
+                            st.error(f"❌ Estás fuera del rango de todas las sucursales. Acercate al local para habilitar el fichaje.")
 
-                    if config_app.get("verificar_wifi", False):
-                        ip_tienda = lista_locales[local_seleccionado].get("ip", "").strip()
-                        if not ip_tienda: wifi_aprobado = False
-                        elif client_ip and client_ip == ip_tienda: st.markdown("<div class='validation-box'>✅ <b>Red Aprobada:</b> Conectado al Wi-Fi del local.</div>", unsafe_allow_html=True)
-                        else: wifi_aprobado = False
-
-                    puede_fichar = True
-                    if config_app.get("verificar_wifi", False) and not wifi_aprobado: puede_fichar = False
-                    if config_app.get("verificar_gps", True) and not en_rango: puede_fichar = False
-
-                    if puede_fichar:
-                        st.write("---")
-                        if tipo_movimiento == "Entrada":
-                            if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
-                                hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
-                                hora_t_obj = pd.to_datetime(hora_t_str).time()
-                                dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                                estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
-
-                                insert_row("asistencia", {"Fecha": fecha_hoy, "Hora": hora_hoy, "Empleado": empleado_en_celu, "Sucursal": local_seleccionado, "Turno": turno_seleccionado, "Tipo": "Entrada", "Estado": estado_llegada, "Distancia_m": round(distancia_real, 1), "Nota": nota_empleado})
-                                
-                                msg_final = f"¡Entrada registrada a las {hora_hoy}!"
-                                if estado_llegada == "Tarde": msg_final += f"\n\n🔴 {config_app.get('mensaje_llegada_tarde')}"
-                                for a in alertas_ingreso:
-                                    if a['destinatario'] in ['Todos', empleado_en_celu]: msg_final += f"\n\n📩 {a['texto']}"
-                                st.session_state['fichaje_exitoso'] = msg_final
-                                st.rerun()
-                        else:
-                            if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
-                                insert_row("asistencia", {"Fecha": fecha_hoy, "Hora": hora_hoy, "Empleado": empleado_en_celu, "Sucursal": local_seleccionado, "Turno": turno_seleccionado, "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(distancia_real, 1), "Nota": nota_empleado})
-                                st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
-                                st.rerun() 
+                else:
+                    # ==========================================================
+                    # REGISTRO DE SALIDA AUTOMÁTICO
+                    # ==========================================================
+                    st.markdown("### 🏃‍♂️ Finalizar Turno")
+                    local_actual = datos_turno_activo.get("Sucursal", "N/A")
+                    turno_actual = datos_turno_activo.get("Turno", "N/A")
+                    st.success(f"🟢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
+                    nota_empleado = st.text_input("📝 Novedad al salir (Opcional):")
+                    
+                    if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
+                        insert_row("asistencia", {"Fecha": fecha_hoy, "Hora": hora_hoy, "Empleado": empleado_en_celu, "Sucursal": local_actual, "Turno": turno_actual, "Tipo": "Salida", "Estado": "Salida", "Distancia_m": datos_turno_activo.get("Distancia_m", 0.0), "Nota": nota_empleado})
+                        st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
+                        st.rerun() 
 
             with st.expander("🛑 Buzón de Reportes Confidenciales", expanded=False):
                 tipo_rep = st.selectbox("Tipo:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
@@ -398,7 +414,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     c3.metric("⚠️ Llegadas Tarde", tardes)
                     c4.metric("❌ Inasistencias", ausencias_tot)
                     
-                    # --- NUEVO PANEL DE RECUENTO DE HORAS Y EXPORTACIONES ---
                     st.write("---")
                     st.markdown("### ⏱️ Recuento de Horas y Exportaciones")
                     st.write("Configurá los filtros acá abajo para calcular las horas de tu equipo y descargar las planillas para liquidación.")
@@ -418,7 +433,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     if not df_dl.empty:
                         for emp in df_dl["Empleado"].unique():
                             df_e = df_dl[df_dl["Empleado"] == emp]
-                            # Agrupamos también por sucursal para que sepas en qué local metieron esas horas
                             for loc in df_e["Sucursal"].unique():
                                 df_e_loc = df_e[df_e["Sucursal"] == loc]
                                 horas_totales = 0.0
@@ -450,11 +464,9 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         st.write("⬇️ **Descargar Archivos (Excel/CSV)**")
                         c_btn1, c_btn2 = st.columns(2)
                         
-                        # 1. Reporte de horas totales
                         csv_horas = df_horas_final.to_csv(index=False).encode('utf-8')
                         c_btn1.download_button(label="⏱️ Descargar Recuento de Horas", data=csv_horas, file_name=f"HorasTotales_{local_descarga}_{fecha_in_dl}.csv", mime="text/csv", use_container_width=True)
 
-                        # 2. Reporte de Fichajes Detallados (Minuto a minuto)
                         df_asist_dl = df_dl.copy()
                         df_asist_dl['Hora_dt'] = pd.to_datetime(df_asist_dl['Hora'], errors='coerce')
                         df_asist_dl = df_asist_dl.sort_values(by=["Fecha", "Hora_dt"])
@@ -670,6 +682,13 @@ elif pestaña == "⚙️ Panel de Gerencia":
             with col_l1:
                 st.subheader("📍 Tiendas Físicas")
                 for loc, d_loc in lista_locales.items(): st.write(f"- **{loc}** | IP: `{d_loc.get('ip', 'Ninguna')}`")
+                
+                st.markdown("---")
+                if client_ip and client_ip != 'Error':
+                    st.info(f"💡 **Ayuda de Configuración:** La IP actual de tu conexión es `{client_ip}`. (Si estás físicamente en la sucursal nueva, podés copiar y pegar este número abajo).")
+                else:
+                    st.info("💡 Buscando tu IP actual para ayudarte a configurar...")
+
                 n_loc, lat_loc, lon_loc, ip_loc = st.text_input("Nueva Tienda:"), st.number_input("Lat:", format="%.6f"), st.number_input("Lon:", format="%.6f"), st.text_input("IP Wi-Fi:")
                 if st.button("➕ Crear Tienda") and n_loc: lista_locales[n_loc] = {"lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}; save_json("locales", lista_locales); st.rerun()
                 borrar_loc = st.selectbox("Eliminar Tienda:", ["Seleccionar..."] + list(lista_locales.keys()))
