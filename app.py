@@ -16,14 +16,12 @@ st.set_page_config(page_title="Gestión Corporativa", page_icon="🛍️", layou
 # ==========================================
 st.markdown("""
 <style>
-    /* ---> MODO MARCA BLANCA TOTAL (EXTREMO) <--- */
     [data-testid="stToolbar"] { display: none !important; } 
     .viewerBadge_container { display: none !important; } 
     footer { display: none !important; } 
     #MainMenu { display: none !important; } 
     [data-testid="collapsedControl"] { display: none !important; }
 
-    /* ---> DISEÑO DE LA APP <--- */
     .main-title { font-size: 2.2rem; font-weight: 800; color: #111827; margin-bottom: 0.5rem; text-align: center; text-transform: uppercase; letter-spacing: -0.5px;}
     .sub-text { font-size: 1.15rem; color: #4B5563; margin-bottom: 2rem; }
     div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #2563EB; transition: transform 0.2s ease-in-out;}
@@ -140,6 +138,7 @@ alertas_ingreso = load_json("alertas_ingreso", [])
 lista_intentos = load_json("intentos_seguridad", [])
 lista_puntos = load_json("ajustes_puntos", [])
 reportes_log = load_json("reportes", [])
+salidas_pendientes = load_json("salidas_pendientes", [])
 
 ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A"]
 
@@ -240,7 +239,6 @@ if pestaña == "⏱️ Portal del Empleado":
             puntos_actuales = config_app["reglas_puntos"]["base"]
             d1_mes = ahora.date().replace(day=1)
             
-            # --- CÁLCULOS PRINCIPALES ---
             df_punt = load_df("asistencia")
             if not df_punt.empty:
                 df_punt['F_Obj'] = pd.to_datetime(df_punt['Fecha'], errors='coerce').dt.date
@@ -253,8 +251,8 @@ if pestaña == "⏱️ Portal del Empleado":
                 puntos_actuales += pd.to_numeric(df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Estado"] == "Aprobada") & (df_tl['F_Obj'] >= d1_mes)]["Puntos"], errors='coerce').fillna(0).astype(int).sum()
             
             puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada" and datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() >= d1_mes])
-            
-            # --- DETECCIÓN DE TURNO ACTIVO ---
+
+            # ---> DETECCIÓN DE TURNO Y SUCURSAL GLOBAL <---
             df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy() if not df_punt.empty else pd.DataFrame()
             estado_laboral = "Fuera"
             datos_turno_activo = {}
@@ -269,45 +267,75 @@ if pestaña == "⏱️ Portal del Empleado":
                     try: dist_guardada = float(ultimo_reg.get("Distancia_m", 0.0))
                     except: dist_guardada = 0.0
                     datos_turno_activo = {"Sucursal": str(ultimo_reg["Sucursal"]), "Turno": str(ultimo_reg["Turno"]), "Distancia_m": dist_guardada}
-
+            
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts en {ahora.strftime('%B')})</div></div>", unsafe_allow_html=True)
 
-            # ---> NUEVO PANEL DEL CAJERO (CON AUDITORÍA DE SALIDAS) <---
+            # ---> PANEL DEL CAJERO (FILTRADO INTELIGENTE POR SUCURSAL) <---
             if rol_empleado in ["Cajero", "Encargado"]:
                 with st.expander("👑 Panel de Responsable de Turno", expanded=False):
                     st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas y asignar puntos a tus compañeros.</div>", unsafe_allow_html=True)
                     
                     st.markdown("#### 🕒 Auditar Salida de Compañero")
-                    st.write("Si alguien se olvidó de fichar o se retiró antes, cargá su salida manualmente para que quede registrada en Gerencia.")
-                    with st.form("form_sup_salida"):
-                        c_s1, c_s2 = st.columns(2)
-                        s_emp_salida = c_s1.selectbox("Compañero a retirar:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
-                        s_hora_salida = c_s2.time_input("Hora exacta de salida:", ahora.time())
-                        s_motivo_salida = st.text_input("Nota de Auditoría (Ej: 'Se fue temprano por el médico'):")
+                    if estado_laboral == "Adentro":
+                        suc_cajero = datos_turno_activo.get("Sucursal")
+                        st.write(f"📍 Estás auditando la sucursal: **{suc_cajero}**")
                         
-                        if st.form_submit_button("Fichar Salida"):
-                            if s_emp_salida == "Seleccionar...":
-                                st.warning("⚠️ Elegí un compañero de la lista.")
-                            else:
-                                hora_str_salida = s_hora_salida.strftime("%I:%M:%S %p")
-                                nota_final = f"[Auditado por {empleado_en_celu}] {s_motivo_salida}"
-                                loc_aud = datos_turno_activo.get("Sucursal", "Manual") if estado_laboral == "Adentro" else "Manual"
-                                turn_aud = datos_turno_activo.get("Turno", "Manual") if estado_laboral == "Adentro" else "Manual"
+                        # Filtra a los que marcaron entrada en la MISMA sucursal hoy
+                        auditables = []
+                        df_hoy_todos = df_punt[df_punt["Fecha"] == fecha_hoy] if not df_punt.empty else pd.DataFrame()
+                        
+                        if not df_hoy_todos.empty:
+                            if 'id' in df_hoy_todos.columns:
+                                df_hoy_todos['id_num'] = pd.to_numeric(df_hoy_todos['id'], errors='coerce')
+                                df_hoy_todos = df_hoy_todos.sort_values(by="id_num")
+                            for e_comp in lista_empleados:
+                                if e_comp != empleado_en_celu:
+                                    df_c = df_hoy_todos[df_hoy_todos["Empleado"] == e_comp]
+                                    if not df_c.empty:
+                                        ult_c = df_c.iloc[-1]
+                                        # Verifica que tengan entrada activa y que la sucursal sea la misma
+                                        if ult_c["Tipo"] == "Entrada" and str(ult_c["Sucursal"]) == str(suc_cajero):
+                                            auditables.append(e_comp)
+                        
+                        if auditables:
+                            with st.form("form_sup_salida"):
+                                c_s1, c_s2 = st.columns(2)
+                                s_emp_salida = c_s1.selectbox("Compañero a retirar:", ["Seleccionar..."] + auditables)
+                                s_hora_salida = c_s2.time_input("Hora exacta de salida:", ahora.time())
+                                s_motivo_salida = st.text_input("Nota de Auditoría (Ej: 'Se fue temprano por el médico'):")
                                 
-                                insert_row("asistencia", {
-                                    "Fecha": str(fecha_hoy), 
-                                    "Hora": str(hora_str_salida), 
-                                    "Empleado": str(s_emp_salida), 
-                                    "Sucursal": str(loc_aud), 
-                                    "Turno": str(turn_aud), 
-                                    "Tipo": "Salida", 
-                                    "Estado": "Salida", 
-                                    "Distancia_m": 0.0, 
-                                    "Nota": str(nota_final)
-                                })
-                                st.success(f"✅ Salida de {s_emp_salida} registrada correctamente a las {hora_str_salida}.")
-                                st.rerun()
+                                if st.form_submit_button("Fichar Salida"):
+                                    if s_emp_salida == "Seleccionar...":
+                                        st.warning("⚠️ Elegí un compañero de la lista.")
+                                    elif not s_motivo_salida.strip():
+                                        st.warning("⚠️ Escribí el motivo en la nota (Obligatorio para la auditoría).")
+                                    else:
+                                        hora_str_salida = s_hora_salida.strftime("%I:%M:%S %p")
+                                        nota_final = f"[Auditado por {empleado_en_celu}] {s_motivo_salida}"
+                                        
+                                        # Busca el turno exacto del auditado
+                                        turno_del_auditado = "Manual"
+                                        df_aud_turno = df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Entrada")]
+                                        if not df_aud_turno.empty:
+                                            turno_del_auditado = df_aud_turno.iloc[-1]["Turno"]
+                                        
+                                        salidas_pendientes.append({
+                                            "Fecha": str(fecha_hoy), 
+                                            "Hora": str(hora_str_salida), 
+                                            "Empleado": str(s_emp_salida), 
+                                            "Sucursal": str(suc_cajero), 
+                                            "Turno": str(turno_del_auditado), 
+                                            "Nota": str(nota_final),
+                                            "Autor": str(empleado_en_celu)
+                                        })
+                                        save_json("salidas_pendientes", salidas_pendientes)
+                                        st.success(f"✅ Solicitud de salida de {s_emp_salida} enviada a Gerencia para revisión.")
+                                        st.rerun()
+                        else:
+                            st.info("ℹ️ No hay otros compañeros trabajando en esta sucursal en este momento.")
+                    else:
+                        st.warning("⚠️ Para auditar la salida de un compañero, primero tenés que registrar tu propia ENTRADA en la sucursal.")
 
                     st.markdown("---")
                     st.markdown("#### 🏆 Asignar Bono o Multa")
@@ -672,7 +700,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                     df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                                     ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                                     
-                                    # ---> NUEVO SISTEMA DE FANTASMA (6 HORAS POR DEFECTO) <---
                                     if not ent.empty:
                                         if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
                                             h_in = ent.iloc[0]["Hora_dt"]
@@ -694,7 +721,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
                                             horas_totales += diff
                                         else:
-                                            # Ficharon entrada pero no marcaron salida: 6 horas de base aseguradas.
                                             horas_totales += 6.0
                                 
                                 if horas_totales > 0:
@@ -817,6 +843,26 @@ elif pestaña == "⚙️ Panel de Gerencia":
 
         with tab_auditoria_horas:
             st.markdown('<div class="highlight-edit"><b>✏️ AUDITORÍA DE HORARIOS (NUBE)</b></div>', unsafe_allow_html=True)
+            
+            st.subheader("🛡️ Salidas Pendientes (Reportadas por Cajeros)")
+            if salidas_pendientes:
+                for idx, sp in enumerate(salidas_pendientes):
+                    c_sp1, c_sp2, c_sp3 = st.columns([4, 1, 1])
+                    c_sp1.markdown(f"**{sp['Autor']}** retiró a **{sp['Empleado']}** a las {sp['Hora']} ({sp['Nota']})")
+                    if c_sp2.button("✅ Aprobar", key=f"apr_sal_{idx}"):
+                        insert_row("asistencia", {"Fecha": sp["Fecha"], "Hora": sp["Hora"], "Empleado": sp["Empleado"], "Sucursal": sp["Sucursal"], "Turno": sp["Turno"], "Tipo": "Salida", "Estado": "Salida", "Distancia_m": 0.0, "Nota": sp["Nota"]})
+                        salidas_pendientes.pop(idx)
+                        save_json("salidas_pendientes", salidas_pendientes)
+                        st.rerun()
+                    if c_sp3.button("❌ Rechazar", key=f"rec_sal_{idx}"):
+                        salidas_pendientes.pop(idx)
+                        save_json("salidas_pendientes", salidas_pendientes)
+                        st.rerun()
+            else:
+                st.info("No hay solicitudes de salida pendientes de revisión.")
+
+            st.write("---")
+            
             col_ed1, col_ed2 = st.columns(2)
             fecha_edicion = col_ed1.date_input("Fecha a auditar:", key="fecha_edit")
             emp_edicion = col_ed2.selectbox("Personal a auditar:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_edit")
@@ -872,7 +918,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
                         ent, sal = df_ef[df_ef["Tipo"] == "Entrada"], df_ef[df_ef["Tipo"] == "Salida"]
                         
-                        # ---> NUEVO SISTEMA FANTASMA PARA EL PERFIL <---
                         if not ent.empty:
                             if not sal.empty and sal.iloc[-1]["Estado"] != "Salida (Fuera de Rango)":
                                 h_in, h_out = ent.iloc[0]["Hora_dt"], sal.iloc[-1]["Hora_dt"]
@@ -941,6 +986,11 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                     if p.get('Empleado') == emp_mod: p['Empleado'] = nn
                                     if p.get('Autor') == emp_mod: p['Autor'] = nn
                                 save_json("ajustes_puntos", lista_puntos)
+                                
+                                for sp in salidas_pendientes:
+                                    if sp.get('Empleado') == emp_mod: sp['Empleado'] = nn
+                                    if sp.get('Autor') == emp_mod: sp['Autor'] = nn
+                                save_json("salidas_pendientes", salidas_pendientes)
                                 
                                 for r in reportes_log:
                                     if r.get('Emisor') == emp_mod: r['Emisor'] = nn
@@ -1204,6 +1254,7 @@ elif pestaña == "💻 Dueño del Software":
                 save_json("intentos_seguridad", [])
                 save_json("ajustes_puntos", [])
                 save_json("reportes", [])
+                save_json("salidas_pendientes", [])
                 
                 supabase.table("asistencia").delete().neq("id", 0).execute()
                 supabase.table("tareas_log").delete().neq("id", 0).execute()
