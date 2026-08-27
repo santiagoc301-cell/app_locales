@@ -16,9 +16,9 @@ st.set_page_config(page_title="Gestión Corporativa - Retail", page_icon="🛍�
 st.markdown("""
 <style>
     /* ---> MODO MARCA BLANCA TOTAL (EXTREMO) <--- */
-    [data-testid="stToolbar"] { display: none !important; } /* Borra el menú de arriba a la derecha */
-    .viewerBadge_container { display: none !important; } /* Borra la corona y el logo rojo de abajo */
-    footer { display: none !important; } /* Borra la marca de agua del final */
+    [data-testid="stToolbar"] { display: none !important; }
+    .viewerBadge_container { display: none !important; }
+    footer { display: none !important; }
     #MainMenu { display: none !important; }
 
     /* ---> DISEÑO DE LA APP <--- */
@@ -326,41 +326,51 @@ if pestaña == "⏱️ Portal del Empleado":
                                     break
                     
                     if local_detectado:
-                        turno_detectado = None
-                        min_diff = float('inf')
-                        for t_name, t_data in lista_turnos.items():
-                            try:
-                                h_ing = pd.to_datetime(t_data["ingreso"]).time()
-                                dt_ing = datetime.datetime.combine(ahora.date(), h_ing).replace(tzinfo=zona_arg)
-                                diff = abs((ahora - dt_ing).total_seconds())
-                                if diff < min_diff:
-                                    min_diff = diff
-                                    turno_detectado = t_name
-                            except: pass
-                            
+                        # --- NUEVA LÓGICA DE SELECCIÓN DE TURNO HÍBRIDA ---
+                        nombres_turnos = list(lista_turnos.keys())
+                        idx_defecto = 0
+                        if nombres_turnos:
+                            min_diff = float('inf')
+                            for idx, t_name in enumerate(nombres_turnos):
+                                try:
+                                    h_ing = pd.to_datetime(lista_turnos[t_name]["ingreso"]).time()
+                                    dt_ing = datetime.datetime.combine(ahora.date(), h_ing).replace(tzinfo=zona_arg)
+                                    diff = abs((ahora - dt_ing).total_seconds())
+                                    if diff < min_diff:
+                                        min_diff = diff
+                                        idx_defecto = idx
+                                except: pass
+                                
                         st.markdown(f"<div class='task-box'>✅ <b>Sucursal Detectada:</b> {local_detectado}<br><small>Verificado por: {metodo_det}</small></div>", unsafe_allow_html=True)
-                        if turno_detectado:
-                            st.markdown(f"<div class='super-box'>🕒 <b>Turno Asignado:</b> {turno_detectado}<br><small>({lista_turnos[turno_detectado]['ingreso']} a {lista_turnos[turno_detectado]['salida']})</small></div>", unsafe_allow_html=True)
                         
-                        nota_empleado = st.text_input("📝 Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
-                        
-                        if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True) and turno_detectado:
-                            hora_t_str = lista_turnos[turno_detectado]["ingreso"]
-                            hora_t_obj = pd.to_datetime(hora_t_str).time()
-                            dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                            estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
+                        if nombres_turnos:
+                            st.markdown("🕒 **Verificá y confirmá tu turno:**")
+                            # El selectbox le sugiere el turno, pero le permite cambiarlo.
+                            turno_seleccionado = st.selectbox("Turno a fichar:", nombres_turnos, index=idx_defecto, label_visibility="collapsed")
+                            
+                            st.markdown(f"<small style='color: gray;'>El horario oficial de este turno es de {lista_turnos[turno_seleccionado]['ingreso']} a {lista_turnos[turno_seleccionado]['salida']}</small>", unsafe_allow_html=True)
+                            
+                            nota_empleado = st.text_input("📝 Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
+                            
+                            if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
+                                hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
+                                hora_t_obj = pd.to_datetime(hora_t_str).time()
+                                dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
 
-                            insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_detectado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": str(nota_empleado)})
-                            
-                            msg_final = f"¡Entrada registrada a las {hora_hoy}!"
-                            if estado_llegada == "Tarde": msg_final += f"\n\n🔴 {config_app.get('mensaje_llegada_tarde')}"
-                            
-                            for a in alertas_ingreso:
-                                if a['destinatario'] in ['Todos', empleado_en_celu, rol_empleado]: 
-                                    msg_final += f"\n\n📩 {a['texto']}"
-                            
-                            st.session_state['fichaje_exitoso'] = msg_final
-                            st.rerun()
+                                insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": str(nota_empleado)})
+                                
+                                msg_final = f"¡Entrada registrada a las {hora_hoy}!"
+                                if estado_llegada == "Tarde": msg_final += f"\n\n🔴 {config_app.get('mensaje_llegada_tarde')}"
+                                
+                                for a in alertas_ingreso:
+                                    if a['destinatario'] in ['Todos', empleado_en_celu, rol_empleado]: 
+                                        msg_final += f"\n\n📩 {a['texto']}"
+                                
+                                st.session_state['fichaje_exitoso'] = msg_final
+                                st.rerun()
+                        else:
+                            st.warning("No hay turnos configurados en el sistema. Avisale a Gerencia.")
                     else:
                         if config_app.get("verificar_gps", True) and (not ubicacion or 'coords' not in ubicacion):
                             st.info("⏳ Detectando ubicación satelital... Por favor, permití el acceso al GPS en tu celular.")
