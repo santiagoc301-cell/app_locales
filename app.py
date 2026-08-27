@@ -455,17 +455,23 @@ if pestaña == "⏱️ Portal del Empleado":
             st.warning("⚠️ **Equipo no autorizado.**")
             
             if config_app.get("autoregistro", False):
-                st.info("📝 **El Auto-registro está habilitado.** Escribí tu nombre y apellido para darte de alta en el sistema y enlazar este celular.")
+                st.info("📝 **El Auto-registro está habilitado.** Escribí tu nombre, elegí tu rol y vinculá tu celular.")
                 nuevo_nombre_emp = st.text_input("Tu Nombre Completo:")
+                rol_elegido_auto = st.selectbox("Tu Rol / Puesto:", lista_roles_disponibles)
+                
                 if st.button("🔗 Registrar y Enlazar mi teléfono") and nuevo_nombre_emp.strip():
                     n_emp = nuevo_nombre_emp.strip()
                     if n_emp not in lista_empleados:
                         lista_empleados.append(n_emp)
-                        roles_empleados[n_emp] = "Otro"
+                        roles_empleados[n_emp] = rol_elegido_auto
                         tareas_individuales[n_emp] = []
                         save_json("empleados", lista_empleados)
                         save_json("roles", roles_empleados)
                         save_json("tareas_individuales", tareas_individuales)
+                    else:
+                        # Si ya existía pero no tenía cel vinculado, actualizamos su rol por si acaso
+                        roles_empleados[n_emp] = rol_elegido_auto
+                        save_json("roles", roles_empleados)
                     
                     dispositivos_vinculados[n_emp] = device_id
                     save_json("dispositivos", dispositivos_vinculados)
@@ -510,6 +516,27 @@ elif pestaña == "⚙️ Panel de Gerencia":
                 df_activos = df_activos[df_activos["Empleado"].isin(lista_empleados)].copy()
                 df_activos['Fecha_Obj'] = pd.to_datetime(df_activos['Fecha'], errors='coerce')
                 
+                # --- NUEVO MONITOR EN VIVO: ¿QUIÉNES ESTÁN EN EL LOCAL AHORA? ---
+                st.markdown(f"### 🟢 Personal Trabajando en Este Momento ({fecha_hoy})")
+                df_hoy_gerencia = df_activos[df_activos["Fecha"] == fecha_hoy].copy()
+                activos_en_local = []
+                if not df_hoy_gerencia.empty:
+                    if 'id' in df_hoy_gerencia.columns:
+                        df_hoy_gerencia['id_num'] = pd.to_numeric(df_hoy_gerencia['id'], errors='coerce')
+                        df_hoy_gerencia = df_hoy_gerencia.sort_values(by="id_num")
+                    for emp in lista_empleados:
+                        df_e_h = df_hoy_gerencia[df_hoy_gerencia["Empleado"] == emp]
+                        if not df_e_h.empty:
+                            ultimo_m = df_e_h.iloc[-1]
+                            if ultimo_m["Tipo"] == "Entrada":
+                                activos_en_local.append(f"• **{emp}** (Rol: {roles_empleados.get(emp, 'Staff')}) ➔ Sucursal: *{ultimo_m['Sucursal']}* (Ingresó a las {ultimo_m['Hora']})")
+                
+                if activos_en_local:
+                    st.markdown("<div class='task-box'>" + "<br>".join(activos_en_local) + "</div>", unsafe_allow_html=True)
+                else:
+                    st.info("ℹ️ No hay personal con entrada activa en este momento.")
+
+                st.write("---")
                 st.markdown(f"### 🚨 Alertas del Día ({fecha_hoy})")
                 df_hoy = df_activos[df_activos["Fecha"] == fecha_hoy]
                 entradas_hoy = df_hoy[df_hoy["Tipo"] == "Entrada"]["Empleado"].unique().tolist()
@@ -544,7 +571,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                     fecha_in_dl = c_dl2.date_input("📅 Desde el día:", value=ahora.date() - datetime.timedelta(days=7), key="dl_in")
                     fecha_fi_dl = c_dl3.date_input("📅 Hasta el día:", value=ahora.date(), key="dl_fi")
                     
-                    # ---> ACÁ ESTÁ EL NUEVO RECORTE DE HORAS <---
                     v_recortar_salida = st.checkbox("✂️ Recortar horas extra (Topar el pago hasta el horario de salida oficial del turno)", value=False)
                     
                     df_dl = df_activos.copy()
@@ -575,7 +601,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                             diff = (h_out - h_in).total_seconds() / 3600.0
                                             diff = diff if diff >= 0 else (diff + 24.0)
                                             
-                                            # --- APLICACIÓN DEL RECORTE ANTIFRAUDE SALARIAL ---
                                             if v_recortar_salida and turno_actual_eval in lista_turnos:
                                                 h_oficial_out_str = lista_turnos[turno_actual_eval].get("salida")
                                                 if h_oficial_out_str:
@@ -583,7 +608,6 @@ elif pestaña == "⚙️ Panel de Gerencia":
                                                     if not pd.isna(h_oficial_out):
                                                         diff_oficial = (h_oficial_out - h_in).total_seconds() / 3600.0
                                                         diff_oficial = diff_oficial if diff_oficial >= 0 else (diff_oficial + 24.0)
-                                                        # Si se quedó más tiempo, se corta al tiempo oficial
                                                         if diff > diff_oficial:
                                                             diff = diff_oficial
 
@@ -678,7 +702,7 @@ elif pestaña == "⚙️ Panel de Gerencia":
                         supabase.table("tareas_log").update({"Estado": "Rechazada"}).eq("id", int(row['id'])).execute()
                         st.rerun()
 
-            puntos_pendientes = [p for p in lista_puntos if p.get("Estado") == "Pendiente"]
+            puntos_pendientes = [p for p in lista_puntos if p.get("Estado"] == "Pendiente"]
             if puntos_pendientes:
                 st.write("**Evaluaciones Pendientes (De Supervisores):**")
                 for idx, p in enumerate(lista_puntos):
