@@ -855,14 +855,6 @@ elif pestaña == "💼 Panel de Gerencia":
                         c_btn2.markdown(link_asist, unsafe_allow_html=True)
                 else:
                     st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
-                    
-            st.write("---")
-            st.markdown("### 📱 Estado de Conexión de Celulares")
-            datos_conexion_an = []
-            for emp in sorted(lista_empleados):
-                estado_cel = "🟢 Enlazado" if emp in dispositivos_vinculados else "🔴 Sin Enlazar"
-                datos_conexion_an.append({"Empleado": emp, "Celular": estado_cel})
-            st.dataframe(pd.DataFrame(datos_conexion_an), use_container_width=True, hide_index=True)
 
         with tab_caja:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Control de Caja y Estadísticas</div>', unsafe_allow_html=True)
