@@ -21,94 +21,34 @@ st.markdown("""
 .viewerBadge_container { display: none !important; }
 footer { display: none !important; }
 #MainMenu { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
 
 /* ---> DISEÑO DE PESTAÑAS (TABS) ESTILO APP MODERNA <--- */
-.stTabs [data-baseweb="tab-list"] { gap: 10px; padding-bottom: 10px; }
-.stTabs [data-baseweb="tab"] { 
-    background-color: #f8f9fa; 
-    border-radius: 10px 10px 0 0;
-    padding: 12px 24px; 
-    border: 1px solid #e9ecef; 
-    border-bottom: none; 
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-    color: #495057;
-}
-.stTabs [aria-selected="true"] { 
-    background: linear-gradient(135deg, #1e3a8a, #3b82f6) !important; 
-    color: white !important; 
-    font-weight: 800 !important; 
-    box-shadow: 0 -4px 15px -3px rgba(59, 130, 246, 0.3); 
-    border: none;
-}
-.stTabs [data-baseweb="tab"]:hover { background-color: #e2e8f0; }
+.stTabs [data-baseweb="tab-list"] { gap: 8px; padding-bottom: 5px; }
+.stTabs [data-baseweb="tab"] { background-color: #F3F4F6; border-radius: 8px 8px 0 0;
+padding: 10px 20px; border: 1px solid #E5E7EB; border-bottom: none; transition: all 0.3s ease; }
+.stTabs [aria-selected="true"] { background: linear-gradient(135deg, #1e3a8a, #3b82f6) !important; color: white !important; font-weight: 800 !important; box-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.2); }
+.stTabs [data-baseweb="tab"]:hover { background-color: #E0E7FF; }
 
 /* ---> DISEÑO GENERAL DE LA APP <--- */
-.main-title { 
-    font-size: 2.5rem; 
-    font-weight: 900; 
-    background: -webkit-linear-gradient(45deg, #0f172a, #3b82f6); 
-    -webkit-background-clip: text; 
-    -webkit-text-fill-color: transparent; 
-    margin-bottom: 1rem; 
-    text-transform: uppercase; 
-    letter-spacing: -0.5px; 
-}
-div[data-testid="metric-container"] { 
-    background: white; 
-    border: 1px solid #f1f5f9; 
-    padding: 24px; 
-    border-radius: 16px; 
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); 
-    border-top: 5px solid #3b82f6; 
-    transition: all 0.3s ease;
-}
-div[data-testid="metric-container"]:hover { 
-    transform: translateY(-5px); 
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-}
-div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #0f172a; }
-.stButton>button { 
-    border-radius: 12px; 
-    font-weight: 700; 
-    transition: all 0.2s ease; 
-    border: 1px solid #e2e8f0; 
-    padding: 0.6rem 1rem; 
-    width: 100%; 
-    background-color: white;
-    color: #1e293b;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-}
-.stButton>button:hover { 
-    transform: translateY(-2px); 
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
-    border-color: #cbd5e1;
-    background-color: #f8fafc;
-}
-
-/* ---> CAJAS DE AVISOS Y ALERTAS <--- */
-.alert-box { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #991B1B;}
-.task-box { padding: 18px; border-radius: 12px; border-left: 6px solid #10B981; background-color: #ECFDF5; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #065F46;}
-.task-pend { padding: 18px; border-radius: 12px; border-left: 6px solid #F59E0B; background-color: #FFFBEB; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #92400E;}
-.task-rej { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #991B1B;}
-.report-box { padding: 18px; border-radius: 12px; border-left: 6px solid #8B5CF6; background-color: #F5F3FF; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #5B21B6;}
-.super-box { padding: 20px; border-radius: 16px; border-left: 6px solid #3B82F6; background-color: #EFF6FF; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); color: #1E40AF;}
-.validation-box { padding: 18px; border-radius: 12px; border: 1px solid #E5E7EB; background-color: #F9FAFB; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #374151;}
-
-/* ---> CREDENCIAL EMPLEADO <--- */
-.credencial { 
-    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); 
-    color: white; 
-    padding: 25px; 
-    border-radius: 20px; 
-    box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4); 
-    margin-bottom: 25px; 
-    border: 1px solid rgba(255,255,255,0.1);
-}
-.cred-nombre { font-size: 2.2rem; font-weight: 900; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);}
+.main-title { font-size: 2.4rem; font-weight: 900; background: -webkit-linear-gradient(45deg, #111827, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; text-align: center; text-transform: uppercase; letter-spacing: -0.5px; }
+div[data-testid="metric-container"] { background: linear-gradient(180deg, #ffffff 0%, #F9FAFB 100%); border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #3b82f6; transition: transform 0.2s ease-in-out;}
+div[data-testid="metric-container"]:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);}
+div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #111827; }
+.stButton>button { border-radius: 12px; font-weight: 700; transition: all 0.3s; border: 1px solid #D1D5DB; padding: 0.6rem 1rem; width: 100%; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);}
+.stButton>button:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border-color: #9CA3AF;}
+.alert-box { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+.task-box { padding: 18px; border-radius: 12px; border-left: 6px solid #10B981; background-color: #ECFDF5; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+.task-pend { padding: 18px; border-radius: 12px; border-left: 6px solid #F59E0B; background-color: #FFFBEB; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+.task-rej { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+.report-box { padding: 18px; border-radius: 12px; border-left: 6px solid #8B5CF6; background-color: #F5F3FF; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+.super-box { padding: 18px; border-radius: 12px; border-left: 6px solid #3B82F6; background-color: #EFF6FF; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+.highlight-edit { padding: 20px; background-color: #EFF6FF; border-radius: 12px; border-left: 6px solid #3B82F6; margin-bottom: 20px; font-weight: bold;}
+.credencial { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; padding: 25px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4); margin-bottom: 25px; border: 1px solid rgba(255,255,255,0.1);}
+.cred-nombre { font-size: 2rem; font-weight: 900; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);}
 .cred-rol { font-size: 1.2rem; opacity: 0.95; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
 .cred-nivel { font-size: 1.4rem; font-weight: 800; background-color: rgba(255,255,255,0.25); padding: 8px 20px; border-radius: 25px; display: inline-block; backdrop-filter: blur(5px);}
-
-/* ---> BLOQUEO PANTALLA <--- */
+.validation-box { padding: 18px; border-radius: 12px; border: 1px solid #E5E7EB; background-color: #F9FAFB; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
 .bloqueo-pantalla { padding: 40px; background: linear-gradient(180deg, #FEF2F2 0%, #ffffff 100%); border: 4px solid #EF4444; border-radius: 20px; text-align: center; margin-top: 50px; box-shadow: 0 25px 50px -12px rgba(239, 68, 68, 0.25);}
 .bloqueo-titulo { font-size: 3.5rem; color: #B91C1C; font-weight: 900; margin-bottom: 20px;}
 </style>
@@ -141,7 +81,6 @@ def get_all_settings():
 
 def load_json(key_name, default_data):
     settings = get_all_settings()
-    
     if settings is None:
         st.error("⏳ Aguardá un momento. Reconectando de forma segura con la base de datos...")
         st.stop()
@@ -269,7 +208,7 @@ def formato_horas_texto(h_decimal):
         nums = {0: "cero", 1: "una", 2: "dos", 3: "tres", 4: "cuatro", 5: "cinco", 6: "seis", 7: "siete", 8: "ocho", 9: "nueve", 10: "diez", 11: "once", 12: "doce", 13: "trece", 14: "catorce", 15: "quince", 16: "dieciséis", 17: "diecisiete", 18: "dieciocho", 19: "diecinueve", 20: "veinte", 21: "veintiuna", 22: "veintidós", 23: "veintitrés", 24: "veinticuatro"}
         h_str = nums.get(horas, str(horas))
         txt_h = "hora" if horas == 1 else "horas"
-        return f"{horas}:{minutos:02d} ({h_str} {txt_h} y {minutos} min)"
+        return f"{horas}:{minutos:02d} ({h_str} {txt_h} y {minutos} minutos)"
     except:
         return str(h_decimal)
 
@@ -291,7 +230,7 @@ elif 'device_id' in st.session_state:
 # ==========================================
 # 4. NAVEGACIÓN FRONTAL PARA CELULARES
 # ==========================================
-st.markdown('<div class="main-title" style="text-align: center;">🏢 Portal Corporativo</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏢 Portal Corporativo</div>', unsafe_allow_html=True)
 pestaña = st.selectbox("Navegación:", ["📱 Portal del Empleado", "💼 Panel de Gerencia", "⚙️ Dueño del Software"], label_visibility="collapsed")
 st.write("---")
 
@@ -466,9 +405,9 @@ if pestaña == "📱 Portal del Empleado":
             mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu, rol_empleado]]
             if mensajes_usuario:
                 for m in mensajes_usuario:
-                    if m['destinatario'] == 'Todos': st.markdown(f"<div class='alert-box' style='border-color: #3B82F6; background-color: #EFF6FF; color: #1E40AF;'>📢 <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
-                    elif m['destinatario'] == rol_empleado: st.markdown(f"<div class='task-pend'>📢 <b>Para el equipo de {rol_empleado}s:</b> {m['texto']}</div>", unsafe_allow_html=True)
-                    else: st.markdown(f"<div class='report-box'>✉️ <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    if m['destinatario'] == 'Todos': st.markdown(f"<div class='msg-global alert-box' style='border-color: #3B82F6; background-color: #EFF6FF;'>📢 <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    elif m['destinatario'] == rol_empleado: st.markdown(f"<div class='msg-rol'>📢 <b>Para el equipo de {rol_empleado}s:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    else: st.markdown(f"<div class='msg-individual report-box'>✉️ <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
                     
             with st.expander("📍 Smart Check-In", expanded=True):
                 st.markdown("### 📡 Radar Automático")
@@ -525,9 +464,8 @@ if pestaña == "📱 Portal del Empleado":
                             min_diff = float('inf')
                             for idx, t_name in enumerate(nombres_turnos):
                                 try:
-                                    h_ing_str = lista_turnos[t_name]["ingreso"]
-                                    h_ing_obj = datetime.datetime.strptime(h_ing_str, "%I:%M %p").time()
-                                    dt_ing = datetime.datetime.combine(ahora.date(), h_ing_obj).replace(tzinfo=zona_arg)
+                                    h_ing = pd.to_datetime(lista_turnos[t_name]["ingreso"]).time()
+                                    dt_ing = datetime.datetime.combine(ahora.date(), h_ing).replace(tzinfo=zona_arg)
                                     diff = abs((ahora - dt_ing).total_seconds())
                                     if diff < min_diff:
                                         min_diff = diff
@@ -544,13 +482,10 @@ if pestaña == "📱 Portal del Empleado":
                             nota_empleado = st.text_input("✍️ Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
                             
                             if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
-                                estado_llegada = "A tiempo"
-                                try:
-                                    hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
-                                    hora_t_obj = datetime.datetime.strptime(hora_t_str, "%I:%M %p").time()
-                                    dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                                    estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
-                                except: pass
+                                hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
+                                hora_t_obj = pd.to_datetime(hora_t_str).time()
+                                dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
                                 
                                 insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": str(nota_empleado)})
                                 
@@ -585,11 +520,9 @@ if pestaña == "📱 Portal del Empleado":
                             
                             estado_llegada = "A tiempo"
                             if turno_seleccionado in lista_turnos:
-                                try:
-                                    hora_t_obj = datetime.datetime.strptime(lista_turnos[turno_seleccionado]["ingreso"], "%I:%M %p").time()
-                                    dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                                    estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
-                                except: pass
+                                hora_t_obj = pd.to_datetime(lista_turnos[turno_seleccionado]["ingreso"]).time()
+                                dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
                             
                             insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": "Ingreso por cambio de local."})
                             
@@ -855,19 +788,11 @@ elif pestaña == "💼 Panel de Gerencia":
                 df_dl = df_activos.copy()
                 df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
                 
-                # ---> SOLUCIÓN FILTRO DE SUCURSAL <---
-                # Filtramos la tabla general ANTES de exportar, así las descargas y el loop respetan la sucursal.
+                # --- SOLUCIÓN: CÁLCULO INTELIGENTE Y FILTRADO PREVIO ---
                 if local_descarga != "Todas las sucursales":
-                    df_dl = df_dl[df_dl['Sucursal'] == local_descarga]
-                    st.info(f"📍 **Modo filtrado activo:** Mostrando y exportando únicamente datos de la sucursal **{local_descarga}**.")
+                    st.info(f"📍 **Modo filtrado activo:** Mostrando y exportando únicamente datos de **{local_descarga}**.")
                 
-                # ---> SOLUCIÓN CÁLCULO DE HORAS (CRUCE DE MEDIANOCHE Y PARSEO DE FECHAS) <---
-                # Aseguramos que el Timestamp se procese bien aunque el horario sea AM/PM.
-                try:
-                    df_dl['Timestamp'] = pd.to_datetime(df_dl['Fecha'] + ' ' + df_dl['Hora'], errors='coerce')
-                except:
-                    pass # Fallback nativo
-                
+                df_dl['Timestamp'] = pd.to_datetime(df_dl['Fecha'].astype(str) + ' ' + df_dl['Hora'].astype(str), errors='coerce')
                 df_dl = df_dl.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
                 
                 datos_horas_dict = {}
@@ -877,68 +802,81 @@ elif pestaña == "💼 Panel de Gerencia":
                         df_e = df_dl[df_dl["Empleado"] == emp]
                         entrada_actual = None
                         
-                        for _, row_f in df_e.iterrows():
-                            if row_f["Tipo"] == "Entrada":
-                                entrada_actual = row_f
-                            elif row_f["Tipo"] == "Salida" and entrada_actual is not None:
-                                h_in = entrada_actual["Timestamp"]
-                                h_out = row_f["Timestamp"]
-                                turno_eval = entrada_actual["Turno"]
-                                suc_eval = entrada_actual["Sucursal"]
+                        # --- HELPER: CIERRA TRAMOS (INCLUSO SI OLVIDARON FICHAR LA SALIDA) ---
+                        def procesar_tramo(entrada_row, salida_row):
+                            h_in = entrada_row["Timestamp"]
+                            t_eval = str(entrada_row["Turno"])
+                            s_eval = str(entrada_row["Sucursal"])
+                            
+                            # Filtro estricto por local
+                            if local_descarga != "Todas las sucursales" and s_eval != local_descarga:
+                                return
                                 
-                                # Doble chequeo por las dudas (ya filtramos el df entero arriba)
-                                if local_descarga != "Todas las sucursales" and suc_eval != local_descarga:
-                                    entrada_actual = None
-                                    continue
+                            h_tramo = 0.0
+                            h_out_real = salida_row["Timestamp"] if salida_row is not None else None
+                            
+                            if t_eval in lista_turnos:
+                                try:
+                                    t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
+                                    t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
+                                    
+                                    h_in_ofi = datetime.datetime.combine(h_in.date(), t_in_obj)
+                                    h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                    
+                                    if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
+                                    
+                                    # Ajuste automático para cruce de medianoche (Turnos Nocturnos)
+                                    if (h_in_ofi - h_in).total_seconds() > 43200:
+                                        h_in_ofi -= datetime.timedelta(days=1); h_out_ofi -= datetime.timedelta(days=1)
+                                    elif (h_in - h_in_ofi).total_seconds() > 43200:
+                                        h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
+                                        
+                                    h_tramo = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
+                                    
+                                    # Aplicar reglas de descuento configuradas
+                                    if config_app.get("desc_tarde", True):
+                                        diff_in = (h_in - h_in_ofi).total_seconds() / 3600.0
+                                        if diff_in > 0: h_tramo -= diff_in
+                                        
+                                    if salida_row is not None and config_app.get("desc_temp", True):
+                                        diff_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0
+                                        if diff_out > 0: h_tramo -= diff_out
+                                except:
+                                    if h_out_real: h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                            else:
+                                if h_out_real: h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
                                 
-                                horas_tramo = 0.0
-                                if turno_eval in lista_turnos:
-                                    h_ofi_in_str = lista_turnos[turno_eval].get("ingreso")
-                                    h_ofi_out_str = lista_turnos[turno_eval].get("salida")
-                                    if h_ofi_in_str and h_ofi_out_str:
-                                        try:
-                                            # Parseo súper seguro de horas usando datetime nativo
-                                            t_in_obj = datetime.datetime.strptime(h_ofi_in_str, "%I:%M %p").time()
-                                            t_out_obj = datetime.datetime.strptime(h_ofi_out_str, "%I:%M %p").time()
-                                            
-                                            h_in_oficial = datetime.datetime.combine(h_in.date(), t_in_obj)
-                                            h_out_oficial = datetime.datetime.combine(h_in.date(), t_out_obj)
-                                            
-                                            if h_out_oficial < h_in_oficial: 
-                                                h_out_oficial += datetime.timedelta(days=1)
-                                            
-                                            horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
-                                            
-                                            if config_app.get("desc_tarde", True):
-                                                diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
-                                                if diff_tarde > 0: horas_tramo -= diff_tarde
-                                                
-                                            if config_app.get("desc_temp", True):
-                                                diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
-                                                if diff_temp > 0: horas_tramo -= diff_temp
-                                        except Exception as e:
-                                            # Si falla el parseo, caemos directo a la hora real
-                                            horas_tramo = (h_out - h_in).total_seconds() / 3600.0
-                                else:
-                                    # Para turnos manuales o no definidos, cuenta el tiempo exacto que estuvo
-                                    horas_tramo = (h_out - h_in).total_seconds() / 3600.0
-                                
-                                if horas_tramo < 0: horas_tramo += 24.0
-                                horas_tramo = max(0.0, horas_tramo)
-                                
-                                sueldo_hora = 0.0
-                                fecha_in_str = h_in.strftime("%Y-%m-%d")
+                            if h_tramo < 0: h_tramo = 0.0
+                            
+                            # Cargar sueldo y horas computadas
+                            if h_tramo > 0:
+                                sueldo_h = 0.0
+                                f_str = h_in.strftime("%Y-%m-%d")
                                 for s in sueldos_historico:
-                                    if s["Empleado"] == emp and s["Fecha_Desde"] <= fecha_in_str <= s["Fecha_Hasta"]:
-                                        sueldo_hora = float(s["Valor_Hora"])
+                                    if s["Empleado"] == emp and s["Fecha_Desde"] <= f_str <= s["Fecha_Hasta"]:
+                                        sueldo_h = float(s["Valor_Hora"])
                                         break
-                                
-                                key_datos = (emp, suc_eval)
-                                if key_datos not in datos_horas_dict: datos_horas_dict[key_datos] = {"Horas": 0.0, "Pago": 0.0}
-                                datos_horas_dict[key_datos]["Horas"] += horas_tramo
-                                datos_horas_dict[key_datos]["Pago"] += (horas_tramo * sueldo_hora)
-                                
+                                        
+                                k = (emp, s_eval)
+                                if k not in datos_horas_dict: datos_horas_dict[k] = {"Horas": 0.0, "Pago": 0.0}
+                                datos_horas_dict[k]["Horas"] += h_tramo
+                                datos_horas_dict[k]["Pago"] += (h_tramo * sueldo_h)
+
+                        # Evaluamos los fichajes del empleado en orden cronológico
+                        for _, row_f in df_e.iterrows():
+                            tipo_reg = str(row_f["Tipo"]).strip()
+                            if tipo_reg == "Entrada":
+                                if entrada_actual is not None:
+                                    # Si llega una Entrada sin haber cerrado la anterior, se AUTO-CIERRA
+                                    procesar_tramo(entrada_actual, None)
+                                entrada_actual = row_f
+                            elif tipo_reg in ["Salida", "Salida (Cambio Local)", "Retiro Temprano"] and entrada_actual is not None:
+                                procesar_tramo(entrada_actual, row_f)
                                 entrada_actual = None
+                                
+                        # Si quedó la última entrada abierta al final del registro (Ej: hoy no marcó salida o se olvidó)
+                        if entrada_actual is not None:
+                            procesar_tramo(entrada_actual, None)
                 
                     datos_horas = []
                     for (emp, loc), vals in datos_horas_dict.items():
@@ -951,7 +889,6 @@ elif pestaña == "💼 Panel de Gerencia":
                         st.write("### 🪪 Fichas de Liquidación Individuales")
                         st.write("Acá tenés el desglose exacto y corregido. Podés descargar el CSV individual de cada empleado.")
                         
-                        # --- NUEVO DISEÑO VISUAL PARA FICHAS ---
                         c_cards = st.columns(3)
                         col_idx = 0
                         for idx, row in df_horas_final.iterrows():
@@ -967,7 +904,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                     </div>
                                     """, unsafe_allow_html=True)
                                     
-                                    # Generar CSV individual nativo
                                     csv_ind = pd.DataFrame([row]).to_csv(index=False).encode('utf-8')
                                     st.download_button(
                                         label="📥 Descargar Ficha",
@@ -984,7 +920,7 @@ elif pestaña == "💼 Panel de Gerencia":
                         st.write("### ⬇️ Descargas Generales (Para RRHH)")
                         c_btn1, c_btn2 = st.columns(2)
                         
-                        # BOTÓN NATIVO PARA LIQUIDACIÓN GLOBAL (AHORA RESPETA EL FILTRO)
+                        # AHORA LAS DESCARGAS RESPETAN LA SUCURSAL ELEGIDA
                         csv_horas = df_horas_final.to_csv(index=False).encode('utf-8')
                         c_btn1.download_button(
                             label="📥 Liquidación General de Sueldos (CSV)",
@@ -994,7 +930,6 @@ elif pestaña == "💼 Panel de Gerencia":
                             use_container_width=True
                         )
                         
-                        # BOTÓN NATIVO PARA ASISTENCIA CRUDO (AHORA RESPETA EL FILTRO)
                         df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
                         csv_asist = df_asist_dl.to_csv(index=False).encode('utf-8')
                         c_btn2.download_button(
@@ -1005,7 +940,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             use_container_width=True
                         )
                 else:
-                    st.info("📭 Sin registros de horas completados (Entrada + Salida) para la sucursal y fechas seleccionadas.")
+                    st.info("📭 Sin registros para liquidar en la sucursal y fechas seleccionadas.")
 
         with tab_caja:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Control de Caja y Estadísticas</div>', unsafe_allow_html=True)
@@ -1158,7 +1093,6 @@ elif pestaña == "💼 Panel de Gerencia":
                     df_mostrar_caja["Total_Ventas"] = df_mostrar_caja["Total_Ventas"].apply(lambda x: f"${x:,.2f}")
                     st.dataframe(df_mostrar_caja.sort_values(by=["Fecha", "Hora"], ascending=[False, False])[["Fecha", "Hora", "Sucursal", "Cajero", "Efectivo", "Tarjeta", "Transferencia", "Total_Ventas", "Nota"]], use_container_width=True, hide_index=True)
                     
-                    # BOTÓN NATIVO
                     csv_cajas = df_caja.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="📥 Descargar Reporte Completo en CSV",
@@ -1568,57 +1502,67 @@ elif pestaña == "💼 Panel de Gerencia":
                 df_act_p, df_tar_p = load_df("asistencia"), load_df("tareas_log")
                 if not df_act_p.empty:
                     df_act_p['F_Obj'] = pd.to_datetime(df_act_p['Fecha'], errors='coerce').dt.date
-                    df_e_p = df_act_p[(df_act_p["Empleado"] == emp_perfil) & (df_act_p['F_Obj'] >= pf_in) & (df_act_p['F_Obj'] <= pf_fi)]
+                    df_e_p = df_act_p[(df_act_p["Empleado"] == emp_perfil) & (df_act_p['F_Obj'] >= pf_in) & (df_act_p['F_Obj'] <= pf_fi)].copy()
                     e_atiempo = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "A tiempo")])
                     e_tardes = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "Tarde")])
                     e_ausencias = len(df_e_p[df_e_p["Tipo"] == "Ausente"])
+                    
+                    # --- NUEVO CÁLCULO INTELIGENTE PERFIL ---
+                    df_e_p['Timestamp'] = pd.to_datetime(df_e_p['Fecha'].astype(str) + ' ' + df_e_p['Hora'].astype(str), errors='coerce')
+                    df_e_p = df_e_p.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
+                    
+                    entrada_actual = None
                     horas_totales = 0.0
                     
-                    for f in df_e_p["Fecha"].unique():
-                        df_ef = df_e_p[df_e_p["Fecha"] == f].copy()
-                        df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
-                        df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
+                    def procesar_tramo_perfil(entrada_row, salida_row):
+                        h_in = entrada_row["Timestamp"]
+                        t_eval = str(entrada_row["Turno"])
+                        h_tramo = 0.0
+                        h_out_real = salida_row["Timestamp"] if salida_row is not None else None
                         
-                        entrada_actual = None
-                        
-                        for _, row_f in df_ef.iterrows():
-                            if row_f["Tipo"] == "Entrada":
-                                entrada_actual = row_f
-                            elif row_f["Tipo"] == "Salida" and entrada_actual is not None:
-                                h_in = entrada_actual["Hora_dt"]
-                                h_out = row_f["Hora_dt"]
-                                turno_actual_eval = entrada_actual["Turno"]
+                        if t_eval in lista_turnos:
+                            try:
+                                t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
+                                t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
                                 
-                                horas_tramo = 0.0
-                                if turno_actual_eval in lista_turnos:
-                                    h_ofi_in_str = lista_turnos[turno_actual_eval].get("ingreso")
-                                    h_ofi_out_str = lista_turnos[turno_actual_eval].get("salida")
-                                    if h_ofi_in_str and h_ofi_out_str:
-                                        try:
-                                            t_in_obj = datetime.datetime.strptime(h_ofi_in_str, "%I:%M %p").time()
-                                            t_out_obj = datetime.datetime.strptime(h_ofi_out_str, "%I:%M %p").time()
-                                            
-                                            h_in_oficial = datetime.datetime.combine(h_in.date(), t_in_obj)
-                                            h_out_oficial = datetime.datetime.combine(h_in.date(), t_out_obj)
-                                            
-                                            if h_out_oficial < h_in_oficial: h_out_oficial += datetime.timedelta(days=1)
-                                            
-                                            horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
-                                            
-                                            if config_app.get("desc_tarde", True):
-                                                diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
-                                                if diff_tarde > 0: horas_tramo -= diff_tarde
-                                            if config_app.get("desc_temp", True):
-                                                diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
-                                                if diff_temp > 0: horas_tramo -= diff_temp
-                                        except:
-                                            horas_tramo = (h_out - h_in).total_seconds() / 3600.0
-                                else:
-                                    horas_tramo = (h_out - h_in).total_seconds() / 3600.0
+                                h_in_ofi = datetime.datetime.combine(h_in.date(), t_in_obj)
+                                h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
                                 
-                                if horas_tramo < 0: horas_tramo += 24.0
-                                horas_totales += max(0.0, horas_tramo)
-                                entrada_actual = None
+                                if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
+                                
+                                if (h_in_ofi - h_in).total_seconds() > 43200:
+                                    h_in_ofi -= datetime.timedelta(days=1); h_out_ofi -= datetime.timedelta(days=1)
+                                elif (h_in - h_in_ofi).total_seconds() > 43200:
+                                    h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
+                                    
+                                h_tramo = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
+                                
+                                if config_app.get("desc_tarde", True):
+                                    diff_in = (h_in - h_in_ofi).total_seconds() / 3600.0
+                                    if diff_in > 0: h_tramo -= diff_in
+                                    
+                                if salida_row is not None and config_app.get("desc_temp", True):
+                                    diff_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0
+                                    if diff_out > 0: h_tramo -= diff_out
+                            except:
+                                if h_out_real: h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                        else:
+                            if h_out_real: h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                            
+                        return max(0.0, h_tramo)
+
+                    for _, row_f in df_e_p.iterrows():
+                        tipo_reg = str(row_f["Tipo"]).strip()
+                        if tipo_reg == "Entrada":
+                            if entrada_actual is not None:
+                                horas_totales += procesar_tramo_perfil(entrada_actual, None)
+                            entrada_actual = row_f
+                        elif tipo_reg in ["Salida", "Salida (Cambio Local)", "Retiro Temprano"] and entrada_actual is not None:
+                            horas_totales += procesar_tramo_perfil(entrada_actual, row_f)
+                            entrada_actual = None
+                            
+                    if entrada_actual is not None:
+                        horas_totales += procesar_tramo_perfil(entrada_actual, None)
                         
                     e_aj = sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == emp_perfil and p.get('Estado') == 'Aprobada' and pf_in <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= pf_fi])
                     e_tp = 0
