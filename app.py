@@ -143,12 +143,12 @@ config_app = load_json("config", config_defecto)
 
 owner_config_defecto = {
     "estado_licencia": "Activo", "plan_pago": "Mensual", "fecha_vencimiento": "2030-12-31",
-    "mensaje_bloqueo": "🚨 SISTEMA SUSPENDIDO TEMPORALMENTE.\\n\\nPor favor, comuníquese con el proveedor del software para regularizar el estado de su cuenta.",
+    "mensaje_bloqueo": "🚨 SISTEMA SUSPENDIDO TEMPORALMENTE.\n\nPor favor, comuníquese con el proveedor del software para regularizar el estado de su cuenta.",
     "mostrar_membresia": False, "dias_aviso": 5,
     "mensaje_aviso": "🚨 Tu suscripción está próxima a vencer. Por favor, renová tu plan para evitar interrupciones en el servicio.",
     "empresa_nombre": "SyncroRetail Solutions",
     "quienes_somos": "Nacimos con una misión clara: revolucionar la gestión del personal y potenciar el rendimiento de los equipos de trabajo...",
-    "contactos": "🏢 Oficina Central: Salta Capital, Argentina\\n📧 Soporte y Soluciones: soporte@syncroretail.com\\n💡 Sugerencias y Nuevas Funciones: desarrollo@syncroretail.com"
+    "contactos": "🏢 Oficina Central: Salta Capital, Argentina\n📧 Soporte y Soluciones: soporte@syncroretail.com\n💡 Sugerencias y Nuevas Funciones: desarrollo@syncroretail.com"
 }
 owner_config = load_json("owner_config", owner_config_defecto)
 
@@ -231,7 +231,7 @@ except: pass
 
 if pestaña in ["📱 Portal del Empleado", "💼 Panel de Gerencia"]:
     if owner_config.get("estado_licencia") == "Suspendido" or licencia_vencida:
-        msg_motivo = owner_config.get("mensaje_bloqueo") if owner_config.get("estado_licencia") == "Suspendido" else "🚨 EL PERÍODO DE LICENCIA HA VENCIDO.\\n\\nPor favor, contacte a soporte para renovar su suscripción."
+        msg_motivo = owner_config.get("mensaje_bloqueo") if owner_config.get("estado_licencia") == "Suspendido" else "🚨 EL PERÍODO DE LICENCIA HA VENCIDO.\n\nPor favor, contacte a soporte para renovar su suscripción."
         st.markdown(f"""
         <div class="bloqueo-pantalla">
         <div class="bloqueo-titulo">⛔ ACCESO BLOQUEADO</div>
@@ -261,7 +261,7 @@ if pestaña == "📱 Portal del Empleado":
         device_id = st.session_state.get('device_id')
 
     if config_app.get("mensaje_dia", "").strip() != "":
-        st.info(f"📢 **Comunicado Interno:**\\n\\n{config_app['mensaje_dia']}")
+        st.info(f"📢 **Comunicado Interno:**\n\n{config_app['mensaje_dia']}")
 
     if not device_id:
         st.info("⏳ Autenticando tu equipo...")
@@ -478,10 +478,10 @@ if pestaña == "📱 Portal del Empleado":
                                 insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": str(nota_empleado)})
                                 
                                 msg_final = f"¡Entrada registrada a las {hora_hoy}!"
-                                if estado_llegada == "Tarde": msg_final += f"\\n\\n🚨 {config_app.get('mensaje_llegada_tarde')}"
+                                if estado_llegada == "Tarde": msg_final += f"\n\n🚨 {config_app.get('mensaje_llegada_tarde')}"
                                 for a in alertas_ingreso:
                                     if a['destinatario'] in ['Todos', empleado_en_celu, rol_empleado]:
-                                        msg_final += f"\\n\\n📢 {a['texto']}"
+                                        msg_final += f"\n\n📢 {a['texto']}"
                                 st.session_state['fichaje_exitoso'] = msg_final
                                 st.rerun()
                         else:
@@ -604,28 +604,42 @@ if pestaña == "📱 Portal del Empleado":
                 if st.button("🔗 Registrar y Enlazar mi teléfono") and nuevo_nombre_emp.strip():
                     n_emp = nuevo_nombre_emp.strip()
                     match = next((e for e in lista_empleados if e.lower() == n_emp.lower()), None)
-                    if not match:
-                        lista_empleados.append(n_emp)
-                        roles_empleados[n_emp] = rol_elegido_auto
-                        tareas_individuales[n_emp] = []
-                        save_json("empleados", lista_empleados)
-                        save_json("roles", roles_empleados)
-                        save_json("tareas_individuales", tareas_individuales)
-                        dispositivos_vinculados[n_emp] = device_id
-                        save_json("dispositivos", dispositivos_vinculados)
+                    
+                    # --- RESTRICCIÓN ESTRICTA DE 1 CELULAR POR PERSONA / ANTI-INCÓGNITO ---
+                    if device_id in dispositivos_vinculados.values():
+                        st.error("❌ Este celular ya está vinculado a otra persona. No se permite compartir dispositivos.")
+                    elif match and match in dispositivos_vinculados:
+                        st.error(f"❌ '{match}' ya tiene un celular vinculado. No puedes ingresar desde otro celular ni usar el Modo Incógnito.")
                     else:
-                        roles_empleados[match] = rol_elegido_auto
-                        save_json("roles", roles_empleados)
-                        dispositivos_vinculados[match] = device_id
-                        save_json("dispositivos", dispositivos_vinculados)
-                    st.rerun()
+                        if not match:
+                            lista_empleados.append(n_emp)
+                            roles_empleados[n_emp] = rol_elegido_auto
+                            tareas_individuales[n_emp] = []
+                            save_json("empleados", lista_empleados)
+                            save_json("roles", roles_empleados)
+                            save_json("tareas_individuales", tareas_individuales)
+                            dispositivos_vinculados[n_emp] = device_id
+                            save_json("dispositivos", dispositivos_vinculados)
+                        else:
+                            roles_empleados[match] = rol_elegido_auto
+                            save_json("roles", roles_empleados)
+                            dispositivos_vinculados[match] = device_id
+                            save_json("dispositivos", dispositivos_vinculados)
+                        st.rerun()
             else:
                 st.info("🔒 **Auto-registro deshabilitado.** Pedile a gerencia que te dé de alta en la lista o seleccioná tu nombre si ya existís.")
-                emp_vincular = st.selectbox("Identificate:", ["Seleccionar..."] + [e for e in sorted(lista_empleados) if e not in dispositivos_vinculados.keys()])
+                # Ahora se muestran todos en el selectbox para poder arrojarles el error si ya tienen un dispositivo o si entran en incógnito
+                emp_vincular = st.selectbox("Identificate:", ["Seleccionar..."] + sorted(lista_empleados))
                 if st.button("🔗 Enlazar mi teléfono") and emp_vincular != "Seleccionar...":
-                    dispositivos_vinculados[emp_vincular] = device_id
-                    save_json("dispositivos", dispositivos_vinculados)
-                    st.rerun()
+                    # --- RESTRICCIÓN ESTRICTA DE 1 CELULAR POR PERSONA / ANTI-INCÓGNITO ---
+                    if emp_vincular in dispositivos_vinculados:
+                        st.error(f"❌ La cuenta de '{emp_vincular}' ya está vinculada a otro celular. No puedes ingresar desde otro equipo ni usar el Navegador en Modo Incógnito. Si cambiaste tu teléfono, pedile a Gerencia que libere tu usuario.")
+                    elif device_id in dispositivos_vinculados.values():
+                        st.error("❌ Este celular ya está vinculado a otra persona. No se permite prestar el celular a otro compañero.")
+                    else:
+                        dispositivos_vinculados[emp_vincular] = device_id
+                        save_json("dispositivos", dispositivos_vinculados)
+                        st.rerun()
 
 # ==========================================
 # 6. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
@@ -1306,12 +1320,12 @@ elif pestaña == "💼 Panel de Gerencia":
                                             h_out = sal.iloc[-1]["Hora_dt"]
                                             diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
                                             if diff_temp > 0: horas_dia -= diff_temp
-                            else:
-                                if not sal.empty:
-                                    h_out = sal.iloc[-1]["Hora_dt"]
-                                    diff = (h_out - h_in).total_seconds() / 3600.0
-                                    if diff < 0: diff += 24.0
-                                    horas_dia = diff
+                        else:
+                            if not sal.empty:
+                                h_out = sal.iloc[-1]["Hora_dt"]
+                                diff = (h_out - h_in).total_seconds() / 3600.0
+                                if diff < 0: diff += 24.0
+                                horas_dia = diff
                         horas_totales += max(0.0, horas_dia)
                         
                     e_aj = sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == emp_perfil and p.get('Estado') == 'Aprobada' and pf_in <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= pf_fi])
