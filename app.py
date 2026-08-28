@@ -168,7 +168,13 @@ def load_json(key_name, default_data):
         st.stop()
         
     if key_name in settings:
-        return settings[key_name]
+        data = settings[key_name]
+        # MEJORA: Fusión de diccionarios para persistencia ante actualizaciones del código
+        if isinstance(data, dict) and isinstance(default_data, dict):
+            for k, v in default_data.items():
+                if k not in data:
+                    data[k] = v
+        return data
     else:
         try:
             supabase.table('app_data').insert({'id': key_name, 'data': default_data}).execute()
@@ -220,12 +226,11 @@ config_defecto = {
     "ip_wifi_oficial": "", "radio_metros": 150, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
     "desc_tarde": True, "desc_temp": True, "perdonar_tolerancia": True,
     "mostrar_horas_empleado": False, "dia_inicio_semana": "Lunes",
-    "mostrar_top3": False, "top3_modo": "Global", "top3_visibilidad": ["Todos"],
+    "mostrar_top3": False, "top3_ocultar": [],
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
 config_app = load_json("config", config_defecto)
 
-# Parseo de booleanos a prueba de fallos para las deducciones
 def get_bool_config(key, default=True):
     val = config_app.get(key, default)
     if isinstance(val, str): return val.lower() in ['true', '1', 'yes', 't']
@@ -423,11 +428,10 @@ if pestaña == "📱 Portal del Empleado":
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
             
-            # --- NUEVO: MURO DE LA FAMA (TOP 3) ---
-            visibilidad_top3 = config_app.get("top3_visibilidad", ["Todos"])
-            puede_ver_top3 = False
-            if "Todos" in visibilidad_top3 or rol_empleado in visibilidad_top3 or empleado_en_celu in visibilidad_top3:
-                puede_ver_top3 = True
+            top3_ocultar = config_app.get("top3_ocultar", [])
+            puede_ver_top3 = True
+            if rol_empleado in top3_ocultar or empleado_en_celu in top3_ocultar:
+                puede_ver_top3 = False
 
             if get_bool_config("mostrar_top3", False) and puede_ver_top3:
                 inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
@@ -467,7 +471,11 @@ if pestaña == "📱 Portal del Empleado":
                             ranking_sp.append({"Empleado": emp_r, "Puntos": puntaje_semana, "Sucursal": suc_ppal})
                     
                     ranking_sp = sorted(ranking_sp, key=lambda x: x["Puntos"], reverse=True)
-                    modo_top = config_app.get("top3_modo", "Global")
+                    
+                    suc_hoy_muro = None
+                    if not df_hoy.empty:
+                        df_hoy_s = df_hoy.sort_values(by="id_num") if 'id_num' in df_hoy.columns else df_hoy
+                        suc_hoy_muro = str(df_hoy_s.iloc[-1]["Sucursal"])
                     
                     st.markdown(f"<p style='text-align: center; color: #64748b; margin-bottom: 10px;'>Desempeño del {p_in_top.strftime('%d/%m')} al {p_fi_top.strftime('%d/%m')}</p>", unsafe_allow_html=True)
                     
@@ -480,19 +488,14 @@ if pestaña == "📱 Portal del Empleado":
                         if len(lista_top) > 2: c3.markdown(f"<div style='text-align:center; padding:10px; background:#FFEDD5; border-radius:10px; border:2px solid #D97706; margin-top:40px;'><b>🥉 3ro</b><br>{lista_top[2]['Empleado']}<br>{lista_top[2]['Puntos']} pts</div>", unsafe_allow_html=True)
                         st.markdown("<br>", unsafe_allow_html=True)
 
-                    if modo_top == "Global":
-                        render_podio(ranking_sp[:3], "🌍 Ranking Global")
-                        if not ranking_sp: st.info("No hubo actividad registrada la semana pasada.")
+                    if suc_hoy_muro and suc_hoy_muro != "Sin Asignar" and suc_hoy_muro != "nan":
+                        top_suc = [r for r in ranking_sp if r["Sucursal"] == suc_hoy_muro][:3]
+                        render_podio(top_suc, f"🏢 Top 3 - {suc_hoy_muro} (Tu sucursal de hoy)")
+                        if not top_suc: st.info(f"Nadie sumó puntos en {suc_hoy_muro} la semana pasada.")
                     else:
-                        sucursales_con_gente = set([r["Sucursal"] for r in ranking_sp if r["Sucursal"] != "Sin Asignar"])
-                        if not sucursales_con_gente:
-                            st.info("No hubo actividad registrada la semana pasada para armar el ranking por sucursal.")
-                        else:
-                            for suc in sorted(list(sucursales_con_gente)):
-                                top_suc = [r for r in ranking_sp if r["Sucursal"] == suc][:3]
-                                render_podio(top_suc, f"🏢 Top 3 - {suc}")
+                        render_podio(ranking_sp[:3], "🌍 Ranking Global (Aún no fichaste hoy)")
+                        if not ranking_sp: st.info("No hubo actividad registrada la semana pasada.")
 
-            # --- CÁLCULO DE HORAS PARA MOSTRAR AL EMPLEADO ---
             if get_bool_config("mostrar_horas_empleado", False):
                 inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
                 hoy_dt = ahora.date()
@@ -729,7 +732,6 @@ if pestaña == "📱 Portal del Empleado":
                             st.markdown(f"<small style='color: gray;'>El horario oficial de este turno es de {lista_turnos[turno_seleccionado]['ingreso']} a {lista_turnos[turno_seleccionado]['salida']}</small>", unsafe_allow_html=True)
                             nota_empleado = st.text_input("✍️ Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
                             
-                            # BOTÓN DE ENTRADA GIGANTE
                             st.markdown("<br>", unsafe_allow_html=True)
                             if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True, type="primary"):
                                 estado_llegada = "A tiempo"
@@ -831,7 +833,6 @@ if pestaña == "📱 Portal del Empleado":
                             if puede_salir:
                                 nota_empleado = st.text_input("✍️ Novedad al salir (Opcional):")
                                 
-                                # BOTÓN DE SALIDA GIGANTE
                                 st.markdown("<br>", unsafe_allow_html=True)
                                 if st.button("🔴 REGISTRAR SALIDA", use_container_width=True, type="primary"):
                                     insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(distancia_salida), 1), "Nota": str(nota_empleado)})
@@ -1043,8 +1044,15 @@ elif pestaña == "💼 Panel de Gerencia":
                 dias_desde_inicio_def = (ahora.date().weekday() - inicio_semana_int) % 7
                 fecha_inicio_semana_def = ahora.date() - datetime.timedelta(days=dias_desde_inicio_def)
                 
+                tipo_vista_rrhh = st.radio("🏢 Filtro de Locales para Reporte y Descargas:", ["Ver todas las sucursales juntas", "Ver una sucursal en particular"], horizontal=True)
+
                 c_dl1, c_dl2, c_dl3 = st.columns(3)
-                local_descarga = c_dl1.selectbox("🏢 Sucursal a evaluar:", ["Todas las sucursales"] + list(lista_locales.keys()), key="dl_loc")
+                if tipo_vista_rrhh == "Ver una sucursal en particular":
+                    local_descarga = c_dl1.selectbox("🏢 Seleccionar Sucursal Específica:", list(lista_locales.keys()), key="dl_loc")
+                else:
+                    local_descarga = "Todas las sucursales"
+                    c_dl1.write("<br>**Modo Global Seleccionado**", unsafe_allow_html=True)
+                
                 fecha_in_dl = c_dl2.date_input("📅 Desde el día:", value=fecha_inicio_semana_def, key="dl_in")
                 fecha_fi_dl = c_dl3.date_input("📅 Hasta el día:", value=ahora.date(), key="dl_fi")
                 
@@ -1052,7 +1060,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
                 
                 if local_descarga != "Todas las sucursales":
-                    st.info(f"📍 **Modo filtrado activo:** Mostrando y exportando únicamente datos de **{local_descarga}**.")
+                    st.info(f"📍 **Modo filtrado activo:** Mostrando y exportando únicamente los datos registrados en la sucursal **{local_descarga}**.")
                 
                 df_dl['Timestamp'] = pd.to_datetime(df_dl['Fecha'].astype(str) + ' ' + df_dl['Hora'].astype(str), errors='coerce')
                 df_dl = df_dl.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
@@ -1170,13 +1178,15 @@ elif pestaña == "💼 Panel de Gerencia":
                         st.write("### ⬇️ Descargas Generales (Para RRHH)")
                         c_btn1, c_btn2 = st.columns(2)
                         
-                        c_btn1.markdown(generate_html_download(df_horas_final, f"Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv", "📥 Descargar Liquidación General (Móvil/PC)"), unsafe_allow_html=True)
+                        nombre_export_sucursal = local_descarga.replace(" ", "_")
+                        
+                        c_btn1.markdown(generate_html_download(df_horas_final, f"Horas_y_Sueldos_{nombre_export_sucursal}_{fecha_in_dl}.csv", "📥 Descargar Liquidación General (Móvil/PC)"), unsafe_allow_html=True)
                         
                         df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
                         if local_descarga != "Todas las sucursales":
                             df_asist_dl = df_asist_dl[df_asist_dl["Sucursal"] == local_descarga]
                         
-                        c_btn2.markdown(generate_html_download(df_asist_dl, f"Fichajes_{local_descarga}_{fecha_in_dl}.csv", "📥 Descargar Fichajes Crudos (Móvil/PC)"), unsafe_allow_html=True)
+                        c_btn2.markdown(generate_html_download(df_asist_dl, f"Fichajes_{nombre_export_sucursal}_{fecha_in_dl}.csv", "📥 Descargar Fichajes Crudos (Móvil/PC)"), unsafe_allow_html=True)
                 else:
                     st.info("📭 Sin registros para liquidar en la sucursal y fechas seleccionadas.")
 
@@ -1358,35 +1368,60 @@ elif pestaña == "💼 Panel de Gerencia":
             with c_su2:
                 st.subheader("📜 Historial y Edición de Tarifas")
                 if sueldos_historico:
-                    df_sueldos = pd.DataFrame(sueldos_historico).sort_values(by=["Empleado", "Fecha_Desde"], ascending=[True, False])
-                    df_mostrar = df_sueldos.copy()
-                    df_mostrar["Fecha_Hasta"] = df_mostrar["Fecha_Hasta"].replace("2099-12-31", "Actualidad")
-                    df_mostrar["Valor_Hora"] = df_mostrar["Valor_Hora"].apply(lambda x: f"${float(x):,.2f}")
-                    st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
-                    st.write("---")
-                    st.write("**✏️ Corregir o Eliminar Tarifas:**")
+                    c_fsu1, c_fsu2 = st.columns(2)
+                    f_s_in = c_fsu1.date_input("Filtrar vista desde:", value=ahora.date() - datetime.timedelta(days=30))
+                    f_s_fi = c_fsu2.date_input("Filtrar vista hasta:", value=ahora.date() + datetime.timedelta(days=365))
+                    
+                    sueldos_filtrados = []
                     for idx, s in enumerate(sueldos_historico):
-                        txt_hasta = "Actualidad" if s['Fecha_Hasta'] == "2099-12-31" else s['Fecha_Hasta']
-                        with st.expander(f"👤 {s['Empleado']} | ${float(s['Valor_Hora']):,.2f}/h | 📅 {s['Fecha_Desde']} al {txt_hasta}"):
-                            c_ed1, c_ed2, c_ed3 = st.columns(3)
-                            n_val = c_ed1.number_input("Valor ($):", value=float(s['Valor_Hora']), step=100.0, key=f"nval_{idx}")
-                            n_ini = c_ed2.date_input("Desde:", value=datetime.datetime.strptime(s['Fecha_Desde'], "%Y-%m-%d").date(), key=f"nini_{idx}")
-                            is_2099 = s['Fecha_Hasta'] == "2099-12-31"
-                            n_fin = c_ed3.date_input("Hasta:", value=datetime.datetime.strptime(s['Fecha_Hasta'], "%Y-%m-%d").date() if not is_2099 else ahora.date(), key=f"nfin_{idx}")
-                            n_actual = c_ed3.checkbox("Dejar sin fecha de fin", value=is_2099, key=f"nact_{idx}")
-                            n_fin_str = "2099-12-31" if n_actual else n_fin.strftime("%Y-%m-%d")
-                            c_b1, c_b2 = st.columns(2)
-                            if c_b1.button("💾 Guardar Cambios", key=f"save_s_{idx}"):
-                                sueldos_historico[idx]['Valor_Hora'] = n_val
-                                sueldos_historico[idx]['Fecha_Desde'] = n_ini.strftime("%Y-%m-%d")
-                                sueldos_historico[idx]['Fecha_Hasta'] = n_fin_str
-                                save_json("sueldos_historico", sueldos_historico)
-                                st.rerun()
-                            if c_b2.button("🗑️ Eliminar Tarifa", key=f"del_s_{idx}"):
-                                sueldos_historico.pop(idx)
-                                save_json("sueldos_historico", sueldos_historico)
-                                st.rerun()
-                else: st.info("ℹ️ Todavía no configuraste ningún sueldo. Las horas se calcularán con un valor de $0 por defecto.")
+                        try:
+                            d_desde = datetime.datetime.strptime(s["Fecha_Desde"], "%Y-%m-%d").date()
+                            d_hasta = datetime.datetime.strptime(s["Fecha_Hasta"], "%Y-%m-%d").date() if s["Fecha_Hasta"] != "2099-12-31" else datetime.date(2099, 12, 31)
+                            if d_desde <= f_s_fi and d_hasta >= f_s_in:
+                                s_con_idx = s.copy()
+                                s_con_idx['_original_idx'] = idx
+                                sueldos_filtrados.append(s_con_idx)
+                        except:
+                            s_con_idx = s.copy()
+                            s_con_idx['_original_idx'] = idx
+                            sueldos_filtrados.append(s_con_idx)
+
+                    if sueldos_filtrados:
+                        df_sueldos = pd.DataFrame(sueldos_filtrados).sort_values(by=["Empleado", "Fecha_Desde"], ascending=[True, False])
+                        df_mostrar = df_sueldos.drop(columns=['_original_idx']).copy()
+                        df_mostrar["Fecha_Hasta"] = df_mostrar["Fecha_Hasta"].replace("2099-12-31", "Actualidad")
+                        df_mostrar["Valor_Hora"] = df_mostrar["Valor_Hora"].apply(lambda x: f"${float(x):,.2f}")
+                        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+                        
+                        st.write("---")
+                        st.write("**✏️ Corregir o Eliminar Tarifas:**")
+                        for item in sueldos_filtrados:
+                            idx = item['_original_idx']
+                            s = sueldos_historico[idx]
+                            txt_hasta = "Actualidad" if s['Fecha_Hasta'] == "2099-12-31" else s['Fecha_Hasta']
+                            with st.expander(f"👤 {s['Empleado']} | ${float(s['Valor_Hora']):,.2f}/h | 📅 {s['Fecha_Desde']} al {txt_hasta}"):
+                                c_ed1, c_ed2, c_ed3 = st.columns(3)
+                                n_val = c_ed1.number_input("Valor ($):", value=float(s['Valor_Hora']), step=100.0, key=f"nval_{idx}")
+                                n_ini = c_ed2.date_input("Desde:", value=datetime.datetime.strptime(s['Fecha_Desde'], "%Y-%m-%d").date(), key=f"nini_{idx}")
+                                is_2099 = s['Fecha_Hasta'] == "2099-12-31"
+                                n_fin = c_ed3.date_input("Hasta:", value=datetime.datetime.strptime(s['Fecha_Hasta'], "%Y-%m-%d").date() if not is_2099 else ahora.date(), key=f"nfin_{idx}")
+                                n_actual = c_ed3.checkbox("Dejar sin fecha de fin", value=is_2099, key=f"nact_{idx}")
+                                n_fin_str = "2099-12-31" if n_actual else n_fin.strftime("%Y-%m-%d")
+                                c_b1, c_b2 = st.columns(2)
+                                if c_b1.button("💾 Guardar Cambios", key=f"save_s_{idx}"):
+                                    sueldos_historico[idx]['Valor_Hora'] = n_val
+                                    sueldos_historico[idx]['Fecha_Desde'] = n_ini.strftime("%Y-%m-%d")
+                                    sueldos_historico[idx]['Fecha_Hasta'] = n_fin_str
+                                    save_json("sueldos_historico", sueldos_historico)
+                                    st.rerun()
+                                if c_b2.button("🗑️ Eliminar Tarifa", key=f"del_s_{idx}"):
+                                    sueldos_historico.pop(idx)
+                                    save_json("sueldos_historico", sueldos_historico)
+                                    st.rerun()
+                    else:
+                        st.info("No se encontraron tarifas en ese rango de fechas.")
+                else: 
+                    st.info("ℹ️ Todavía no configuraste ningún sueldo. Las horas se calcularán con un valor de $0 por defecto.")
 
         with tab_horarios:
             st.markdown('<div class="main-title" style="font-size: 2rem;">📅 Planificación y Horarios</div>', unsafe_allow_html=True)
@@ -1596,6 +1631,11 @@ elif pestaña == "💼 Panel de Gerencia":
                 
             st.markdown("---")
             st.subheader("⚖️ Comparativa: Planificado vs. Real")
+            
+            c_comp1, c_comp2 = st.columns(2)
+            filtro_suc_comp = c_comp1.selectbox("🏢 Filtrar vista por Sucursal:", ["Todas las sucursales"] + list(lista_locales.keys()))
+            filtro_tur_comp = c_comp2.selectbox("⏰ Filtrar vista por Turno:", ["Todos los turnos"] + list(lista_turnos.keys()))
+
             def get_plan_emp(fecha_s, empleado_s):
                 for l_plan, turnos_dict in planificacion_turnos.get(fecha_s, {}).items():
                     if isinstance(turnos_dict, dict):
@@ -1606,11 +1646,28 @@ elif pestaña == "💼 Panel de Gerencia":
                 
             df_asist_comp = load_df("asistencia")
             comp_data = []
+            
             for emp in lista_empleados:
+                mostrar_empleado = False
                 row = {"Empleado": emp}
+                
+                for f_str in str_fechas:
+                    p_loc, p_tur = get_plan_emp(f_str, emp)
+                    if (filtro_suc_comp == "Todas las sucursales" or p_loc == filtro_suc_comp) and \
+                       (filtro_tur_comp == "Todos los turnos" or p_tur == filtro_tur_comp):
+                        if p_tur != "Libre":
+                            mostrar_empleado = True
+                            
+                if filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos":
+                    mostrar_empleado = True 
+
+                if not mostrar_empleado:
+                    continue 
+                    
                 for i, f_str in enumerate(str_fechas):
                     plan_loc, plan_turno = get_plan_emp(f_str, emp)
                     real_estado, real_turno, real_sucursal = "No Fichó", "", ""
+                    
                     if not df_asist_comp.empty:
                         f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Entrada")]
                         if not f_asist.empty:
@@ -1623,19 +1680,26 @@ elif pestaña == "💼 Panel de Gerencia":
                                 
                     f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
                     if f_date > today_date:
-                        cell_val = f"⏳ {plan_turno}" if plan_turno != "Libre" else "Libre"
+                        cell_val = f"⏳ {plan_turno} en {plan_loc}" if plan_turno != "Libre" else "Libre"
                     else:
                         if plan_turno == "Libre":
-                            cell_val = "✅ Libre" if real_estado == "No Fichó" else f"🚨 Vino en su franco"
+                            cell_val = "✅ Libre" if real_estado == "No Fichó" else f"🚨 Vino en su franco a {real_sucursal} ({real_turno})"
                         else:
-                            if real_estado == "No Fichó": cell_val = f"⏳ Pendiente" if f_date == today_date else f"❌ Faltó sin aviso"
-                            elif real_estado == "Ausente Reportado": cell_val = f"❌ Ausente reportado"
+                            if real_estado == "No Fichó":
+                                cell_val = f"⏳ Pendiente" if f_date == today_date else f"❌ Faltó sin aviso"
+                            elif real_estado == "Ausente Reportado":
+                                cell_val = f"❌ Ausente reportado"
                             else:
-                                if real_turno != plan_turno or real_sucursal != plan_loc: cell_val = f"🚨 Vino a {real_sucursal} ({real_turno})"
+                                if plan_loc and (real_sucursal != plan_loc or real_turno != plan_turno):
+                                    planificados_aca = planificacion_turnos.get(f_str, {}).get(real_sucursal, {}).get(real_turno, [])
+                                    planificados_str = ", ".join([p for p in planificados_aca if p != "Nadie"])
+                                    swap_msg = f" (Posible cambio con: {planificados_str})" if planificados_str else ""
+                                    cell_val = f"⚠️ CAMBIO NO AVISADO: Debía ir a {plan_loc} pero fue a {real_sucursal} {swap_msg}"
                                 else:
-                                    if real_estado == "A tiempo": cell_val = f"✅ A tiempo"
-                                    elif real_estado == "Tarde": cell_val = f"🚨 Tarde"
-                                    else: cell_val = f"✅ Vino"
+                                    if real_estado == "A tiempo": cell_val = f"✅ A tiempo en {real_sucursal}"
+                                    elif real_estado == "Tarde": cell_val = f"🚨 Tarde en {real_sucursal}"
+                                    else: cell_val = f"✅ Vino a {real_sucursal}"
+                                    
                     row[cols_fechas[i]] = cell_val
                 comp_data.append(row)
                 
@@ -1644,13 +1708,20 @@ elif pestaña == "💼 Panel de Gerencia":
                     if '✅' in val: return 'background-color: #D1FAE5; color: #065F46; font-weight: 600;'
                     if '❌' in val: return 'background-color: #FEE2E2; color: #991B1B; font-weight: 600;'
                     if '🚨' in val: return 'background-color: #FEF3C7; color: #92400E; font-weight: 600;'
+                    if '⚠️' in val: return 'background-color: #FEE2E2; color: #B91C1C; font-weight: 800; border: 2px solid #EF4444;' 
                     if '⏳' in val: return 'background-color: #DBEAFE; color: #1E40AF; font-weight: 600;'
                 return ''
                 
             df_comp = pd.DataFrame(comp_data)
-            try: styled_comp = df_comp.style.map(color_comparativa)
-            except: styled_comp = df_comp.style.applymap(color_comparativa)
-            st.dataframe(styled_comp, hide_index=True, use_container_width=True)
+            if not df_comp.empty:
+                try: styled_comp = df_comp.style.map(color_comparativa)
+                except: styled_comp = df_comp.style.applymap(color_comparativa)
+                st.dataframe(styled_comp, hide_index=True, use_container_width=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown(generate_html_download(df_comp, f"Comparativa_Horarios_{start_date_plan}.csv", "📥 Descargar Planilla Completa (CSV)"), unsafe_allow_html=True)
+            else:
+                st.info("No hay turnos planificados que coincidan con los filtros seleccionados.")
 
         with tab_puntos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Ranking de Puntos</div>', unsafe_allow_html=True)
@@ -2170,15 +2241,13 @@ elif pestaña == "💼 Panel de Gerencia":
                         config_app["reglas_puntos"] = {"base": r_base, "A tiempo": r_ok, "Tarde": r_tar, "Ausente": r_aus, "Falta Justificada": r_fj}
                         save_json("config", config_app); st.rerun()
                         
-                # --- NUEVO: CONFIGURACIÓN DEL MURO DE LA FAMA ---
                 st.subheader("🏆 Muro de la Fama (Top 3)")
                 with st.form("form_top3"):
                     v_mostrar_top3 = st.checkbox("🏆 Mostrar Top 3 de la Semana Pasada en el Portal", value=get_bool_config("mostrar_top3", False))
-                    v_top3_modo = st.radio("Modo del Ranking:", ["Global", "Por Sucursal"], index=0 if config_app.get("top3_modo", "Global") == "Global" else 1)
-                    v_top3_visibilidad = st.multiselect("¿Quiénes pueden ver el Top 3?", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), default=config_app.get("top3_visibilidad", ["Todos"]))
+                    v_top3_ocultar = st.multiselect("🚫 ¿Quiénes NO pueden ver el Muro de la Fama ni su puntuación?", lista_roles_disponibles + sorted(lista_empleados), default=config_app.get("top3_ocultar", []))
                     
                     if st.form_submit_button("💾 Guardar Ajustes Top 3"):
-                        config_app.update({"mostrar_top3": v_mostrar_top3, "top3_modo": v_top3_modo, "top3_visibilidad": v_top3_visibilidad})
+                        config_app.update({"mostrar_top3": v_mostrar_top3, "top3_ocultar": v_top3_ocultar})
                         save_json("config", config_app)
                         st.success("Configuración del Muro de la Fama guardada.")
                         st.rerun()
