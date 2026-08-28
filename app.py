@@ -1776,8 +1776,3 @@ elif pestaña == "⚙️ Dueño del Software":
                     st.session_state['incognito'] = False
                     st.session_state['incognito_user'] = None
                     st.success("✅ Modo incógnito desactivado. Ahora navegás como un dispositivo de incógnito normal.")
-                else:
-                    st.session_state['incognito'] = True
-                    st.session_state['incognito_user'] = simular_como
-                    st.success(f"🕵️ ¡Identidad camuflada! Ahora el sistema cree que sos: **{simular_como}**. Cambiá de pestaña en el menú principal para ver su pantalla.")
-                st.rerun()
