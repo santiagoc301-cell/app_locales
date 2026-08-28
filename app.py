@@ -55,7 +55,7 @@ div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ☁️ 1. CONEXIÓN A SUPABASE (LA NUBE) Y FIX ANTI-BORRADO
+# ☁️ 1. CONEXIÓN A SUPABASE (LA NUBE)
 # ==========================================
 @st.cache_resource
 def init_connection():
@@ -76,11 +76,12 @@ def get_all_settings():
         if res.data:
             return {row['id']: row['data'] for row in res.data}
         return {}
-    except:
-        return None 
+    except Exception as e:
+        return None # FIX: Evita el sobreescrito si se corta la conexión
 
 def load_json(key_name, default_data):
     settings = get_all_settings()
+    
     if settings is None:
         st.error("⏳ Aguardá un momento. Reconectando de forma segura con la base de datos...")
         st.stop()
@@ -348,7 +349,7 @@ if pestaña == "📱 Portal del Empleado":
                                         if ya_salio:
                                             st.error(f"🚨 El empleado {s_emp_salida} ya tiene una salida registrada en este turno.")
                                         elif ya_pedido:
-                                            st.error(f"🚨 Ya enviaste una solicitud de salida para {s_emp_salida} hoy.")
+                                            st.error(f"🚨 Ya enviaste una solicitud de salida para {s_emp_salida} hoy. Gerencia la está revisando.")
                                         else:
                                             hora_str_salida = s_hora_salida.strftime("%I:%M:%S %p")
                                             nota_final = f"[Auditado por {empleado_en_celu}] {s_motivo_salida}"
@@ -367,7 +368,7 @@ if pestaña == "📱 Portal del Empleado":
                         else:
                             st.info("ℹ️ No hay otros compañeros trabajando en esta sucursal en este momento.")
                     else:
-                        st.warning("🚨 Para auditar la salida de un compañero, primero tenés que registrar tu propia ENTRADA.")
+                        st.warning("🚨 Para auditar la salida de un compañero, primero tenés que registrar tu propia ENTRADA en la sucursal.")
                         
                     st.markdown("---")
                     st.markdown("#### ⭐ Asignar Bono o Multa")
@@ -377,7 +378,7 @@ if pestaña == "📱 Portal del Empleado":
                         s_mot = st.text_input("Motivo:")
                         if st.form_submit_button("Enviar a Gerencia"):
                             if s_emp == "Seleccionar..." or s_pts == 0 or not s_mot.strip():
-                                st.warning("🚨 ¡Completá todos los campos!")
+                                st.warning("🚨 ¡Completá todos los campos! (Elegí un compañero, poné un puntaje distinto a 0 y escribí el motivo).")
                             else:
                                 lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot.strip(), "Autor": empleado_en_celu, "Estado": "Pendiente"})
                                 save_json("ajustes_puntos", lista_puntos)
@@ -816,9 +817,9 @@ elif pestaña == "💼 Panel de Gerencia":
                     st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
                     
         with tab_caja:
-            st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Control de Caja</div>', unsafe_allow_html=True)
-            with st.expander("➕ Cargar Nuevo Cierre de Caja", expanded=True):
-                st.write("Registrá los montos recaudados al finalizar el turno de una sucursal.")
+            st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Control de Caja y Estadísticas</div>', unsafe_allow_html=True)
+            with st.expander("➕ Cargar Cierre de Caja (Actual o Histórico)", expanded=True):
+                st.write("Registrá los montos recaudados al finalizar el turno. **Podés elegir fechas anteriores** para cargar tu historial en el sistema[cite: 1].")
                 with st.form("form_cierre_caja"):
                     c_caj1, c_caj2 = st.columns(2)
                     caj_emp = c_caj1.selectbox("Cajero/Encargado Responsable:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -843,10 +844,10 @@ elif pestaña == "💼 Panel de Gerencia":
                             st.rerun()
                             
             st.write("---")
-            st.subheader("📜 Historial de Cajas")
+            st.subheader("📊 Estadísticas y Comparativas de Recaudación")
             c_fc1, c_fc2 = st.columns([1,3])
-            filtro_caja = c_fc1.selectbox("⏳ Filtrar por:", ["Hoy", "Esta Semana", "Este Mes", "Mes Anterior", "Todo el Historial", "Personalizado"], key="filtro_caja")
-            rango_caja = c_fc2.date_input("📅 Fechas de Caja:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_caja == "Personalizado" else None
+            filtro_caja = c_fc1.selectbox("⏳ Filtrar por:", ["Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_caja")
+            rango_caja = c_fc2.date_input("📅 Rango de Fechas:", value=(ahora.date() - datetime.timedelta(days=30), ahora.date())) if filtro_caja == "Personalizado" else None
             c_in, c_fi = get_fechas_filtro(filtro_caja, rango_caja)
             
             if cierres_caja:
@@ -854,20 +855,56 @@ elif pestaña == "💼 Panel de Gerencia":
                 for c in cierres_caja:
                     d_obj = datetime.datetime.strptime(c["Fecha"], "%Y-%m-%d").date()
                     if c_in <= d_obj <= c_fi: cierres_filtrados.append(c)
+                
                 if cierres_filtrados:
                     df_caja = pd.DataFrame(cierres_filtrados)
+                    df_caja['Efectivo'] = pd.to_numeric(df_caja['Efectivo'], errors='coerce').fillna(0)
+                    df_caja['Tarjeta'] = pd.to_numeric(df_caja['Tarjeta'], errors='coerce').fillna(0)
+                    df_caja['Transferencia'] = pd.to_numeric(df_caja['Transferencia'], errors='coerce').fillna(0)
+                    df_caja['Total_Ventas'] = pd.to_numeric(df_caja['Total_Ventas'], errors='coerce').fillna(0)
+                    
                     col1, col2, col3, col4 = st.columns(4)
                     col1.metric("💵 Efectivo Total", f"${df_caja['Efectivo'].sum():,.2f}")
                     col2.metric("💳 Tarjeta Total", f"${df_caja['Tarjeta'].sum():,.2f}")
                     col3.metric("🏦 Transf. Total", f"${df_caja['Transferencia'].sum():,.2f}")
                     col4.metric("🧾 TOTAL VENTAS", f"${df_caja['Total_Ventas'].sum():,.2f}")
                     
+                    st.markdown("#### 📈 Gráficos de Rendimiento")
+                    tab_g1, tab_g2 = st.tabs(["📉 Evolución de Ventas (Tiempo)", "🏢 Comparativa por Sucursal"])
+                    
+                    with tab_g1:
+                        df_caja['Fecha_DT'] = pd.to_datetime(df_caja['Fecha'])
+                        ventas_por_dia = df_caja.groupby("Fecha_DT")["Total_Ventas"].sum().reset_index()
+                        grafico_lineas = alt.Chart(ventas_por_dia).mark_line(point=True, color='#3b82f6', strokeWidth=3).encode(
+                            x=alt.X('Fecha_DT:T', title='Fecha'),
+                            y=alt.Y('Total_Ventas:Q', title='Total Ventas ($)'),
+                            tooltip=[alt.Tooltip('Fecha_DT:T', title='Fecha'), alt.Tooltip('Total_Ventas:Q', title='Recaudación ($)', format=',.2f')]
+                        ).properties(height=350).interactive()
+                        st.altair_chart(grafico_lineas, use_container_width=True)
+                        
+                    with tab_g2:
+                        ventas_por_sucursal = df_caja.groupby("Sucursal")["Total_Ventas"].sum().reset_index()
+                        grafico_barras = alt.Chart(ventas_por_sucursal).mark_bar(color='#10B981', cornerRadiusTopLeft=5, cornerRadiusTopRight=5).encode(
+                            x=alt.X('Sucursal:N', title='Sucursal', sort='-y'),
+                            y=alt.Y('Total_Ventas:Q', title='Total Ventas ($)'),
+                            tooltip=[alt.Tooltip('Sucursal:N', title='Sucursal'), alt.Tooltip('Total_Ventas:Q', title='Recaudación ($)', format=',.2f')]
+                        ).properties(height=350).interactive()
+                        st.altair_chart(grafico_barras, use_container_width=True)
+
+                    st.markdown("#### 📜 Registro Detallado")
                     df_mostrar_caja = df_caja.copy()
-                    df_mostrar_caja["Efectivo"] = df_mostrar_caja["Efectivo"].apply(lambda x: f"${float(x):,.2f}")
-                    df_mostrar_caja["Tarjeta"] = df_mostrar_caja["Tarjeta"].apply(lambda x: f"${float(x):,.2f}")
-                    df_mostrar_caja["Transferencia"] = df_mostrar_caja["Transferencia"].apply(lambda x: f"${float(x):,.2f}")
-                    df_mostrar_caja["Total_Ventas"] = df_mostrar_caja["Total_Ventas"].apply(lambda x: f"${float(x):,.2f}")
-                    st.dataframe(df_mostrar_caja.sort_values(by=["Fecha", "Hora"], ascending=[False, False]), use_container_width=True, hide_index=True)
+                    df_mostrar_caja["Efectivo"] = df_mostrar_caja["Efectivo"].apply(lambda x: f"${x:,.2f}")
+                    df_mostrar_caja["Tarjeta"] = df_mostrar_caja["Tarjeta"].apply(lambda x: f"${x:,.2f}")
+                    df_mostrar_caja["Transferencia"] = df_mostrar_caja["Transferencia"].apply(lambda x: f"${x:,.2f}")
+                    df_mostrar_caja["Total_Ventas"] = df_mostrar_caja["Total_Ventas"].apply(lambda x: f"${x:,.2f}")
+                    st.dataframe(df_mostrar_caja.sort_values(by=["Fecha", "Hora"], ascending=[False, False])[["Fecha", "Hora", "Sucursal", "Cajero", "Efectivo", "Tarjeta", "Transferencia", "Total_Ventas", "Nota"]], use_container_width=True, hide_index=True)
+                    
+                    csv_cajas = df_caja.to_csv(index=False).encode('utf-8')
+                    b64_cajas = base64.b64encode(csv_cajas).decode()
+                    link_cajas = f'<a href="data:file/csv;base64,{b64_cajas}" download="Reporte_Cajas_{c_in}_al_{c_fi}.csv" style="display: block; text-align: center; padding: 0.6rem 1.2rem; background-color: #3b82f6; color: white; border-radius: 8px; text-decoration: none; font-weight: 700;">📥 Descargar Reporte Completo en CSV</a>'
+                    st.markdown(link_cajas, unsafe_allow_html=True)
+                else:
+                    st.info("📭 No hay registros de caja para las fechas seleccionadas.")
 
         with tab_sueldos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💵 Liquidación de Sueldos</div>', unsafe_allow_html=True)
