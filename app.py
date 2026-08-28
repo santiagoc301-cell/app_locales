@@ -55,7 +55,7 @@ div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ☁️ 1. CONEXIÓN A SUPABASE (LA NUBE)
+# ☁️ 1. CONEXIÓN A SUPABASE (LA NUBE) Y FIX ANTI-BORRADO
 # ==========================================
 @st.cache_resource
 def init_connection():
@@ -77,12 +77,10 @@ def get_all_settings():
             return {row['id']: row['data'] for row in res.data}
         return {}
     except:
-        return None # 🔴 FIX: Evitamos sobreescrituras si hay falla de red.
+        return None 
 
 def load_json(key_name, default_data):
     settings = get_all_settings()
-    
-    # 🔴 FIX: Frena la app si hay error de conexión en lugar de borrar datos.
     if settings is None:
         st.error("⏳ Aguardá un momento. Reconectando de forma segura con la base de datos...")
         st.stop()
@@ -100,6 +98,9 @@ def load_json(key_name, default_data):
 def save_json(key_name, data):
     try:
         settings = get_all_settings()
+        if settings is None:
+            st.error("🚨 No se pudo guardar ahora mismo por un error de conexión.")
+            return
         if key_name in settings:
             supabase.table('app_data').update({'data': data}).eq('id', key_name).execute()
         else:
@@ -197,18 +198,26 @@ def calcular_nivel(puntos):
     else: return "👑 Leyenda"
 
 # ==========================================
+# 3. IDENTIFICACIÓN Y MODO INCÓGNITO (ESPÍA)
+# ==========================================
+empleado_en_celu = None
+es_incognito = st.session_state.get('incognito', False)
+usuario_incognito = st.session_state.get('incognito_user', None)
+
+if es_incognito and usuario_incognito in lista_empleados:
+    empleado_en_celu = usuario_incognito
+elif 'device_id' in st.session_state:
+    for emp, dev in dispositivos_vinculados.items():
+        if dev == st.session_state['device_id']:
+            empleado_en_celu = emp
+            break
+
+# ==========================================
 # 4. NAVEGACIÓN FRONTAL PARA CELULARES
 # ==========================================
 st.markdown('<div class="main-title">🏢 Portal Corporativo</div>', unsafe_allow_html=True)
 pestaña = st.selectbox("Navegación:", ["📱 Portal del Empleado", "💼 Panel de Gerencia", "⚙️ Dueño del Software"], label_visibility="collapsed")
 st.write("---")
-
-empleado_en_celu = None
-if 'device_id' in st.session_state:
-    for emp, dev in dispositivos_vinculados.items():
-        if dev == st.session_state['device_id']:
-            empleado_en_celu = emp
-            break
 
 # ==========================================
 # 🚨 SISTEMA ANTIFRAUDE (KILL SWITCH Y VENCIMIENTO)
@@ -234,14 +243,18 @@ if pestaña in ["📱 Portal del Empleado", "💼 Panel de Gerencia"]:
 # 5. INTERFAZ: PORTAL DEL EMPLEADO
 # ==========================================
 if pestaña == "📱 Portal del Empleado":
-    if 'device_id' not in st.session_state:
-        js_get_device = "(function() { let id = localStorage.getItem('tienda_app_device_id'); if (!id) { id = 'dev_' + Math.random().toString(36).substring(2, 15); localStorage.setItem('tienda_app_device_id', id); } return id; })();"
-        did = streamlit_js_eval(js_expressions=js_get_device, want_output=True, key="get_dev_id")
-        if did:
-            st.session_state['device_id'] = did
-            st.rerun()
+    if es_incognito and usuario_incognito in lista_empleados:
+        device_id = "incognito_device"
+        st.warning(f"🕵️ **MODO INCÓGNITO ACTIVO:** Estás viendo la app como **{usuario_incognito}**. Tu celular personal no quedó vinculado en el sistema.\n\n*Nota: Podés usar la app libremente, pero si hacés clic en 'Registrar Entrada' o guardás datos, SÍ impactarán en la base de datos real.*")
+    else:
+        if 'device_id' not in st.session_state:
+            js_get_device = "(function() { let id = localStorage.getItem('tienda_app_device_id'); if (!id) { id = 'dev_' + Math.random().toString(36).substring(2, 15); localStorage.setItem('tienda_app_device_id', id); } return id; })();"
+            did = streamlit_js_eval(js_expressions=js_get_device, want_output=True, key="get_dev_id")
+            if did:
+                st.session_state['device_id'] = did
+                st.rerun()
+        device_id = st.session_state.get('device_id')
 
-    device_id = st.session_state.get('device_id')
     if config_app.get("mensaje_dia", "").strip() != "":
         st.info(f"📢 **Comunicado Interno:**\\n\\n{config_app['mensaje_dia']}")
 
@@ -610,15 +623,24 @@ if pestaña == "📱 Portal del Empleado":
 # 6. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
 # ==========================================
 elif pestaña == "💼 Panel de Gerencia":
-    password_ingresada = st.text_input("Clave de acceso de Gerencia:", type="password")
-    if password_ingresada and password_ingresada != "doremifasol":
-        if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
-            st.session_state['last_pw_attempt'] = password_ingresada
-            res = "✅ Acceso Permitido" if password_ingresada == config_app.get("admin_password", "1234") else "❌ Acceso Denegado"
-            lista_intentos.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Usuario": empleado_en_celu if empleado_en_celu else "Desconocido", "Clave": password_ingresada, "Resultado": res})
-            save_json("intentos_seguridad", lista_intentos)
-            
-    if password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == "doremifasol":
+    es_incognito_gerencia = (es_incognito and usuario_incognito == "Gerencia")
+
+    if not es_incognito_gerencia:
+        password_ingresada = st.text_input("Clave de acceso de Gerencia:", type="password")
+        
+        if password_ingresada and password_ingresada != "doremifasol":
+            if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
+                st.session_state['last_pw_attempt'] = password_ingresada
+                res = "✅ Acceso Permitido" if password_ingresada == config_app.get("admin_password", "1234") else "❌ Acceso Denegado"
+                lista_intentos.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Usuario": empleado_en_celu if empleado_en_celu else "Desconocido", "Clave": password_ingresada, "Resultado": res})
+                save_json("intentos_seguridad", lista_intentos)
+                
+        acceso_concedido = (password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == "doremifasol")
+    else:
+        st.warning("🕵️ **MODO INCÓGNITO ACTIVO:** Estás viendo el panel como Gerente. Has ingresado sin contraseña y sin dejar registro de tu acceso en el historial de seguridad.")
+        acceso_concedido = True
+
+    if acceso_concedido:
         try:
             f_venc = datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date()
             dias_restantes = (f_venc - ahora.date()).days
@@ -902,8 +924,49 @@ elif pestaña == "💼 Panel de Gerencia":
 
         with tab_horarios:
             st.markdown('<div class="main-title" style="font-size: 2rem;">📅 Planificación y Horarios</div>', unsafe_allow_html=True)
-            st.markdown("### ✏️ Modificar Fichajes Manualmente")
-            st.write("Editá la hora de entrada o salida de un empleado en un día específico.")
+            
+            # --- AGREGAR FICHAJE MANUALMENTE ---
+            st.markdown("### ➕ Agregar Fichaje Manualmente")
+            st.write("Registrá una entrada o salida que un empleado olvidó marcar en la app.")
+            with st.form("form_add_fichaje"):
+                c_add1, c_add2, c_add3 = st.columns(3)
+                add_emp = c_add1.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados))
+                add_fecha = c_add2.date_input("Fecha:", value=ahora.date())
+                add_hora = c_add3.time_input("Hora:", value=ahora.time())
+
+                c_add4, c_add5, c_add6 = st.columns(3)
+                add_suc = c_add4.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()))
+                add_turno = c_add5.selectbox("Turno:", ["Seleccionar..."] + list(lista_turnos.keys()) + ["Manual"])
+                add_tipo = c_add6.selectbox("Tipo:", ["Entrada", "Salida"])
+
+                c_add7, c_add8 = st.columns([1, 2])
+                add_estado = c_add7.selectbox("Estado:", ESTADOS_POSIBLES)
+                add_nota = c_add8.text_input("Nota / Motivo:")
+
+                if st.form_submit_button("💾 Guardar Fichaje Manual"):
+                    if "Seleccionar..." in [add_emp, add_suc, add_turno]:
+                        st.warning("🚨 Por favor seleccioná el Empleado, la Sucursal y el Turno.")
+                    else:
+                        str_hora = add_hora.strftime("%I:%M:%S %p")
+                        str_fecha = add_fecha.strftime("%Y-%m-%d")
+                        insert_row("asistencia", {
+                            "Fecha": str_fecha,
+                            "Hora": str_hora,
+                            "Empleado": add_emp,
+                            "Sucursal": add_suc,
+                            "Turno": add_turno,
+                            "Tipo": add_tipo,
+                            "Estado": add_estado,
+                            "Distancia_m": 0.0,
+                            "Nota": f"[Carga Manual] {add_nota}".strip()
+                        })
+                        st.success("✅ Fichaje manual agregado correctamente a la nube.")
+                        st.rerun()
+            st.markdown("---")
+            
+            # --- MODIFICAR FICHAJES EXISTENTES ---
+            st.markdown("### ✏️ Modificar Fichajes Existentes")
+            st.write("Editá la hora de un registro que ya existe.")
             c_edh1, c_edh2 = st.columns(2)
             emp_mod_horario = c_edh1.selectbox("Seleccionar Empleado:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_mod_hor")
             fecha_mod_horario = c_edh2.date_input("Fecha a modificar:", value=ahora.date(), key="f_mod_hor")
@@ -1507,8 +1570,8 @@ elif pestaña == "⚙️ Dueño del Software":
     
     if pass_dueño == "SantiMaster2026":
         st.success("✅ Acceso Maestro Concedido")
-        tab_licencia, tab_equipos, tab_empresa, tab_reset = st.tabs([
-            "🔑 Control de Licencia", "📱 Gestión de Sesiones", "🏢 Empresa", "☢️ Botón Nuclear"
+        tab_licencia, tab_equipos, tab_empresa, tab_reset, tab_incognito = st.tabs([
+            "🔑 Control de Licencia", "📱 Gestión de Sesiones", "🏢 Empresa", "☢️ Botón Nuclear", "🕵️ Modo Incógnito"
         ])
         
         with tab_licencia:
@@ -1569,4 +1632,26 @@ elif pestaña == "⚙️ Dueño del Software":
                     supabase.table("tareas_log").delete().neq("id", 0).execute()
                 except: pass
                 st.success("¡SISTEMA BORRADO! La aplicación está lista para un nuevo cliente.")
+                st.rerun()
+
+        with tab_incognito:
+            st.subheader("🕵️ Modo Espía / Incógnito")
+            st.write("Activá este modo para navegar por la aplicación simulando ser la Gerencia o un Empleado específico sin dejar rastros en los registros de acceso y sin vincular tu propio celular.")
+            st.info("💡 **Cómo funciona:** Elegí una identidad de la lista de abajo, hacé clic en 'Aplicar Identidad' y luego movete a la pestaña de 'Portal del Empleado' o 'Panel de Gerencia' en el menú principal de arriba de todo.")
+
+            identidad_actual = st.session_state.get('incognito_user', "Desactivado")
+            opciones_identidad = ["Desactivado", "Gerencia"] + sorted(lista_empleados)
+            idx_actual = opciones_identidad.index(identidad_actual) if identidad_actual in opciones_identidad else 0
+
+            simular_como = st.selectbox("Simular identidad de:", opciones_identidad, index=idx_actual)
+
+            if st.button("🕵️ Aplicar Identidad", use_container_width=True):
+                if simular_como == "Desactivado":
+                    st.session_state['incognito'] = False
+                    st.session_state['incognito_user'] = None
+                    st.success("✅ Modo incógnito desactivado. Ahora navegás como un dispositivo de incógnito normal.")
+                else:
+                    st.session_state['incognito'] = True
+                    st.session_state['incognito_user'] = simular_como
+                    st.success(f"🕵️ ¡Identidad camuflada! Ahora el sistema cree que sos: **{simular_como}**. Cambiá de pestaña en el menú principal para ver su pantalla.")
                 st.rerun()
