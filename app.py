@@ -861,7 +861,7 @@ elif pestaña == "💼 Panel de Gerencia":
             datos_conexion_an = []
             for emp in sorted(lista_empleados):
                 estado_cel = "🟢 Enlazado" if emp in dispositivos_vinculados else "🔴 Sin Enlazar"
-                datos_conexion_an.append({"Empleado": emp, "Estado del Celular": estado_cel})
+                datos_conexion_an.append({"Empleado": emp, "Celular": estado_cel})
             st.dataframe(pd.DataFrame(datos_conexion_an), use_container_width=True, hide_index=True)
 
         with tab_caja:
