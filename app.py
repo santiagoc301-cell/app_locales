@@ -135,7 +135,7 @@ config_defecto = {
     "admin_password": "1234", "tolerancia_minutos": 10,
     "mensaje_llegada_tarde": "🚨 Llegada fuera del margen de tolerancia.", "verificar_gps": True,
     "verificar_wifi": False, "salida_estricta": False, "exigir_salida_manual": False, "autoregistro": False,
-    "ip_wifi_oficial": "", "radio_metros": 50, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
+    "ip_wifi_oficial": "", "radio_metros": 150, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
     "desc_tarde": True, "desc_temp": True,
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
@@ -830,7 +830,6 @@ elif pestaña == "💼 Panel de Gerencia":
                         df_horas_final = pd.DataFrame(datos_horas).sort_values(by=["Personal", "⏱️ Horas Computadas"], ascending=[True, False])
                         df_mostrar = df_horas_final.copy()
                         
-                        # --- NUEVO FORMATO DE HORAS EN PANTALLA ---
                         df_mostrar["⏱️ Horas Computadas"] = df_mostrar["⏱️ Horas Computadas"].apply(formato_horas_texto)
                         
                         df_mostrar["💰 Pago Est."] = df_mostrar["💰 Pago Est."].apply(lambda x: f"${x:,.2f}")
@@ -856,21 +855,31 @@ elif pestaña == "💼 Panel de Gerencia":
                         c_btn2.markdown(link_asist, unsafe_allow_html=True)
                 else:
                     st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
-                    
+
         with tab_caja:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Control de Caja y Estadísticas</div>', unsafe_allow_html=True)
+            
+            # --- FILTRAMOS SOLO A LOS QUE TIENEN ROL DE CAJERO O ENCARGADO ---
+            empleados_cajeros = [e for e in lista_empleados if roles_empleados.get(e) in ["Cajero", "Encargado"]]
+            if not empleados_cajeros:
+                # Por si no configuraste a nadie todavía, mostramos a todos para que no se rompa
+                empleados_cajeros = lista_empleados
+            
             with st.expander("➕ Cargar Cierre de Caja (Actual o Histórico)", expanded=True):
                 st.write("Registrá los montos recaudados al finalizar el turno. **Podés elegir fechas anteriores** para cargar tu historial en el sistema.")
                 with st.form("form_cierre_caja"):
                     c_caj1, c_caj2 = st.columns(2)
-                    caj_emp = c_caj1.selectbox("Cajero/Encargado Responsable:", ["Seleccionar..."] + sorted(lista_empleados))
+                    caj_emp = c_caj1.selectbox("Cajero/Encargado Responsable:", ["Seleccionar..."] + sorted(empleados_cajeros))
                     caj_suc = c_caj2.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()))
+                    
                     c_caj3, c_caj4 = st.columns(2)
                     val_efectivo = c_caj3.number_input("💵 Efectivo ($):", min_value=0.0, step=1000.0)
                     val_tarjeta = c_caj4.number_input("💳 Tarjeta ($):", min_value=0.0, step=1000.0)
+                    
                     c_caj5, c_caj6 = st.columns(2)
                     val_transf = c_caj5.number_input("🏦 Transferencia ($):", min_value=0.0, step=1000.0)
                     val_total = c_caj6.number_input("🧾 Total Ventas Declarado ($):", min_value=0.0, step=1000.0)
+                    
                     c_caj7, c_caj8 = st.columns(2)
                     caj_fecha = c_caj7.date_input("Fecha del Cierre:", value=ahora.date())
                     nota_caja = c_caj8.text_input("📝 Novedades (Faltantes, sobrantes, etc.):")
@@ -883,7 +892,66 @@ elif pestaña == "💼 Panel de Gerencia":
                             save_json("cierres_caja", cierres_caja)
                             st.success("✅ ¡Cierre de caja guardado correctamente!")
                             st.rerun()
+
+            # --- NUEVA SECCIÓN: EDITAR O ELIMINAR CIERRES EXISTENTES ---
+            with st.expander("✏️ Modificar o Eliminar Cierres Existentes", expanded=False):
+                if cierres_caja:
+                    st.write("Acá podés corregir montos o borrar cierres mal cargados (se muestran de más nuevo a más viejo).")
+                    for idx, cc in reversed(list(enumerate(cierres_caja))):
+                        with st.expander(f"🛒 {cc.get('Fecha')} - {cc.get('Sucursal')} | {cc.get('Cajero')} | Total: ${float(cc.get('Total_Ventas', 0)):,.2f}"):
+                            c_edc1, c_edc2 = st.columns(2)
                             
+                            idx_emp = (sorted(empleados_cajeros).index(cc['Cajero']) + 1) if cc['Cajero'] in empleados_cajeros else 0
+                            n_emp_caja = c_edc1.selectbox("Cajero/Encargado:", ["Seleccionar..."] + sorted(empleados_cajeros), index=idx_emp, key=f"ecaj_{idx}")
+                            
+                            idx_suc = (list(lista_locales.keys()).index(cc['Sucursal']) + 1) if cc['Sucursal'] in lista_locales else 0
+                            n_suc_caja = c_edc2.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()), index=idx_suc, key=f"esuc_{idx}")
+                            
+                            c_edc3, c_edc4 = st.columns(2)
+                            n_efvo = c_edc3.number_input("Efectivo ($):", value=float(cc.get('Efectivo', 0)), step=1000.0, key=f"eefvo_{idx}")
+                            n_tarj = c_edc4.number_input("Tarjeta ($):", value=float(cc.get('Tarjeta', 0)), step=1000.0, key=f"etarj_{idx}")
+                            
+                            c_edc5, c_edc6 = st.columns(2)
+                            n_transf = c_edc5.number_input("Transferencia ($):", value=float(cc.get('Transferencia', 0)), step=1000.0, key=f"etransf_{idx}")
+                            n_tot = c_edc6.number_input("Total Declarado ($):", value=float(cc.get('Total_Ventas', 0)), step=1000.0, key=f"etot_{idx}")
+                            
+                            c_edc7, c_edc8 = st.columns(2)
+                            try: 
+                                fecha_def = datetime.datetime.strptime(cc['Fecha'], "%Y-%m-%d").date()
+                            except: 
+                                fecha_def = ahora.date()
+                            n_fecha = c_edc7.date_input("Fecha:", value=fecha_def, key=f"efec_{idx}")
+                            n_nota = c_edc8.text_input("Nota:", value=cc.get('Nota', ''), key=f"enot_{idx}")
+
+                            c_edcb1, c_edcb2 = st.columns(2)
+                            if c_edcb1.button("💾 Guardar Cambios", key=f"btn_s_c_{idx}"):
+                                if n_emp_caja != "Seleccionar..." and n_suc_caja != "Seleccionar...":
+                                    cierres_caja[idx] = {
+                                        "Fecha": n_fecha.strftime("%Y-%m-%d"), 
+                                        "Hora": cc.get("Hora", hora_hoy), 
+                                        "Cajero": n_emp_caja, 
+                                        "Sucursal": n_suc_caja, 
+                                        "Turno": cc.get("Turno", "N/A"), 
+                                        "Efectivo": n_efvo, 
+                                        "Tarjeta": n_tarj, 
+                                        "Transferencia": n_transf, 
+                                        "Total_Ventas": n_tot, 
+                                        "Nota": n_nota.strip()
+                                    }
+                                    save_json("cierres_caja", cierres_caja)
+                                    st.success("✅ Cierre actualizado.")
+                                    st.rerun()
+                                else:
+                                    st.warning("⚠️ Faltan seleccionar Empleado o Sucursal.")
+                                    
+                            if c_edcb2.button("🗑️ Eliminar Cierre", key=f"btn_d_c_{idx}"):
+                                cierres_caja.pop(idx)
+                                save_json("cierres_caja", cierres_caja)
+                                st.success("🗑️ Cierre eliminado.")
+                                st.rerun()
+                else:
+                    st.info("No hay cierres registrados todavía.")
+                    
             st.write("---")
             st.subheader("📊 Estadísticas y Comparativas de Recaudación")
             c_fc1, c_fc2 = st.columns([1,3])
@@ -894,8 +962,10 @@ elif pestaña == "💼 Panel de Gerencia":
             if cierres_caja:
                 cierres_filtrados = []
                 for c in cierres_caja:
-                    d_obj = datetime.datetime.strptime(c["Fecha"], "%Y-%m-%d").date()
-                    if c_in <= d_obj <= c_fi: cierres_filtrados.append(c)
+                    try:
+                        d_obj = datetime.datetime.strptime(c["Fecha"], "%Y-%m-%d").date()
+                        if c_in <= d_obj <= c_fi: cierres_filtrados.append(c)
+                    except: pass
                 
                 if cierres_filtrados:
                     df_caja = pd.DataFrame(cierres_filtrados)
@@ -1354,9 +1424,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     puntaje = reg.get('base', 100) + (e_atiempo * reg.get('A tiempo', 0)) + (e_tardes * reg.get('Tarde', -5)) + (e_ausencias * reg.get('Ausente', -15)) + e_aj + e_tp
                     c_pf1, c_pf2, c_pf3, c_pf4 = st.columns(4)
                     
-                    # --- NUEVO FORMATO DE HORAS EN EL PERFIL ---
                     c_pf1.metric("⏱️ Horas Trabajadas", formato_horas_texto(horas_totales))
-                    
                     c_pf2.metric("⭐ Puntos", f"{puntaje} pts")
                     c_pf3.metric("🚨 Tardes", e_tardes)
                     c_pf4.metric("❌ Ausencias", e_ausencias)
