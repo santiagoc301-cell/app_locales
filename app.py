@@ -77,7 +77,7 @@ def get_all_settings():
             return {row['id']: row['data'] for row in res.data}
         return {}
     except Exception as e:
-        return None # FIX: Evita el sobreescrito si se corta la conexión
+        return None 
 
 def load_json(key_name, default_data):
     settings = get_all_settings()
@@ -247,6 +247,10 @@ if pestaña == "📱 Portal del Empleado":
     if es_incognito and usuario_incognito in lista_empleados:
         device_id = "incognito_device"
         st.warning(f"🕵️ **MODO INCÓGNITO ACTIVO:** Estás viendo la app como **{usuario_incognito}**. Tu celular personal no quedó vinculado en el sistema.\n\n*Nota: Podés usar la app libremente, pero si hacés clic en 'Registrar Entrada' o guardás datos, SÍ impactarán en la base de datos real.*")
+        if st.button("❌ Salir del Modo Incógnito", key="btn_exit_inc_emp"):
+            st.session_state['incognito'] = False
+            st.session_state['incognito_user'] = None
+            st.rerun()
     else:
         if 'device_id' not in st.session_state:
             js_get_device = "(function() { let id = localStorage.getItem('tienda_app_device_id'); if (!id) { id = 'dev_' + Math.random().toString(36).substring(2, 15); localStorage.setItem('tienda_app_device_id', id); } return id; })();"
@@ -639,6 +643,10 @@ elif pestaña == "💼 Panel de Gerencia":
         acceso_concedido = (password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == "doremifasol")
     else:
         st.warning("🕵️ **MODO INCÓGNITO ACTIVO:** Estás viendo el panel como Gerente. Has ingresado sin contraseña y sin dejar registro de tu acceso en el historial de seguridad.")
+        if st.button("❌ Salir del Modo Incógnito", key="btn_exit_inc_ger"):
+            st.session_state['incognito'] = False
+            st.session_state['incognito_user'] = None
+            st.rerun()
         acceso_concedido = True
 
     if acceso_concedido:
@@ -819,7 +827,7 @@ elif pestaña == "💼 Panel de Gerencia":
         with tab_caja:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Control de Caja y Estadísticas</div>', unsafe_allow_html=True)
             with st.expander("➕ Cargar Cierre de Caja (Actual o Histórico)", expanded=True):
-                st.write("Registrá los montos recaudados al finalizar el turno. **Podés elegir fechas anteriores** para cargar tu historial en el sistema[cite: 1].")
+                st.write("Registrá los montos recaudados al finalizar el turno. **Podés elegir fechas anteriores** para cargar tu historial en el sistema.")
                 with st.form("form_cierre_caja"):
                     c_caj1, c_caj2 = st.columns(2)
                     caj_emp = c_caj1.selectbox("Cajero/Encargado Responsable:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -1454,7 +1462,8 @@ elif pestaña == "💼 Panel de Gerencia":
             col_l1, col_l2 = st.columns(2)
             with col_l1:
                 st.subheader("🏢 Tiendas Físicas")
-                for loc, d_loc in lista_locales.items(): st.write(f"- **{loc}** | IP: `{d_loc.get('ip', 'Ninguna')}`")
+                for loc, d_loc in lista_locales.items(): 
+                    st.write(f"- **{loc}** | IP: `{d_loc.get('ip', 'Ninguna')}` | Lat: {d_loc.get('lat')} | Lon: {d_loc.get('lon')}")
                 st.markdown("---")
                 ip_gerencia = st.session_state.get('client_ip')
                 if not ip_gerencia:
@@ -1466,12 +1475,47 @@ elif pestaña == "💼 Panel de Gerencia":
                     st.info(f"ℹ️ **Ayuda de Configuración:** La IP actual de tu conexión es `{ip_gerencia}`. (Si estás físicamente en la sucursal nueva, podés copiar y pegar este número abajo).")
                 else: st.info("🔍 Buscando tu IP actual para ayudarte a configurar...")
                 
-                n_loc, lat_loc, lon_loc, ip_loc = st.text_input("Nueva Tienda:"), st.number_input("Lat:", format="%.6f"), st.number_input("Lon:", format="%.6f"), st.text_input("IP Wi-Fi:")
-                if st.button("➕ Crear Tienda") and n_loc:
-                    lista_locales[n_loc] = {"lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}
-                    save_json("locales", lista_locales)
-                    st.rerun()
+                with st.expander("➕ Crear Nueva Tienda", expanded=False):
+                    n_loc = st.text_input("Nombre Nueva Tienda:")
+                    lat_loc = st.number_input("Lat:", format="%.6f")
+                    lon_loc = st.number_input("Lon:", format="%.6f")
+                    ip_loc = st.text_input("IP Wi-Fi:")
+                    if st.button("➕ Crear Tienda") and n_loc:
+                        lista_locales[n_loc] = {"lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}
+                        save_json("locales", lista_locales)
+                        st.rerun()
+                        
+                st.markdown("---")
+                st.markdown("**✏️ Editar Tienda Existente**")
+                loc_mod = st.selectbox("Seleccionar tienda a editar:", ["Seleccionar..."] + list(lista_locales.keys()))
+                if loc_mod != "Seleccionar...":
+                    n_loc_mod = st.text_input("Modificar Nombre:", value=loc_mod)
+                    lat_mod = st.number_input("Modificar Lat:", value=float(lista_locales[loc_mod].get("lat", 0.0)), format="%.6f")
+                    lon_mod = st.number_input("Modificar Lon:", value=float(lista_locales[loc_mod].get("lon", 0.0)), format="%.6f")
+                    ip_mod = st.text_input("Modificar IP Wi-Fi:", value=lista_locales[loc_mod].get("ip", ""))
                     
+                    if st.button("💾 Guardar Cambios de Tienda"):
+                        nuevo_nombre = n_loc_mod.strip()
+                        if nuevo_nombre and nuevo_nombre != loc_mod:
+                            if nuevo_nombre not in lista_locales:
+                                lista_locales[nuevo_nombre] = {"lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}
+                                del lista_locales[loc_mod]
+                                for f_str in planificacion_turnos:
+                                    if loc_mod in planificacion_turnos[f_str]:
+                                        planificacion_turnos[f_str][nuevo_nombre] = planificacion_turnos[f_str].pop(loc_mod)
+                                save_json("planificacion_turnos", planificacion_turnos)
+                                save_json("locales", lista_locales)
+                                st.success(f"✅ Tienda actualizada a {nuevo_nombre}.")
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ Ese nombre de tienda ya existe.")
+                        else:
+                            lista_locales[loc_mod] = {"lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}
+                            save_json("locales", lista_locales)
+                            st.success("✅ Datos de la tienda actualizados.")
+                            st.rerun()
+
+                st.markdown("---")
                 borrar_loc = st.selectbox("Eliminar Tienda:", ["Seleccionar..."] + list(lista_locales.keys()))
                 if st.button("🗑️ Eliminar Tienda") and borrar_loc != "Seleccionar...":
                     del lista_locales[borrar_loc]; save_json("locales", lista_locales); st.rerun()
@@ -1479,13 +1523,49 @@ elif pestaña == "💼 Panel de Gerencia":
             with col_l2:
                 st.subheader("⏰ Turnos / Horarios")
                 for turno, horas in lista_turnos.items(): st.write(f"- **{turno}** | De {horas.get('ingreso')} a {horas.get('salida')}")
-                n_turno = st.text_input("Nuevo Horario (Nombre):")
-                c_h1, c_h2 = st.columns(2)
-                h_ingreso, h_salida = c_h1.time_input("Ingreso:"), c_h2.time_input("Salida:")
-                if st.button("➕ Crear Horario") and n_turno:
-                    lista_turnos[n_turno] = {"ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}
-                    save_json("turnos", lista_turnos)
-                    st.rerun()
+                
+                with st.expander("➕ Crear Nuevo Horario", expanded=False):
+                    n_turno = st.text_input("Nuevo Horario (Nombre):")
+                    c_h1, c_h2 = st.columns(2)
+                    h_ingreso, h_salida = c_h1.time_input("Ingreso:"), c_h2.time_input("Salida:")
+                    if st.button("➕ Crear Horario") and n_turno:
+                        lista_turnos[n_turno] = {"ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}
+                        save_json("turnos", lista_turnos)
+                        st.rerun()
+                        
+                st.markdown("---")
+                st.markdown("**✏️ Editar Horario Existente**")
+                turno_mod = st.selectbox("Seleccionar turno a editar:", ["Seleccionar..."] + list(lista_turnos.keys()))
+                if turno_mod != "Seleccionar...":
+                    n_turno_mod = st.text_input("Modificar Nombre Turno:", value=turno_mod)
+                    try:
+                        time_ing_def = pd.to_datetime(lista_turnos[turno_mod].get('ingreso')).time()
+                        time_sal_def = pd.to_datetime(lista_turnos[turno_mod].get('salida')).time()
+                    except:
+                        time_ing_def, time_sal_def = ahora.time(), ahora.time()
+                        
+                    c_hm1, c_hm2 = st.columns(2)
+                    hm_ingreso = c_hm1.time_input("Modificar Ingreso:", value=time_ing_def)
+                    hm_salida = c_hm2.time_input("Modificar Salida:", value=time_sal_def)
+                    
+                    if st.button("💾 Guardar Horario"):
+                        nuevo_nombre_t = n_turno_mod.strip()
+                        if nuevo_nombre_t and nuevo_nombre_t != turno_mod:
+                            if nuevo_nombre_t not in lista_turnos:
+                                lista_turnos[nuevo_nombre_t] = {"ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}
+                                del lista_turnos[turno_mod]
+                                save_json("turnos", lista_turnos)
+                                st.success("✅ Turno actualizado.")
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ Ese nombre de turno ya existe.")
+                        else:
+                            lista_turnos[turno_mod] = {"ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}
+                            save_json("turnos", lista_turnos)
+                            st.success("✅ Horario actualizado.")
+                            st.rerun()
+
+                st.markdown("---")
                 borrar_turno = st.selectbox("Eliminar Turno:", ["Seleccionar..."] + list(lista_turnos.keys()))
                 if st.button("🗑️ Eliminar Turno") and borrar_turno != "Seleccionar...":
                     del lista_turnos[borrar_turno]; save_json("turnos", lista_turnos); st.rerun()
