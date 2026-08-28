@@ -170,7 +170,7 @@ sueldos_historico = load_json("sueldos_historico", [])
 cierres_caja = load_json("cierres_caja", [])
 planificacion_turnos = load_json("planificacion_turnos", {})
 
-ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A"]
+ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A", "Retiro Temprano", "Salida (Cambio Local)"]
 
 def procesar_rango_fechas(rango):
     if isinstance(rango, tuple) or isinstance(rango, list):
@@ -411,45 +411,43 @@ if pestaña == "📱 Portal del Empleado":
                     else: st.markdown(f"<div class='msg-individual report-box'>✉️ <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
                     
             with st.expander("📍 Smart Check-In", expanded=True):
-                if estado_laboral == "Adentro":
-                    st.info("🟢 Ya tenés una entrada abierta.")
-                if estado_laboral == "Fuera":
-                    st.markdown("### 📡 Radar Automático")
-                    local_detectado = None
-                    distancia_real = 0.0
-                    metodo_det = ""
-                    client_ip_local = None
+                st.markdown("### 📡 Radar Automático")
+                local_detectado = None
+                distancia_real = 0.0
+                metodo_det = ""
+                client_ip_local = None
+                
+                if config_app.get("verificar_wifi", False):
+                    if 'client_ip' not in st.session_state:
+                        js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
+                        cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
+                        if cip: st.session_state['client_ip'] = cip
+                    client_ip_local = st.session_state.get('client_ip')
                     
-                    if config_app.get("verificar_wifi", False):
-                        if 'client_ip' not in st.session_state:
-                            js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
-                            cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
-                            if cip: st.session_state['client_ip'] = cip
-                        client_ip_local = st.session_state.get('client_ip')
-                        
-                    ubicacion = None
-                    if config_app.get("verificar_gps", True):
-                        ubicacion = get_geolocation()
-                        
-                    if config_app.get("verificar_wifi", False) and client_ip_local and client_ip_local != 'Error':
+                ubicacion = None
+                if config_app.get("verificar_gps", True):
+                    ubicacion = get_geolocation()
+                    
+                if config_app.get("verificar_wifi", False) and client_ip_local and client_ip_local != 'Error':
+                    for loc, d_loc in lista_locales.items():
+                        if d_loc.get("ip", "").strip() == client_ip_local:
+                            local_detectado = loc
+                            metodo_det = "📶 Red Wi-Fi de la tienda"
+                            break
+                            
+                if not local_detectado and config_app.get("verificar_gps", True):
+                    if ubicacion and 'coords' in ubicacion:
+                        coord_usuario = (ubicacion['coords']['latitude'], ubicacion['coords']['longitude'])
                         for loc, d_loc in lista_locales.items():
-                            if d_loc.get("ip", "").strip() == client_ip_local:
+                            coord_local = (d_loc["lat"], d_loc["lon"])
+                            dist = geodesic(coord_usuario, coord_local).meters
+                            if dist <= int(config_app.get("radio_metros", 50)):
                                 local_detectado = loc
-                                metodo_det = "📶 Red Wi-Fi de la tienda"
+                                distancia_real = float(dist)
+                                metodo_det = f"📍 GPS Satelital ({dist:.1f} metros)"
                                 break
                                 
-                    if not local_detectado and config_app.get("verificar_gps", True):
-                        if ubicacion and 'coords' in ubicacion:
-                            coord_usuario = (ubicacion['coords']['latitude'], ubicacion['coords']['longitude'])
-                            for loc, d_loc in lista_locales.items():
-                                coord_local = (d_loc["lat"], d_loc["lon"])
-                                dist = geodesic(coord_usuario, coord_local).meters
-                                if dist <= int(config_app.get("radio_metros", 50)):
-                                    local_detectado = loc
-                                    distancia_real = float(dist)
-                                    metodo_det = f"📍 GPS Satelital ({dist:.1f} metros)"
-                                    break
-                                    
+                if estado_laboral == "Fuera":
                     if local_detectado:
                         nombres_turnos = list(lista_turnos.keys())
                         idx_defecto = 0
@@ -507,61 +505,83 @@ if pestaña == "📱 Portal del Empleado":
                         else:
                             st.error(f"❌ Estás fuera del rango de todas las sucursales. Acercate al local para habilitar el fichaje.")
                             
-                else:
-                    st.markdown("### 🏃‍♂️ Finalizar Turno")
+                elif estado_laboral == "Adentro":
                     local_actual = datos_turno_activo.get("Sucursal", "N/A")
                     turno_actual = datos_turno_activo.get("Turno", "N/A")
-                    st.success(f"🏢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
                     
-                    if not config_app.get("exigir_salida_manual", False):
-                        st.info("🟢 **Salida Automática Activada:** No necesitás registrar tu salida. El sistema computará tu turno automáticamente.")
-                    else:
-                        puede_salir = True
-                        distancia_salida = datos_turno_activo.get("Distancia_m", 0.0)
-                        if config_app.get("salida_estricta", False) and local_actual in lista_locales:
-                            st.markdown("🔒 **Verificación requerida para finalizar turno:**")
-                            ubicacion_sal = get_geolocation() if config_app.get("verificar_gps", True) else None
-                            en_rango_sal = True
-                            wifi_aprobado_sal = True
-                            radio_permitido = int(config_app.get("radio_metros", 50))
+                    if local_detectado and local_detectado != local_actual:
+                        st.warning(f"🔄 **Cambio de Sucursal Detectado:** Tenías un turno abierto en **{local_actual}**, pero detectamos que llegaste a **{local_detectado}**.")
+                        st.write("Podés cerrar automáticamente el turno anterior y registrar tu ingreso en esta nueva sucursal con un solo botón.")
+                        
+                        nombres_turnos = list(lista_turnos.keys())
+                        turno_seleccionado = st.selectbox("Turno a fichar acá:", nombres_turnos) if nombres_turnos else "Manual"
+                        
+                        if st.button("🔄 Cambiar de Sucursal (Cerrar anterior e Ingresar acá)", use_container_width=True):
+                            insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida (Cambio Local)", "Distancia_m": 0.0, "Nota": "Cierre automático al cambiar de local."})
                             
-                            if config_app.get("verificar_gps", True):
-                                if ubicacion_sal and 'coords' in ubicacion_sal:
-                                    coord_us = (ubicacion_sal['coords']['latitude'], ubicacion_sal['coords']['longitude'])
-                                    coord_loc = (lista_locales[local_actual]["lat"], lista_locales[local_actual]["lon"])
-                                    distancia_salida = geodesic(coord_us, coord_loc).meters
-                                    if distancia_salida <= radio_permitido:
-                                        st.markdown(f"<div class='validation-box'>✅ <b>GPS Aprobado:</b> Estás en el local ({distancia_salida:.1f} m).</div>", unsafe_allow_html=True)
+                            estado_llegada = "A tiempo"
+                            if turno_seleccionado in lista_turnos:
+                                hora_t_obj = pd.to_datetime(lista_turnos[turno_seleccionado]["ingreso"]).time()
+                                dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
+                            
+                            insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": "Ingreso por cambio de local."})
+                            
+                            st.session_state['fichaje_exitoso'] = f"¡Saliste de {local_actual} e ingresaste a {local_detectado} a las {hora_hoy}!"
+                            st.rerun()
+                    else:
+                        st.markdown("### 🏃‍♂️ Finalizar Turno")
+                        st.success(f"🏢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
+                        
+                        if not config_app.get("exigir_salida_manual", False):
+                            st.info("🟢 **Salida Automática Activada:** No necesitás registrar tu salida. El sistema computará tu turno automáticamente.")
+                        else:
+                            puede_salir = True
+                            distancia_salida = datos_turno_activo.get("Distancia_m", 0.0)
+                            if config_app.get("salida_estricta", False) and local_actual in lista_locales:
+                                st.markdown("🔒 **Verificación requerida para finalizar turno:**")
+                                ubicacion_sal = get_geolocation() if config_app.get("verificar_gps", True) else None
+                                en_rango_sal = True
+                                wifi_aprobado_sal = True
+                                radio_permitido = int(config_app.get("radio_metros", 50))
+                                
+                                if config_app.get("verificar_gps", True):
+                                    if ubicacion_sal and 'coords' in ubicacion_sal:
+                                        coord_us = (ubicacion_sal['coords']['latitude'], ubicacion_sal['coords']['longitude'])
+                                        coord_loc = (lista_locales[local_actual]["lat"], lista_locales[local_actual]["lon"])
+                                        distancia_salida = geodesic(coord_us, coord_loc).meters
+                                        if distancia_salida <= radio_permitido:
+                                            st.markdown(f"<div class='validation-box'>✅ <b>GPS Aprobado:</b> Estás en el local ({distancia_salida:.1f} m).</div>", unsafe_allow_html=True)
+                                        else:
+                                            en_rango_sal = False
+                                            st.markdown(f"<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Fuera de rango:</b> Estás a {distancia_salida:.1f} m. (Límite: {radio_permitido}m). <b>No podés finalizar el turno desde acá.</b></div>", unsafe_allow_html=True)
                                     else:
                                         en_rango_sal = False
-                                        st.markdown(f"<div class='validation-box' style='border-left: 5px solid #EF4444;'>❌ <b>Fuera de rango:</b> Estás a {distancia_salida:.1f} m. (Límite: {radio_permitido}m). <b>No podés finalizar el turno desde acá.</b></div>", unsafe_allow_html=True)
-                                else:
-                                    en_rango_sal = False
-                                    st.markdown("<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⏳ <b>Obteniendo GPS...</b></div>", unsafe_allow_html=True)
+                                        st.markdown("<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⏳ <b>Obteniendo GPS...</b></div>", unsafe_allow_html=True)
+                                        
+                                client_ip_local = None
+                                if config_app.get("verificar_wifi", False):
+                                    if 'client_ip' not in st.session_state:
+                                        js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
+                                        cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
+                                        if cip: st.session_state['client_ip'] = cip
+                                    client_ip_local = st.session_state.get('client_ip')
+                                    ip_tienda = lista_locales[local_actual].get("ip", "").strip()
+                                    if not ip_tienda: wifi_aprobado_sal = False
+                                    elif client_ip_local and client_ip_local == ip_tienda: st.markdown("<div class='validation-box'>✅ <b>Red Aprobada.</b></div>", unsafe_allow_html=True)
+                                    else: wifi_aprobado_sal = False
                                     
-                            client_ip_local = None
-                            if config_app.get("verificar_wifi", False):
-                                if 'client_ip' not in st.session_state:
-                                    js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
-                                    cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
-                                    if cip: st.session_state['client_ip'] = cip
-                                client_ip_local = st.session_state.get('client_ip')
-                                ip_tienda = lista_locales[local_actual].get("ip", "").strip()
-                                if not ip_tienda: wifi_aprobado_sal = False
-                                elif client_ip_local and client_ip_local == ip_tienda: st.markdown("<div class='validation-box'>✅ <b>Red Aprobada.</b></div>", unsafe_allow_html=True)
-                                else: wifi_aprobado_sal = False
+                                if config_app.get("verificar_wifi", False) and not wifi_aprobado_sal: puede_salir = False
+                                if config_app.get("verificar_gps", True) and not en_rango_sal: puede_salir = False
                                 
-                            if config_app.get("verificar_wifi", False) and not wifi_aprobado_sal: puede_salir = False
-                            if config_app.get("verificar_gps", True) and not en_rango_sal: puede_salir = False
-                            
-                        if puede_salir:
-                            nota_empleado = st.text_input("✍️ Novedad al salir (Opcional):")
-                            if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
-                                insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(distancia_salida), 1), "Nota": str(nota_empleado)})
-                                st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
-                                st.rerun()
-                        else:
-                            st.error("🚨 El sistema exige que finalices tu turno físicamente dentro de la sucursal.")
+                            if puede_salir:
+                                nota_empleado = st.text_input("✍️ Novedad al salir (Opcional):")
+                                if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
+                                    insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(distancia_salida), 1), "Nota": str(nota_empleado)})
+                                    st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
+                                    st.rerun()
+                            else:
+                                st.error("🚨 El sistema exige que finalices tu turno físicamente dentro de la sucursal.")
                             
             with st.expander("📬 Buzón de Reportes Confidenciales", expanded=False):
                 tipo_rep = st.selectbox("Tipo:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
@@ -777,49 +797,58 @@ elif pestaña == "💼 Panel de Gerencia":
                             df_ef = df_e[df_e["Fecha"] == f].copy()
                             df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
                             df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
-                            ent = df_ef[df_ef["Tipo"] == "Entrada"]
-                            sal = df_ef[df_ef["Tipo"] == "Salida"]
-                            loc_dia = ent.iloc[0]["Sucursal"] if not ent.empty else (sal.iloc[0]["Sucursal"] if not sal.empty else "N/A")
-                            if local_descarga != "Todas las sucursales" and loc_dia != local_descarga: continue
                             
-                            horas_dia = 0.0
-                            if not ent.empty:
-                                h_in = ent.iloc[0]["Hora_dt"]
-                                turno_actual_eval = ent.iloc[0]["Turno"]
-                                if turno_actual_eval in lista_turnos:
-                                    h_ofi_in_str = lista_turnos[turno_actual_eval].get("ingreso")
-                                    h_ofi_out_str = lista_turnos[turno_actual_eval].get("salida")
-                                    if h_ofi_in_str and h_ofi_out_str:
-                                        h_in_oficial = pd.to_datetime(h_ofi_in_str, errors='coerce')
-                                        h_out_oficial = pd.to_datetime(h_ofi_out_str, errors='coerce')
-                                        if not pd.isna(h_in_oficial) and not pd.isna(h_out_oficial):
-                                            h_in_oficial = h_in_oficial.replace(year=h_in.year, month=h_in.month, day=h_in.day)
-                                            h_out_oficial = h_out_oficial.replace(year=h_in.year, month=h_in.month, day=h_in.day)
+                            entrada_actual = None
+                            
+                            for _, row_f in df_ef.iterrows():
+                                if row_f["Tipo"] == "Entrada":
+                                    entrada_actual = row_f
+                                elif row_f["Tipo"] == "Salida" and entrada_actual is not None:
+                                    h_in = entrada_actual["Hora_dt"]
+                                    h_out = row_f["Hora_dt"]
+                                    turno_eval = entrada_actual["Turno"]
+                                    suc_eval = entrada_actual["Sucursal"]
+                                    
+                                    if local_descarga != "Todas las sucursales" and suc_eval != local_descarga:
+                                        entrada_actual = None
+                                        continue
+                                        
+                                    horas_tramo = 0.0
+                                    if turno_eval in lista_turnos:
+                                        h_ofi_in_str = lista_turnos[turno_eval].get("ingreso")
+                                        h_ofi_out_str = lista_turnos[turno_eval].get("salida")
+                                        if h_ofi_in_str and h_ofi_out_str:
+                                            h_in_oficial = pd.to_datetime(h_ofi_in_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
+                                            h_out_oficial = pd.to_datetime(h_ofi_out_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
                                             if h_out_oficial < h_in_oficial: h_out_oficial += datetime.timedelta(days=1)
-                                            horas_dia = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
+                                            
+                                            horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
                                             if config_app.get("desc_tarde", True):
                                                 diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
-                                                if diff_tarde > 0: horas_dia -= diff_tarde
-                                            if not sal.empty and config_app.get("desc_temp", True):
-                                                h_out = sal.iloc[-1]["Hora_dt"]
+                                                if diff_tarde > 0: horas_tramo -= diff_tarde
+                                            if config_app.get("desc_temp", True):
                                                 diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
-                                                if diff_temp > 0: horas_dia -= diff_temp
-                                else:
-                                    if not sal.empty:
-                                        h_out = sal.iloc[-1]["Hora_dt"]
-                                        diff = (h_out - h_in).total_seconds() / 3600.0
-                                        if diff < 0: diff += 24.0
-                                        horas_dia = diff
-                            horas_dia = max(0.0, horas_dia)
-                            sueldo_hora = 0.0
-                            for s in sueldos_historico:
-                                if s["Empleado"] == emp and s["Fecha_Desde"] <= str(f) <= s["Fecha_Hasta"]:
-                                    sueldo_hora = float(s["Valor_Hora"])
-                                    break
-                            key_datos = (emp, loc_dia)
-                            if key_datos not in datos_horas_dict: datos_horas_dict[key_datos] = {"Horas": 0.0, "Pago": 0.0}
-                            datos_horas_dict[key_datos]["Horas"] += horas_dia
-                            datos_horas_dict[key_datos]["Pago"] += (horas_dia * sueldo_hora)
+                                                if diff_temp > 0: horas_tramo -= diff_temp
+                                        else:
+                                            horas_tramo = (h_out - h_in).total_seconds() / 3600.0
+                                    else:
+                                        horas_tramo = (h_out - h_in).total_seconds() / 3600.0
+                                    
+                                    if horas_tramo < 0: horas_tramo += 24.0
+                                    horas_tramo = max(0.0, horas_tramo)
+                                    
+                                    sueldo_hora = 0.0
+                                    for s in sueldos_historico:
+                                        if s["Empleado"] == emp and s["Fecha_Desde"] <= str(f) <= s["Fecha_Hasta"]:
+                                            sueldo_hora = float(s["Valor_Hora"])
+                                            break
+                                    
+                                    key_datos = (emp, suc_eval)
+                                    if key_datos not in datos_horas_dict: datos_horas_dict[key_datos] = {"Horas": 0.0, "Pago": 0.0}
+                                    datos_horas_dict[key_datos]["Horas"] += horas_tramo
+                                    datos_horas_dict[key_datos]["Pago"] += (horas_tramo * sueldo_hora)
+                                    
+                                    entrada_actual = None
                             
                     datos_horas = []
                     for (emp, loc), vals in datos_horas_dict.items():
@@ -1121,55 +1150,60 @@ elif pestaña == "💼 Panel de Gerencia":
                 if not df_asist_mod.empty:
                     df_fil = df_asist_mod[(df_asist_mod["Empleado"] == emp_mod_horario) & (df_asist_mod["Fecha"] == str(fecha_mod_horario))]
                     if not df_fil.empty:
-                        for idx, row in df_fil.iterrows():
-                            with st.expander(f"{row['Tipo']} - {row['Sucursal']} (Original: {row['Hora']})", expanded=False):
-                                c_m1, c_m2, c_m3 = st.columns(3)
-                                
-                                pd_t = pd.to_datetime(row['Hora'], errors='coerce')
-                                time_val = pd_t.time() if not pd.isna(pd_t) else ahora.time()
-                                pd_f = pd.to_datetime(row['Fecha'], errors='coerce')
-                                date_val = pd_f.date() if not pd.isna(pd_f) else ahora.date()
-                                
-                                nueva_fecha = c_m1.date_input("Fecha:", value=date_val, key=f"fec_{row['id']}")
-                                nueva_hora = c_m2.time_input("Hora:", value=time_val, key=f"time_{row['id']}")
-                                nuevo_tipo = c_m3.selectbox("Tipo:", ["Entrada", "Salida"], index=0 if row['Tipo']=="Entrada" else 1, key=f"tip_{row['id']}")
-                                
-                                c_m4, c_m5, c_m6 = st.columns(3)
-                                
-                                suc_ops = list(lista_locales.keys())
-                                if row['Sucursal'] not in suc_ops: suc_ops.append(row['Sucursal'])
-                                idx_suc = suc_ops.index(row['Sucursal'])
-                                nueva_sucursal = c_m4.selectbox("Sucursal:", suc_ops, index=idx_suc, key=f"suc_{row['id']}")
-                                
-                                turnos_ops = list(lista_turnos.keys()) + ["Manual", "N/A"]
-                                if row['Turno'] not in turnos_ops: turnos_ops.append(row['Turno'])
-                                idx_tur = turnos_ops.index(row['Turno'])
-                                nuevo_turno = c_m5.selectbox("Turno:", turnos_ops, index=idx_tur, key=f"tur_{row['id']}")
-                                
-                                est_ops = ESTADOS_POSIBLES.copy()
-                                if row['Estado'] not in est_ops: est_ops.append(row['Estado'])
-                                idx_est = est_ops.index(row['Estado'])
-                                nuevo_estado = c_m6.selectbox("Estado:", est_ops, index=idx_est, key=f"est_{row['id']}")
-                                
-                                nueva_nota = st.text_input("Nota:", value=row.get('Nota', ''), key=f"not_{row['id']}")
-                                
-                                c_btn1, c_btn2 = st.columns(2)
-                                if c_btn1.button("💾 Guardar Cambios", key=f"btn_upd_{row['id']}"):
-                                    supabase.table("asistencia").update({
-                                        "Fecha": nueva_fecha.strftime("%Y-%m-%d"),
-                                        "Hora": nueva_hora.strftime("%I:%M:%S %p"),
-                                        "Tipo": nuevo_tipo,
-                                        "Sucursal": nueva_sucursal,
-                                        "Turno": nuevo_turno,
-                                        "Estado": nuevo_estado,
-                                        "Nota": nueva_nota
-                                    }).eq("id", int(row['id'])).execute()
-                                    st.success("¡Fichaje actualizado correctamente!")
-                                    st.rerun()
-                                if c_btn2.button("🗑️ Eliminar Fichaje", key=f"btn_del_{row['id']}"):
-                                    supabase.table("asistencia").delete().eq("id", int(row['id'])).execute()
-                                    st.success("Fichaje eliminado.")
-                                    st.rerun()
+                        turnos_del_dia = df_fil["Turno"].unique()
+                        for turno_str in turnos_del_dia:
+                            st.markdown(f"#### ⏰ {turno_str}")
+                            df_t = df_fil[df_fil["Turno"] == turno_str]
+                            
+                            for idx, row in df_t.iterrows():
+                                with st.expander(f"📍 {row['Tipo']} - {row['Sucursal']} (Hora: {row['Hora']})", expanded=False):
+                                    c_m1, c_m2, c_m3 = st.columns(3)
+                                    
+                                    pd_t = pd.to_datetime(row['Hora'], errors='coerce')
+                                    time_val = pd_t.time() if not pd.isna(pd_t) else ahora.time()
+                                    pd_f = pd.to_datetime(row['Fecha'], errors='coerce')
+                                    date_val = pd_f.date() if not pd.isna(pd_f) else ahora.date()
+                                    
+                                    nueva_fecha = c_m1.date_input("Fecha:", value=date_val, key=f"fec_{row['id']}")
+                                    nueva_hora = c_m2.time_input("Hora:", value=time_val, key=f"time_{row['id']}")
+                                    nuevo_tipo = c_m3.selectbox("Tipo:", ["Entrada", "Salida"], index=0 if row['Tipo']=="Entrada" else 1, key=f"tip_{row['id']}")
+                                    
+                                    c_m4, c_m5, c_m6 = st.columns(3)
+                                    
+                                    suc_ops = list(lista_locales.keys())
+                                    if row['Sucursal'] not in suc_ops: suc_ops.append(row['Sucursal'])
+                                    idx_suc = suc_ops.index(row['Sucursal'])
+                                    nueva_sucursal = c_m4.selectbox("Sucursal:", suc_ops, index=idx_suc, key=f"suc_{row['id']}")
+                                    
+                                    turnos_ops = list(lista_turnos.keys()) + ["Manual", "N/A"]
+                                    if row['Turno'] not in turnos_ops: turnos_ops.append(row['Turno'])
+                                    idx_tur = turnos_ops.index(row['Turno'])
+                                    nuevo_turno = c_m5.selectbox("Turno:", turnos_ops, index=idx_tur, key=f"tur_{row['id']}")
+                                    
+                                    est_ops = ESTADOS_POSIBLES.copy()
+                                    if row['Estado'] not in est_ops: est_ops.append(row['Estado'])
+                                    idx_est = est_ops.index(row['Estado'])
+                                    nuevo_estado = c_m6.selectbox("Estado:", est_ops, index=idx_est, key=f"est_{row['id']}")
+                                    
+                                    nueva_nota = st.text_input("Nota:", value=row.get('Nota', ''), key=f"not_{row['id']}")
+                                    
+                                    c_btn1, c_btn2 = st.columns(2)
+                                    if c_btn1.button("💾 Guardar Cambios", key=f"btn_upd_{row['id']}"):
+                                        supabase.table("asistencia").update({
+                                            "Fecha": nueva_fecha.strftime("%Y-%m-%d"),
+                                            "Hora": nueva_hora.strftime("%I:%M:%S %p"),
+                                            "Tipo": nuevo_tipo,
+                                            "Sucursal": nueva_sucursal,
+                                            "Turno": nuevo_turno,
+                                            "Estado": nuevo_estado,
+                                            "Nota": nueva_nota
+                                        }).eq("id", int(row['id'])).execute()
+                                        st.success("¡Fichaje actualizado correctamente!")
+                                        st.rerun()
+                                    if c_btn2.button("🗑️ Eliminar Fichaje", key=f"btn_del_{row['id']}"):
+                                        supabase.table("asistencia").delete().eq("id", int(row['id'])).execute()
+                                        st.success("Fichaje eliminado.")
+                                        st.rerun()
                     else:
                         st.info("No hay fichajes registrados para este día y este empleado.")
                         
@@ -1418,37 +1452,41 @@ elif pestaña == "💼 Panel de Gerencia":
                         df_ef = df_e_p[df_e_p["Fecha"] == f].copy()
                         df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
                         df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
-                        ent = df_ef[df_ef["Tipo"] == "Entrada"]
-                        sal = df_ef[df_ef["Tipo"] == "Salida"]
-                        horas_dia = 0.0
-                        if not ent.empty:
-                            h_in = ent.iloc[0]["Hora_dt"]
-                            turno_actual_eval = ent.iloc[0]["Turno"]
-                            if turno_actual_eval in lista_turnos:
-                                h_ofi_in_str = lista_turnos[turno_actual_eval].get("ingreso")
-                                h_ofi_out_str = lista_turnos[turno_actual_eval].get("salida")
-                                if h_ofi_in_str and h_ofi_out_str:
-                                    h_in_oficial = pd.to_datetime(h_ofi_in_str, errors='coerce')
-                                    h_out_oficial = pd.to_datetime(h_ofi_out_str, errors='coerce')
-                                    if not pd.isna(h_in_oficial) and not pd.isna(h_out_oficial):
-                                        h_in_oficial = h_in_oficial.replace(year=h_in.year, month=h_in.month, day=h_in.day)
-                                        h_out_oficial = h_out_oficial.replace(year=h_in.year, month=h_in.month, day=h_in.day)
+                        
+                        entrada_actual = None
+                        
+                        for _, row_f in df_ef.iterrows():
+                            if row_f["Tipo"] == "Entrada":
+                                entrada_actual = row_f
+                            elif row_f["Tipo"] == "Salida" and entrada_actual is not None:
+                                h_in = entrada_actual["Hora_dt"]
+                                h_out = row_f["Hora_dt"]
+                                turno_actual_eval = entrada_actual["Turno"]
+                                
+                                horas_tramo = 0.0
+                                if turno_actual_eval in lista_turnos:
+                                    h_ofi_in_str = lista_turnos[turno_actual_eval].get("ingreso")
+                                    h_ofi_out_str = lista_turnos[turno_actual_eval].get("salida")
+                                    if h_ofi_in_str and h_ofi_out_str:
+                                        h_in_oficial = pd.to_datetime(h_ofi_in_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
+                                        h_out_oficial = pd.to_datetime(h_ofi_out_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
                                         if h_out_oficial < h_in_oficial: h_out_oficial += datetime.timedelta(days=1)
-                                        horas_dia = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
+                                        
+                                        horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
                                         if config_app.get("desc_tarde", True):
                                             diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
-                                            if diff_tarde > 0: horas_dia -= diff_tarde
-                                        if not sal.empty and config_app.get("desc_temp", True):
-                                            h_out = sal.iloc[-1]["Hora_dt"]
+                                            if diff_tarde > 0: horas_tramo -= diff_tarde
+                                        if config_app.get("desc_temp", True):
                                             diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
-                                            if diff_temp > 0: horas_dia -= diff_temp
-                        else:
-                            if not sal.empty:
-                                h_out = sal.iloc[-1]["Hora_dt"]
-                                diff = (h_out - h_in).total_seconds() / 3600.0
-                                if diff < 0: diff += 24.0
-                                horas_dia = diff
-                        horas_totales += max(0.0, horas_dia)
+                                            if diff_temp > 0: horas_tramo -= diff_temp
+                                    else:
+                                        horas_tramo = (h_out - h_in).total_seconds() / 3600.0
+                                else:
+                                    horas_tramo = (h_out - h_in).total_seconds() / 3600.0
+                                
+                                if horas_tramo < 0: horas_tramo += 24.0
+                                horas_totales += max(0.0, horas_tramo)
+                                entrada_actual = None
                         
                     e_aj = sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == emp_perfil and p.get('Estado') == 'Aprobada' and pf_in <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= pf_fi])
                     e_tp = 0
