@@ -855,14 +855,20 @@ elif pestaña == "💼 Panel de Gerencia":
                         c_btn2.markdown(link_asist, unsafe_allow_html=True)
                 else:
                     st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
+                    
+            st.write("---")
+            st.markdown("### 📱 Estado de Conexión de Celulares")
+            datos_conexion_an = []
+            for emp in sorted(lista_empleados):
+                estado_cel = "🟢 Enlazado" if emp in dispositivos_vinculados else "🔴 Sin Enlazar"
+                datos_conexion_an.append({"Empleado": emp, "Estado del Celular": estado_cel})
+            st.dataframe(pd.DataFrame(datos_conexion_an), use_container_width=True, hide_index=True)
 
         with tab_caja:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Control de Caja y Estadísticas</div>', unsafe_allow_html=True)
             
-            # --- FILTRAMOS SOLO A LOS QUE TIENEN ROL DE CAJERO O ENCARGADO ---
             empleados_cajeros = [e for e in lista_empleados if roles_empleados.get(e) in ["Cajero", "Encargado"]]
             if not empleados_cajeros:
-                # Por si no configuraste a nadie todavía, mostramos a todos para que no se rompa
                 empleados_cajeros = lista_empleados
             
             with st.expander("➕ Cargar Cierre de Caja (Actual o Histórico)", expanded=True):
@@ -893,7 +899,6 @@ elif pestaña == "💼 Panel de Gerencia":
                             st.success("✅ ¡Cierre de caja guardado correctamente!")
                             st.rerun()
 
-            # --- NUEVA SECCIÓN: EDITAR O ELIMINAR CIERRES EXISTENTES ---
             with st.expander("✏️ Modificar o Eliminar Cierres Existentes", expanded=False):
                 if cierres_caja:
                     st.write("Acá podés corregir montos o borrar cierres mal cargados (se muestran de más nuevo a más viejo).")
@@ -1114,10 +1119,10 @@ elif pestaña == "💼 Panel de Gerencia":
             
             # --- MODIFICAR FICHAJES EXISTENTES ---
             st.markdown("### ✏️ Modificar Fichajes Existentes")
-            st.write("Editá la hora de un registro que ya existe.")
+            st.write("Editá cualquier dato de un registro o eliminalo.")
             c_edh1, c_edh2 = st.columns(2)
             emp_mod_horario = c_edh1.selectbox("Seleccionar Empleado:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_mod_hor")
-            fecha_mod_horario = c_edh2.date_input("Fecha a modificar:", value=ahora.date(), key="f_mod_hor")
+            fecha_mod_horario = c_edh2.date_input("Fecha a buscar:", value=ahora.date(), key="f_mod_hor")
             
             if emp_mod_horario != "Seleccionar...":
                 df_asist_mod = load_df("asistencia")
@@ -1125,14 +1130,53 @@ elif pestaña == "💼 Panel de Gerencia":
                     df_fil = df_asist_mod[(df_asist_mod["Empleado"] == emp_mod_horario) & (df_asist_mod["Fecha"] == str(fecha_mod_horario))]
                     if not df_fil.empty:
                         for idx, row in df_fil.iterrows():
-                            with st.expander(f"{row['Tipo']} - {row['Sucursal']} (Original: {row['Hora']})", expanded=True):
-                                c_m1, c_m2 = st.columns([3, 1])
+                            with st.expander(f"{row['Tipo']} - {row['Sucursal']} (Original: {row['Hora']})", expanded=False):
+                                c_m1, c_m2, c_m3 = st.columns(3)
+                                
                                 pd_t = pd.to_datetime(row['Hora'], errors='coerce')
                                 time_val = pd_t.time() if not pd.isna(pd_t) else ahora.time()
-                                nueva_h_val = c_m1.time_input("Nueva Hora:", value=time_val, key=f"time_{row['id']}")
-                                if c_m2.button("💾 Actualizar Hora", key=f"btn_upd_{row['id']}"):
-                                    supabase.table("asistencia").update({"Hora": nueva_h_val.strftime("%I:%M:%S %p")}).eq("id", int(row['id'])).execute()
-                                    st.success("¡Hora actualizada correctamente en la nube!")
+                                pd_f = pd.to_datetime(row['Fecha'], errors='coerce')
+                                date_val = pd_f.date() if not pd.isna(pd_f) else ahora.date()
+                                
+                                nueva_fecha = c_m1.date_input("Fecha:", value=date_val, key=f"fec_{row['id']}")
+                                nueva_hora = c_m2.time_input("Hora:", value=time_val, key=f"time_{row['id']}")
+                                nuevo_tipo = c_m3.selectbox("Tipo:", ["Entrada", "Salida"], index=0 if row['Tipo']=="Entrada" else 1, key=f"tip_{row['id']}")
+                                
+                                c_m4, c_m5, c_m6 = st.columns(3)
+                                
+                                suc_ops = list(lista_locales.keys())
+                                if row['Sucursal'] not in suc_ops: suc_ops.append(row['Sucursal'])
+                                idx_suc = suc_ops.index(row['Sucursal'])
+                                nueva_sucursal = c_m4.selectbox("Sucursal:", suc_ops, index=idx_suc, key=f"suc_{row['id']}")
+                                
+                                turnos_ops = list(lista_turnos.keys()) + ["Manual", "N/A"]
+                                if row['Turno'] not in turnos_ops: turnos_ops.append(row['Turno'])
+                                idx_tur = turnos_ops.index(row['Turno'])
+                                nuevo_turno = c_m5.selectbox("Turno:", turnos_ops, index=idx_tur, key=f"tur_{row['id']}")
+                                
+                                est_ops = ESTADOS_POSIBLES.copy()
+                                if row['Estado'] not in est_ops: est_ops.append(row['Estado'])
+                                idx_est = est_ops.index(row['Estado'])
+                                nuevo_estado = c_m6.selectbox("Estado:", est_ops, index=idx_est, key=f"est_{row['id']}")
+                                
+                                nueva_nota = st.text_input("Nota:", value=row.get('Nota', ''), key=f"not_{row['id']}")
+                                
+                                c_btn1, c_btn2 = st.columns(2)
+                                if c_btn1.button("💾 Guardar Cambios", key=f"btn_upd_{row['id']}"):
+                                    supabase.table("asistencia").update({
+                                        "Fecha": nueva_fecha.strftime("%Y-%m-%d"),
+                                        "Hora": nueva_hora.strftime("%I:%M:%S %p"),
+                                        "Tipo": nuevo_tipo,
+                                        "Sucursal": nueva_sucursal,
+                                        "Turno": nuevo_turno,
+                                        "Estado": nuevo_estado,
+                                        "Nota": nueva_nota
+                                    }).eq("id", int(row['id'])).execute()
+                                    st.success("¡Fichaje actualizado correctamente!")
+                                    st.rerun()
+                                if c_btn2.button("🗑️ Eliminar Fichaje", key=f"btn_del_{row['id']}"):
+                                    supabase.table("asistencia").delete().eq("id", int(row['id'])).execute()
+                                    st.success("Fichaje eliminado.")
                                     st.rerun()
                     else:
                         st.info("No hay fichajes registrados para este día y este empleado.")
@@ -1438,6 +1482,14 @@ elif pestaña == "💼 Panel de Gerencia":
         with tab_staff:
             col_s1, col_s2 = st.columns(2)
             with col_s1:
+                st.subheader("📱 Estado de Celulares")
+                datos_conexion = []
+                for emp in sorted(lista_empleados):
+                    estado_cel = "🟢 Enlazado" if emp in dispositivos_vinculados else "🔴 Sin Enlazar"
+                    datos_conexion.append({"Empleado": emp, "Celular": estado_cel})
+                st.dataframe(pd.DataFrame(datos_conexion), use_container_width=True, hide_index=True)
+                
+                st.markdown("---")
                 st.subheader("➕ Alta y Modificación")
                 with st.form("form_alta_emp"):
                     nuevo_emp = st.text_input("Nuevo Empleado (Carga manual):")
