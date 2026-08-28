@@ -788,68 +788,69 @@ elif pestaña == "💼 Panel de Gerencia":
                 
                 df_dl = df_activos.copy()
                 df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
+                
+                # --- AQUÍ ESTÁ EL ARREGLO DEL CÁLCULO DE HORAS (CRUCE DE MEDIANOCHE) ---
+                df_dl['Timestamp'] = pd.to_datetime(df_dl['Fecha'] + ' ' + df_dl['Hora'], errors='coerce')
+                df_dl = df_dl.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
+                
                 datos_horas_dict = {}
                 
                 if not df_dl.empty:
                     for emp in df_dl["Empleado"].unique():
                         df_e = df_dl[df_dl["Empleado"] == emp]
-                        for f in df_e["Fecha"].unique():
-                            df_ef = df_e[df_e["Fecha"] == f].copy()
-                            df_ef['Hora_dt'] = pd.to_datetime(df_ef['Hora'], errors='coerce')
-                            df_ef = df_ef.dropna(subset=['Hora_dt']).sort_values(by="Hora_dt")
-                            
-                            entrada_actual = None
-                            
-                            for _, row_f in df_ef.iterrows():
-                                if row_f["Tipo"] == "Entrada":
-                                    entrada_actual = row_f
-                                elif row_f["Tipo"] == "Salida" and entrada_actual is not None:
-                                    h_in = entrada_actual["Hora_dt"]
-                                    h_out = row_f["Hora_dt"]
-                                    turno_eval = entrada_actual["Turno"]
-                                    suc_eval = entrada_actual["Sucursal"]
-                                    
-                                    if local_descarga != "Todas las sucursales" and suc_eval != local_descarga:
-                                        entrada_actual = None
-                                        continue
+                        entrada_actual = None
+                        
+                        for _, row_f in df_e.iterrows():
+                            if row_f["Tipo"] == "Entrada":
+                                entrada_actual = row_f
+                            elif row_f["Tipo"] == "Salida" and entrada_actual is not None:
+                                h_in = entrada_actual["Timestamp"]
+                                h_out = row_f["Timestamp"]
+                                turno_eval = entrada_actual["Turno"]
+                                suc_eval = entrada_actual["Sucursal"]
+                                
+                                if local_descarga != "Todas las sucursales" and suc_eval != local_descarga:
+                                    entrada_actual = None
+                                    continue
+                                
+                                horas_tramo = 0.0
+                                if turno_eval in lista_turnos:
+                                    h_ofi_in_str = lista_turnos[turno_eval].get("ingreso")
+                                    h_ofi_out_str = lista_turnos[turno_eval].get("salida")
+                                    if h_ofi_in_str and h_ofi_out_str:
+                                        h_in_oficial = pd.to_datetime(h_ofi_in_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
+                                        h_out_oficial = pd.to_datetime(h_ofi_out_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
+                                        if h_out_oficial < h_in_oficial: h_out_oficial += datetime.timedelta(days=1)
                                         
-                                    horas_tramo = 0.0
-                                    if turno_eval in lista_turnos:
-                                        h_ofi_in_str = lista_turnos[turno_eval].get("ingreso")
-                                        h_ofi_out_str = lista_turnos[turno_eval].get("salida")
-                                        if h_ofi_in_str and h_ofi_out_str:
-                                            h_in_oficial = pd.to_datetime(h_ofi_in_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
-                                            h_out_oficial = pd.to_datetime(h_ofi_out_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
-                                            if h_out_oficial < h_in_oficial: h_out_oficial += datetime.timedelta(days=1)
-                                            
-                                            horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
-                                            if config_app.get("desc_tarde", True):
-                                                diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
-                                                if diff_tarde > 0: horas_tramo -= diff_tarde
-                                            if config_app.get("desc_temp", True):
-                                                diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
-                                                if diff_temp > 0: horas_tramo -= diff_temp
-                                        else:
-                                            horas_tramo = (h_out - h_in).total_seconds() / 3600.0
+                                        horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
+                                        if config_app.get("desc_tarde", True):
+                                            diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
+                                            if diff_tarde > 0: horas_tramo -= diff_tarde
+                                        if config_app.get("desc_temp", True):
+                                            diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
+                                            if diff_temp > 0: horas_tramo -= diff_temp
                                     else:
                                         horas_tramo = (h_out - h_in).total_seconds() / 3600.0
-                                    
-                                    if horas_tramo < 0: horas_tramo += 24.0
-                                    horas_tramo = max(0.0, horas_tramo)
-                                    
-                                    sueldo_hora = 0.0
-                                    for s in sueldos_historico:
-                                        if s["Empleado"] == emp and s["Fecha_Desde"] <= str(f) <= s["Fecha_Hasta"]:
-                                            sueldo_hora = float(s["Valor_Hora"])
-                                            break
-                                    
-                                    key_datos = (emp, suc_eval)
-                                    if key_datos not in datos_horas_dict: datos_horas_dict[key_datos] = {"Horas": 0.0, "Pago": 0.0}
-                                    datos_horas_dict[key_datos]["Horas"] += horas_tramo
-                                    datos_horas_dict[key_datos]["Pago"] += (horas_tramo * sueldo_hora)
-                                    
-                                    entrada_actual = None
-                            
+                                else:
+                                    horas_tramo = (h_out - h_in).total_seconds() / 3600.0
+                                
+                                if horas_tramo < 0: horas_tramo += 24.0
+                                horas_tramo = max(0.0, horas_tramo)
+                                
+                                sueldo_hora = 0.0
+                                fecha_in_str = h_in.strftime("%Y-%m-%d")
+                                for s in sueldos_historico:
+                                    if s["Empleado"] == emp and s["Fecha_Desde"] <= fecha_in_str <= s["Fecha_Hasta"]:
+                                        sueldo_hora = float(s["Valor_Hora"])
+                                        break
+                                
+                                key_datos = (emp, suc_eval)
+                                if key_datos not in datos_horas_dict: datos_horas_dict[key_datos] = {"Horas": 0.0, "Pago": 0.0}
+                                datos_horas_dict[key_datos]["Horas"] += horas_tramo
+                                datos_horas_dict[key_datos]["Pago"] += (horas_tramo * sueldo_hora)
+                                
+                                entrada_actual = None
+                
                     datos_horas = []
                     for (emp, loc), vals in datos_horas_dict.items():
                         if vals["Horas"] > 0:
@@ -857,31 +858,62 @@ elif pestaña == "💼 Panel de Gerencia":
                             
                     if datos_horas:
                         df_horas_final = pd.DataFrame(datos_horas).sort_values(by=["Personal", "⏱️ Horas Computadas"], ascending=[True, False])
-                        df_mostrar = df_horas_final.copy()
                         
-                        df_mostrar["⏱️ Horas Computadas"] = df_mostrar["⏱️ Horas Computadas"].apply(formato_horas_texto)
+                        st.write("### 🪪 Fichas de Liquidación Individuales")
+                        st.write("Acá tenés el desglose exacto y corregido. Podés descargar el CSV individual de cada empleado.")
                         
-                        df_mostrar["💰 Pago Est."] = df_mostrar["💰 Pago Est."].apply(lambda x: f"${x:,.2f}")
-                        def style_pago(val): return 'background-color: #ECFDF5; color: #065F46; font-weight: 800;'
-                        try: styled_df = df_mostrar.style.map(style_pago, subset=["💰 Pago Est."])
-                        except: styled_df = df_mostrar.style.applymap(style_pago, subset=["💰 Pago Est."])
-                        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-                        
-                        st.write("⬇️ **Descargar Archivos (Excel/CSV)**")
+                        # --- NUEVO DISEÑO VISUAL PARA FICHAS ---
+                        c_cards = st.columns(3)
+                        col_idx = 0
+                        for idx, row in df_horas_final.iterrows():
+                            with c_cards[col_idx]:
+                                with st.container():
+                                    st.markdown(f"""
+                                    <div class='super-box' style='padding: 15px; margin-bottom: 10px;'>
+                                        <h4 style='margin:0;'>👤 {row['Personal']}</h4>
+                                        <small style='color:gray;'>{row['Rol']} | {row['Sucursal']}</small>
+                                        <hr style='margin: 10px 0;'>
+                                        <h3 style='margin:0;'>{formato_horas_texto(row["⏱️ Horas Computadas"])}</h3>
+                                        <h2 style='margin:0; color:#065F46;'>${row['💰 Pago Est.']:,.2f}</h2>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    
+                                    # Generar CSV individual nativo
+                                    csv_ind = pd.DataFrame([row]).to_csv(index=False).encode('utf-8')
+                                    st.download_button(
+                                        label="📥 Descargar Ficha",
+                                        data=csv_ind,
+                                        file_name=f"Ficha_{row['Personal'].replace(' ', '_')}.csv",
+                                        mime="text/csv",
+                                        key=f"dl_btn_{idx}"
+                                    )
+                                    st.write("")
+                            col_idx = (col_idx + 1) % 3
+
+                        st.write("---")
+                        st.write("⬇️ **Descarga General de Registros (Nativo)**")
                         c_btn1, c_btn2 = st.columns(2)
-                        csv_horas = df_horas_final.to_csv(index=False).encode('utf-8')
-                        b64_horas = base64.b64encode(csv_horas).decode()
-                        link_horas = f'<a href="data:file/csv;base64,{b64_horas}" download="Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">📥 Descargar Liquidación</a>'
-                        c_btn1.markdown(link_horas, unsafe_allow_html=True)
                         
-                        df_asist_dl = df_dl.copy()
-                        df_asist_dl['Hora_dt'] = pd.to_datetime(df_asist_dl['Hora'], errors='coerce')
-                        df_asist_dl = df_asist_dl.sort_values(by=["Fecha", "Hora_dt"])
-                        df_asist_dl = df_asist_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
+                        # BOTÓN NATIVO PARA LIQUIDACIÓN GLOBAL
+                        csv_horas = df_horas_final.to_csv(index=False).encode('utf-8')
+                        c_btn1.download_button(
+                            label="📥 Descargar Liquidación Completa (CSV)",
+                            data=csv_horas,
+                            file_name=f"Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+                        
+                        # BOTÓN NATIVO PARA ASISTENCIA
+                        df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
                         csv_asist = df_asist_dl.to_csv(index=False).encode('utf-8')
-                        b64_asist = base64.b64encode(csv_asist).decode()
-                        link_asist = f'<a href="data:file/csv;base64,{b64_asist}" download="Fichajes_{local_descarga}_{fecha_in_dl}.csv" style="display: block; text-align: center; padding: 0.5rem; background-color: #ffffff; color: #111827; border: 1px solid #D1D5DB; border-radius: 10px; text-decoration: none; font-weight: 600;">📥 Descargar Fichajes</a>'
-                        c_btn2.markdown(link_asist, unsafe_allow_html=True)
+                        c_btn2.download_button(
+                            label="📥 Descargar Fichajes Crudos (CSV)",
+                            data=csv_asist,
+                            file_name=f"Fichajes_{local_descarga}_{fecha_in_dl}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
                 else:
                     st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
 
@@ -1036,10 +1068,14 @@ elif pestaña == "💼 Panel de Gerencia":
                     df_mostrar_caja["Total_Ventas"] = df_mostrar_caja["Total_Ventas"].apply(lambda x: f"${x:,.2f}")
                     st.dataframe(df_mostrar_caja.sort_values(by=["Fecha", "Hora"], ascending=[False, False])[["Fecha", "Hora", "Sucursal", "Cajero", "Efectivo", "Tarjeta", "Transferencia", "Total_Ventas", "Nota"]], use_container_width=True, hide_index=True)
                     
+                    # BOTÓN NATIVO
                     csv_cajas = df_caja.to_csv(index=False).encode('utf-8')
-                    b64_cajas = base64.b64encode(csv_cajas).decode()
-                    link_cajas = f'<a href="data:file/csv;base64,{b64_cajas}" download="Reporte_Cajas_{c_in}_al_{c_fi}.csv" style="display: block; text-align: center; padding: 0.6rem 1.2rem; background-color: #3b82f6; color: white; border-radius: 8px; text-decoration: none; font-weight: 700;">📥 Descargar Reporte Completo en CSV</a>'
-                    st.markdown(link_cajas, unsafe_allow_html=True)
+                    st.download_button(
+                        label="📥 Descargar Reporte Completo en CSV",
+                        data=csv_cajas,
+                        file_name=f"Reporte_Cajas_{c_in}_al_{c_fi}.csv",
+                        mime="text/csv"
+                    )
                 else:
                     st.info("📭 No hay registros de caja para las fechas seleccionadas.")
 
@@ -1959,3 +1995,7 @@ elif pestaña == "⚙️ Dueño del Software":
                     st.session_state['incognito'] = False
                     st.session_state['incognito_user'] = None
                     st.success("✅ Modo incógnito desactivado. Ahora navegás como un dispositivo de incógnito normal.")
+                else:
+                    st.session_state['incognito'] = True
+                    st.session_state['incognito_user'] = simular_como
+                    st.success(f"✅ ¡Identidad '{simular_como}' aplicada! Navegá por el menú principal para espiar.")
