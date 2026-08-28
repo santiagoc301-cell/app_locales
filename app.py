@@ -220,6 +220,7 @@ config_defecto = {
     "ip_wifi_oficial": "", "radio_metros": 150, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
     "desc_tarde": True, "desc_temp": True, "perdonar_tolerancia": True,
     "mostrar_horas_empleado": False, "dia_inicio_semana": "Lunes",
+    "mostrar_top3": False, "top3_modo": "Global", "top3_visibilidad": ["Todos"],
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
 config_app = load_json("config", config_defecto)
@@ -271,7 +272,6 @@ def get_fechas_filtro(opcion, custom_rango=None):
     hoy = ahora.date()
     if opcion == "Hoy": return hoy, hoy
     elif opcion == "Esta Semana": 
-        # CÁLCULO DE SEMANA CORRELACIONADA
         inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
         dias_desde_inicio = (hoy.weekday() - inicio_semana_int) % 7
         return hoy - datetime.timedelta(days=dias_desde_inicio), hoy
@@ -306,7 +306,6 @@ def formato_horas_texto(h_decimal):
     except:
         return str(h_decimal)
 
-# FUNCION PARA DESCARGAS MÓVILES POR BASE64
 def generate_html_download(df, filename, label):
     csv_b64 = base64.b64encode(df.to_csv(index=False).encode('utf-8')).decode()
     return f'<a href="data:file/csv;base64,{csv_b64}" download="{filename}" style="display: block; width: 100%; text-align: center; padding: 0.6rem 1rem; background-color: #f8fafc; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 12px; text-decoration: none; font-weight: 700; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1); margin-top: 10px; transition: all 0.2s ease;">{label}</a>'
@@ -424,6 +423,75 @@ if pestaña == "📱 Portal del Empleado":
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
             
+            # --- NUEVO: MURO DE LA FAMA (TOP 3) ---
+            visibilidad_top3 = config_app.get("top3_visibilidad", ["Todos"])
+            puede_ver_top3 = False
+            if "Todos" in visibilidad_top3 or rol_empleado in visibilidad_top3 or empleado_en_celu in visibilidad_top3:
+                puede_ver_top3 = True
+
+            if get_bool_config("mostrar_top3", False) and puede_ver_top3:
+                inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
+                hoy_dt_top = ahora.date()
+                dias_desde_inicio_top = (hoy_dt_top.weekday() - inicio_semana_int) % 7
+                fecha_inicio_sem_actual = hoy_dt_top - datetime.timedelta(days=dias_desde_inicio_top)
+                
+                p_in_top = fecha_inicio_sem_actual - datetime.timedelta(days=7)
+                p_fi_top = fecha_inicio_sem_actual - datetime.timedelta(days=1)
+                
+                with st.expander("🏆 Muro de la Fama: Top 3 de la Semana Pasada", expanded=True):
+                    df_p_top = df_punt[(df_punt['F_Obj'] >= p_in_top) & (df_punt['F_Obj'] <= p_fi_top)] if not df_punt.empty else pd.DataFrame()
+                    df_t_top = df_tl[(df_tl['F_Obj'] >= p_in_top) & (df_tl['F_Obj'] <= p_fi_top)] if not df_tl.empty else pd.DataFrame()
+                    ajustes_top = [p for p in lista_puntos if p_in_top <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= p_fi_top]
+                    reg_top = config_app.get("reglas_puntos", {})
+                    
+                    ranking_sp = []
+                    for emp_r in lista_empleados:
+                        df_e_p_top = df_p_top[df_p_top["Empleado"] == emp_r] if not df_p_top.empty else pd.DataFrame()
+                        
+                        suc_ppal = "Sin Asignar"
+                        if not df_e_p_top.empty:
+                            sucursales_emp = df_e_p_top[df_e_p_top["Sucursal"] != ""]["Sucursal"].value_counts()
+                            if not sucursales_emp.empty:
+                                suc_ppal = sucursales_emp.index[0]
+                        
+                        e_aj_top = sum([int(p.get('Puntos', 0)) for p in ajustes_top if p.get('Empleado') == emp_r and p.get('Estado', 'Aprobada') == 'Aprobada'])
+                        e_tp_top = pd.to_numeric(df_t_top[(df_t_top["Empleado"] == emp_r) & (df_t_top["Estado"] == "Aprobada")]["Puntos"], errors='coerce').fillna(0).astype(int).sum() if not df_t_top.empty else 0
+                        
+                        e_ok_top = len(df_e_p_top[df_e_p_top["Estado"] == "A tiempo"]) if not df_e_p_top.empty else 0
+                        e_tar_top = len(df_e_p_top[df_e_p_top["Estado"] == "Tarde"]) if not df_e_p_top.empty else 0
+                        e_au_top = len(df_e_p_top[df_e_p_top["Tipo"] == "Ausente"]) if not df_e_p_top.empty else 0
+                        
+                        puntaje_semana = (e_ok_top * reg_top.get('A tiempo', 0)) + (e_tar_top * reg_top.get('Tarde', -5)) + (e_au_top * reg_top.get('Ausente', -15)) + e_aj_top + e_tp_top
+                        
+                        if not df_e_p_top.empty or e_tp_top > 0 or e_aj_top != 0:
+                            ranking_sp.append({"Empleado": emp_r, "Puntos": puntaje_semana, "Sucursal": suc_ppal})
+                    
+                    ranking_sp = sorted(ranking_sp, key=lambda x: x["Puntos"], reverse=True)
+                    modo_top = config_app.get("top3_modo", "Global")
+                    
+                    st.markdown(f"<p style='text-align: center; color: #64748b; margin-bottom: 10px;'>Desempeño del {p_in_top.strftime('%d/%m')} al {p_fi_top.strftime('%d/%m')}</p>", unsafe_allow_html=True)
+                    
+                    def render_podio(lista_top, titulo):
+                        if not lista_top: return
+                        st.markdown(f"<h5 style='text-align: center; color: #1e3a8a;'>{titulo}</h5>", unsafe_allow_html=True)
+                        c1, c2, c3 = st.columns(3)
+                        if len(lista_top) > 0: c2.markdown(f"<div style='text-align:center; padding:10px; background:#FEF08A; border-radius:10px; border:2px solid #F59E0B;'><b>🥇 1ro</b><br>{lista_top[0]['Empleado']}<br>{lista_top[0]['Puntos']} pts</div>", unsafe_allow_html=True)
+                        if len(lista_top) > 1: c1.markdown(f"<div style='text-align:center; padding:10px; background:#E2E8F0; border-radius:10px; border:2px solid #94A3B8; margin-top:20px;'><b>🥈 2do</b><br>{lista_top[1]['Empleado']}<br>{lista_top[1]['Puntos']} pts</div>", unsafe_allow_html=True)
+                        if len(lista_top) > 2: c3.markdown(f"<div style='text-align:center; padding:10px; background:#FFEDD5; border-radius:10px; border:2px solid #D97706; margin-top:40px;'><b>🥉 3ro</b><br>{lista_top[2]['Empleado']}<br>{lista_top[2]['Puntos']} pts</div>", unsafe_allow_html=True)
+                        st.markdown("<br>", unsafe_allow_html=True)
+
+                    if modo_top == "Global":
+                        render_podio(ranking_sp[:3], "🌍 Ranking Global")
+                        if not ranking_sp: st.info("No hubo actividad registrada la semana pasada.")
+                    else:
+                        sucursales_con_gente = set([r["Sucursal"] for r in ranking_sp if r["Sucursal"] != "Sin Asignar"])
+                        if not sucursales_con_gente:
+                            st.info("No hubo actividad registrada la semana pasada para armar el ranking por sucursal.")
+                        else:
+                            for suc in sorted(list(sucursales_con_gente)):
+                                top_suc = [r for r in ranking_sp if r["Sucursal"] == suc][:3]
+                                render_podio(top_suc, f"🏢 Top 3 - {suc}")
+
             # --- CÁLCULO DE HORAS PARA MOSTRAR AL EMPLEADO ---
             if get_bool_config("mostrar_horas_empleado", False):
                 inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
@@ -971,7 +1039,6 @@ elif pestaña == "💼 Panel de Gerencia":
                 st.markdown("### 🧮 Recuento de Horas y Exportaciones")
                 st.write("Configurá los filtros acá abajo para calcular las horas de tu equipo y descargar las planillas para liquidación.")
                 
-                # --- FECHA SUGERIDA BASADA EN LA SEMANA CONFIGURADA ---
                 inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
                 dias_desde_inicio_def = (ahora.date().weekday() - inicio_semana_int) % 7
                 fecha_inicio_semana_def = ahora.date() - datetime.timedelta(days=dias_desde_inicio_def)
@@ -987,7 +1054,6 @@ elif pestaña == "💼 Panel de Gerencia":
                 if local_descarga != "Todas las sucursales":
                     st.info(f"📍 **Modo filtrado activo:** Mostrando y exportando únicamente datos de **{local_descarga}**.")
                 
-                # CÁLCULO SÚPER ROBUSTO DE HORAS Y PENALIZACIONES DE DESCUENTO
                 df_dl['Timestamp'] = pd.to_datetime(df_dl['Fecha'].astype(str) + ' ' + df_dl['Hora'].astype(str), errors='coerce')
                 df_dl = df_dl.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
                 
@@ -1005,13 +1071,11 @@ elif pestaña == "💼 Panel de Gerencia":
                             t_eval = str(entrada_row["Turno"]).strip()
                             s_eval = str(entrada_row["Sucursal"]).strip()
                             
-                            # Filtro por sucursal
                             if local_descarga != "Todas las sucursales" and s_eval != local_descarga:
                                 return
                                 
                             h_tramo = 0.0
                             
-                            # Si no hay salida real, lo auto-cerramos (siempre y cuando sepa a qué hora debió salir)
                             if not h_out_real:
                                 if t_eval in lista_turnos:
                                     try:
@@ -1023,7 +1087,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                 else:
                                     h_out_real = h_in
                             
-                            # CÁLCULO ESTRICTO DE PENALIDADES E INTELIGENCIA DE TOLERANCIA
                             if t_eval in lista_turnos:
                                 try:
                                     t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
@@ -1032,7 +1095,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                     h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
                                     if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
                                     
-                                    # Ajuste medianoche
                                     if (h_in_ofi - h_in).total_seconds() > 43200:
                                         h_in_ofi -= datetime.timedelta(days=1); h_out_ofi -= datetime.timedelta(days=1)
                                     elif (h_in - h_in_ofi).total_seconds() > 43200:
@@ -1055,10 +1117,8 @@ elif pestaña == "💼 Panel de Gerencia":
                                     
                                     h_tramo = h_tramo_oficial - desc_in - desc_out
                                 except Exception as e:
-                                    # Fallback a horas reales exactas si falla la config
                                     h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
                             else:
-                                # Fallback a horas reales exactas si es turno libre/manual
                                 h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
                                 
                             h_tramo = max(0.0, h_tramo)
@@ -1076,7 +1136,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                 datos_horas_dict[k]["Horas"] += h_tramo
                                 datos_horas_dict[k]["Pago"] += (h_tramo * sueldo_h)
 
-                        # Bucle inteligente cronológico para evitar bugs si olvidó fichar
                         for _, row_f in df_e.iterrows():
                             tipo_reg = str(row_f["Tipo"]).strip()
                             if tipo_reg == "Entrada":
@@ -1473,7 +1532,6 @@ elif pestaña == "💼 Panel de Gerencia":
             st.subheader("🗓️ Planilla Semanal de Turnos (Roster)")
             today_date = ahora.date()
             
-            # --- CÁLCULO DE INICIO DE SEMANA CORRELACIONADO ---
             inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
             dia_inicio_actual = today_date - datetime.timedelta(days=(today_date.weekday() - inicio_semana_int) % 7)
             
@@ -1716,7 +1774,6 @@ elif pestaña == "💼 Panel de Gerencia":
                     e_tardes = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "Tarde")])
                     e_ausencias = len(df_e_p[df_e_p["Tipo"] == "Ausente"])
                     
-                    # --- NUEVO CÁLCULO INTELIGENTE PERFIL ---
                     df_e_p['Timestamp'] = pd.to_datetime(df_e_p['Fecha'].astype(str) + ' ' + df_e_p['Hora'].astype(str), errors='coerce')
                     df_e_p = df_e_p.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
                     
@@ -1754,7 +1811,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                     
                                 h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
                                 
-                                # LÓGICA DE PERDÓN DE TOLERANCIA
                                 minutos_tarde = (h_in - h_in_ofi).total_seconds() / 60.0
                                 if get_bool_config("desc_tarde", True):
                                     tolerancia_m = int(config_app.get("tolerancia_minutos", 10))
@@ -2114,6 +2170,19 @@ elif pestaña == "💼 Panel de Gerencia":
                         config_app["reglas_puntos"] = {"base": r_base, "A tiempo": r_ok, "Tarde": r_tar, "Ausente": r_aus, "Falta Justificada": r_fj}
                         save_json("config", config_app); st.rerun()
                         
+                # --- NUEVO: CONFIGURACIÓN DEL MURO DE LA FAMA ---
+                st.subheader("🏆 Muro de la Fama (Top 3)")
+                with st.form("form_top3"):
+                    v_mostrar_top3 = st.checkbox("🏆 Mostrar Top 3 de la Semana Pasada en el Portal", value=get_bool_config("mostrar_top3", False))
+                    v_top3_modo = st.radio("Modo del Ranking:", ["Global", "Por Sucursal"], index=0 if config_app.get("top3_modo", "Global") == "Global" else 1)
+                    v_top3_visibilidad = st.multiselect("¿Quiénes pueden ver el Top 3?", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), default=config_app.get("top3_visibilidad", ["Todos"]))
+                    
+                    if st.form_submit_button("💾 Guardar Ajustes Top 3"):
+                        config_app.update({"mostrar_top3": v_mostrar_top3, "top3_modo": v_top3_modo, "top3_visibilidad": v_top3_visibilidad})
+                        save_json("config", config_app)
+                        st.success("Configuración del Muro de la Fama guardada.")
+                        st.rerun()
+                        
             with col_aj2:
                 st.subheader("🛡️ Seguridad de Red y Ajustes")
                 with st.form("form_seguridad"):
@@ -2128,8 +2197,6 @@ elif pestaña == "💼 Panel de Gerencia":
                     
                     st.markdown("---")
                     st.markdown("#### Ajustes de Recuento de Horas")
-                    
-                    # --- NUEVO: MOSTRAR HORAS Y CONFIGURAR SEMANA ---
                     v_mostrar_horas_empleado = st.checkbox("👁️ Mostrar horas semanales computadas en el portal del empleado", value=get_bool_config("mostrar_horas_empleado", False), help="El empleado podrá ver cuántas horas oficiales lleva acumuladas en su semana laboral en curso.")
                     v_dia_inicio_semana = st.selectbox("📅 Día de inicio de la semana laboral:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")))
                     
