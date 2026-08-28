@@ -301,6 +301,11 @@ def formato_horas_texto(h_decimal):
     except:
         return str(h_decimal)
 
+# FUNCION PARA DESCARGAS MÓVILES POR BASE64
+def generate_html_download(df, filename, label):
+    csv_b64 = base64.b64encode(df.to_csv(index=False).encode('utf-8')).decode()
+    return f'<a href="data:file/csv;base64,{csv_b64}" download="{filename}" style="display: block; width: 100%; text-align: center; padding: 0.6rem 1rem; background-color: #f8fafc; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 12px; text-decoration: none; font-weight: 700; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1); margin-top: 10px; transition: all 0.2s ease;">{label}</a>'
+
 # ==========================================
 # 3. IDENTIFICACIÓN Y MODO INCÓGNITO (ESPÍA)
 # ==========================================
@@ -1011,22 +1016,11 @@ elif pestaña == "💼 Panel de Gerencia":
                         st.write("### ⬇️ Descargas Generales (Para RRHH)")
                         c_btn1, c_btn2 = st.columns(2)
                         
-                        csv_horas = df_horas_final.to_csv(index=False).encode('utf-8')
-                        c_btn1.download_button(
-                            label="📥 Liquidación General de Sueldos (CSV)",
-                            data=csv_horas,
-                            file_name=f"Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv",
-                            mime="text/csv"
-                        )
+                        # --- MODIFICADO: DESCARGAS COMPATIBLES CON CELULARES ---
+                        c_btn1.markdown(generate_html_download(df_horas_final, f"Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv", "📥 Descargar Liquidación General (Móvil/PC)"), unsafe_allow_html=True)
                         
                         df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
-                        csv_asist = df_asist_dl.to_csv(index=False).encode('utf-8')
-                        c_btn2.download_button(
-                            label="📥 Todos los Fichajes Crudos (CSV)",
-                            data=csv_asist,
-                            file_name=f"Fichajes_{local_descarga}_{fecha_in_dl}.csv",
-                            mime="text/csv"
-                        )
+                        c_btn2.markdown(generate_html_download(df_asist_dl, f"Fichajes_{local_descarga}_{fecha_in_dl}.csv", "📥 Descargar Fichajes Crudos (Móvil/PC)"), unsafe_allow_html=True)
                 else:
                     st.info("📭 Sin registros para liquidar en la sucursal y fechas seleccionadas.")
 
@@ -1181,13 +1175,8 @@ elif pestaña == "💼 Panel de Gerencia":
                     df_mostrar_caja["Total_Ventas"] = df_mostrar_caja["Total_Ventas"].apply(lambda x: f"${x:,.2f}")
                     st.dataframe(df_mostrar_caja.sort_values(by=["Fecha", "Hora"], ascending=[False, False])[["Fecha", "Hora", "Sucursal", "Cajero", "Efectivo", "Tarjeta", "Transferencia", "Total_Ventas", "Nota"]], use_container_width=True, hide_index=True)
                     
-                    csv_cajas = df_caja.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Descargar Reporte Completo en CSV",
-                        data=csv_cajas,
-                        file_name=f"Reporte_Cajas_{c_in}_al_{c_fi}.csv",
-                        mime="text/csv"
-                    )
+                    # --- MODIFICADO: DESCARGA COMPATIBLE CON CELULARES ---
+                    st.markdown(generate_html_download(df_caja, f"Reporte_Cajas_{c_in}_al_{c_fi}.csv", "📥 Descargar Reporte Completo en CSV (Móvil/PC)"), unsafe_allow_html=True)
                 else:
                     st.info("📭 No hay registros de caja para las fechas seleccionadas.")
 
@@ -1261,7 +1250,9 @@ elif pestaña == "💼 Panel de Gerencia":
                 add_tipo = c_add6.selectbox("Tipo:", ["Entrada", "Salida"])
 
                 c_add7, c_add8 = st.columns([1, 2])
-                add_estado = c_add7.selectbox("Estado:", ESTADOS_POSIBLES)
+                
+                # --- MODIFICADO: AUTOMATIZACIÓN DEL ESTADO ---
+                add_estado = c_add7.selectbox("Estado:", ["Automático (Calculado)"] + ESTADOS_POSIBLES)
                 add_nota = c_add8.text_input("Nota / Motivo:")
 
                 if st.form_submit_button("💾 Guardar Fichaje Manual"):
@@ -1270,6 +1261,39 @@ elif pestaña == "💼 Panel de Gerencia":
                     else:
                         str_hora = add_hora.strftime("%I:%M:%S %p")
                         str_fecha = add_fecha.strftime("%Y-%m-%d")
+                        dt_fichaje = datetime.datetime.combine(add_fecha, add_hora)
+                        
+                        # --- MODIFICADO: LÓGICA DE CÁLCULO DE ESTADO ---
+                        estado_final = add_estado
+                        if add_estado == "Automático (Calculado)":
+                            if add_turno in lista_turnos:
+                                try:
+                                    t_ing_obj = datetime.datetime.strptime(lista_turnos[add_turno]["ingreso"], "%I:%M %p").time()
+                                    t_sal_obj = datetime.datetime.strptime(lista_turnos[add_turno]["salida"], "%I:%M %p").time()
+                                    
+                                    dt_ing_ofi = datetime.datetime.combine(add_fecha, t_ing_obj)
+                                    dt_sal_ofi = datetime.datetime.combine(add_fecha, t_sal_obj)
+                                    
+                                    # Lógica inteligente para turnos de noche
+                                    if dt_sal_ofi < dt_ing_ofi:
+                                        if add_tipo == "Salida" and add_hora < datetime.time(12, 0): 
+                                            dt_ing_ofi -= datetime.timedelta(days=1)
+                                        else:
+                                            dt_sal_ofi += datetime.timedelta(days=1)
+
+                                    if add_tipo == "Entrada":
+                                        tolerancia = int(config_app.get("tolerancia_minutos", 10))
+                                        limite_tarde = dt_ing_ofi + datetime.timedelta(minutes=tolerancia)
+                                        estado_final = "Tarde" if dt_fichaje > limite_tarde else "A tiempo"
+                                    
+                                    elif add_tipo == "Salida":
+                                        estado_final = "Retiro Temprano" if dt_fichaje < dt_sal_ofi else "Salida"
+                                        
+                                except Exception as e:
+                                    estado_final = "A tiempo" if add_tipo == "Entrada" else "Salida"
+                            else:
+                                estado_final = "A tiempo" if add_tipo == "Entrada" else "Salida"
+                                
                         insert_row("asistencia", {
                             "Fecha": str_fecha,
                             "Hora": str_hora,
@@ -1277,11 +1301,11 @@ elif pestaña == "💼 Panel de Gerencia":
                             "Sucursal": add_suc,
                             "Turno": add_turno,
                             "Tipo": add_tipo,
-                            "Estado": add_estado,
+                            "Estado": estado_final,
                             "Distancia_m": 0.0,
                             "Nota": f"[Carga Manual] {add_nota}".strip()
                         })
-                        st.success("✅ Fichaje manual agregado correctamente a la nube.")
+                        st.success(f"✅ Fichaje manual agregado correctamente. (Estado: {estado_final})")
                         st.rerun()
             st.markdown("---")
             
