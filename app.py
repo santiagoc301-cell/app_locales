@@ -603,18 +603,21 @@ if pestaña == "📱 Portal del Empleado":
                 rol_elegido_auto = st.selectbox("Tu Rol / Puesto:", lista_roles_disponibles)
                 if st.button("🔗 Registrar y Enlazar mi teléfono") and nuevo_nombre_emp.strip():
                     n_emp = nuevo_nombre_emp.strip()
-                    if n_emp not in lista_empleados:
+                    match = next((e for e in lista_empleados if e.lower() == n_emp.lower()), None)
+                    if not match:
                         lista_empleados.append(n_emp)
                         roles_empleados[n_emp] = rol_elegido_auto
                         tareas_individuales[n_emp] = []
                         save_json("empleados", lista_empleados)
                         save_json("roles", roles_empleados)
                         save_json("tareas_individuales", tareas_individuales)
+                        dispositivos_vinculados[n_emp] = device_id
+                        save_json("dispositivos", dispositivos_vinculados)
                     else:
-                        roles_empleados[n_emp] = rol_elegido_auto
+                        roles_empleados[match] = rol_elegido_auto
                         save_json("roles", roles_empleados)
-                    dispositivos_vinculados[n_emp] = device_id
-                    save_json("dispositivos", dispositivos_vinculados)
+                        dispositivos_vinculados[match] = device_id
+                        save_json("dispositivos", dispositivos_vinculados)
                     st.rerun()
             else:
                 st.info("🔒 **Auto-registro deshabilitado.** Pedile a gerencia que te dé de alta en la lista o seleccioná tu nombre si ya existís.")
@@ -1338,14 +1341,19 @@ elif pestaña == "💼 Panel de Gerencia":
                 with st.form("form_alta_emp"):
                     nuevo_emp = st.text_input("Nuevo Empleado (Carga manual):")
                     rol_asignar = st.selectbox("Rol:", lista_roles_disponibles)
-                    if st.form_submit_button("➕ Agregar a la lista") and nuevo_emp and nuevo_emp not in lista_empleados:
-                        lista_empleados.append(nuevo_emp.strip())
-                        roles_empleados[nuevo_emp.strip()] = rol_asignar
-                        tareas_individuales[nuevo_emp.strip()] = []
-                        save_json("empleados", lista_empleados)
-                        save_json("roles", roles_empleados)
-                        save_json("tareas_individuales", tareas_individuales)
-                        st.rerun()
+                    if st.form_submit_button("➕ Agregar a la lista") and nuevo_emp:
+                        n_emp = nuevo_emp.strip()
+                        if any(e.lower() == n_emp.lower() for e in lista_empleados):
+                            st.error("🚨 Ese empleado ya existe. No se permiten nombres repetidos.")
+                        else:
+                            lista_empleados.append(n_emp)
+                            roles_empleados[n_emp] = rol_asignar
+                            tareas_individuales[n_emp] = []
+                            save_json("empleados", lista_empleados)
+                            save_json("roles", roles_empleados)
+                            save_json("tareas_individuales", tareas_individuales)
+                            st.success(f"✅ Empleado '{n_emp}' agregado correctamente.")
+                            st.rerun()
                         
                 if lista_empleados:
                     st.markdown("---")
@@ -1358,7 +1366,9 @@ elif pestaña == "💼 Panel de Gerencia":
                     if c_mod1.button("💾 Guardar Cambios"):
                         nn = nuevo_nombre_mod.strip()
                         if nn and nn != emp_mod:
-                            if nn not in lista_empleados:
+                            if any(e.lower() == nn.lower() for e in lista_empleados):
+                                st.error("🚨 Ese nombre ya está en uso por otro empleado.")
+                            else:
                                 lista_empleados.remove(emp_mod)
                                 lista_empleados.append(nn)
                                 roles_empleados[nn] = nuevo_rol
@@ -1407,13 +1417,12 @@ elif pestaña == "💼 Panel de Gerencia":
                                     supabase.table("tareas_log").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
                                 except: pass
                                 st.success(f"Nombre actualizado a {nn} en toda la base de datos.")
-                            else:
-                                st.warning("Ese nombre ya existe.")
+                                st.rerun()
                         else:
                             roles_empleados[emp_mod] = nuevo_rol
                             save_json("roles", roles_empleados)
                             st.success("Rol actualizado.")
-                        st.rerun()
+                            st.rerun()
                         
                     if c_mod2.button("🔓 Liberar Celular") and emp_mod in dispositivos_vinculados:
                         del dispositivos_vinculados[emp_mod]
