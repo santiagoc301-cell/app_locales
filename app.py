@@ -21,34 +21,94 @@ st.markdown("""
 .viewerBadge_container { display: none !important; }
 footer { display: none !important; }
 #MainMenu { display: none !important; }
-[data-testid="collapsedControl"] { display: none !important; }
 
 /* ---> DISEÑO DE PESTAÑAS (TABS) ESTILO APP MODERNA <--- */
-.stTabs [data-baseweb="tab-list"] { gap: 8px; padding-bottom: 5px; }
-.stTabs [data-baseweb="tab"] { background-color: #F3F4F6; border-radius: 8px 8px 0 0;
-padding: 10px 20px; border: 1px solid #E5E7EB; border-bottom: none; transition: all 0.3s ease; }
-.stTabs [aria-selected="true"] { background: linear-gradient(135deg, #1e3a8a, #3b82f6) !important; color: white !important; font-weight: 800 !important; box-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.2); }
-.stTabs [data-baseweb="tab"]:hover { background-color: #E0E7FF; }
+.stTabs [data-baseweb="tab-list"] { gap: 10px; padding-bottom: 10px; }
+.stTabs [data-baseweb="tab"] { 
+    background-color: #f8f9fa; 
+    border-radius: 10px 10px 0 0;
+    padding: 12px 24px; 
+    border: 1px solid #e9ecef; 
+    border-bottom: none; 
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+    color: #495057;
+}
+.stTabs [aria-selected="true"] { 
+    background: linear-gradient(135deg, #1e3a8a, #3b82f6) !important; 
+    color: white !important; 
+    font-weight: 800 !important; 
+    box-shadow: 0 -4px 15px -3px rgba(59, 130, 246, 0.3); 
+    border: none;
+}
+.stTabs [data-baseweb="tab"]:hover { background-color: #e2e8f0; }
 
 /* ---> DISEÑO GENERAL DE LA APP <--- */
-.main-title { font-size: 2.4rem; font-weight: 900; background: -webkit-linear-gradient(45deg, #111827, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; text-align: center; text-transform: uppercase; letter-spacing: -0.5px; }
-div[data-testid="metric-container"] { background: linear-gradient(180deg, #ffffff 0%, #F9FAFB 100%); border: 1px solid #E5E7EB; padding: 20px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); border-top: 5px solid #3b82f6; transition: transform 0.2s ease-in-out;}
-div[data-testid="metric-container"]:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);}
-div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #111827; }
-.stButton>button { border-radius: 12px; font-weight: 700; transition: all 0.3s; border: 1px solid #D1D5DB; padding: 0.6rem 1rem; width: 100%; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);}
-.stButton>button:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border-color: #9CA3AF;}
-.alert-box { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
-.task-box { padding: 18px; border-radius: 12px; border-left: 6px solid #10B981; background-color: #ECFDF5; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
-.task-pend { padding: 18px; border-radius: 12px; border-left: 6px solid #F59E0B; background-color: #FFFBEB; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
-.task-rej { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
-.report-box { padding: 18px; border-radius: 12px; border-left: 6px solid #8B5CF6; background-color: #F5F3FF; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
-.super-box { padding: 18px; border-radius: 12px; border-left: 6px solid #3B82F6; background-color: #EFF6FF; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
-.highlight-edit { padding: 20px; background-color: #EFF6FF; border-radius: 12px; border-left: 6px solid #3B82F6; margin-bottom: 20px; font-weight: bold;}
-.credencial { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; padding: 25px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4); margin-bottom: 25px; border: 1px solid rgba(255,255,255,0.1);}
-.cred-nombre { font-size: 2rem; font-weight: 900; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);}
+.main-title { 
+    font-size: 2.5rem; 
+    font-weight: 900; 
+    background: -webkit-linear-gradient(45deg, #0f172a, #3b82f6); 
+    -webkit-background-clip: text; 
+    -webkit-text-fill-color: transparent; 
+    margin-bottom: 1rem; 
+    text-transform: uppercase; 
+    letter-spacing: -0.5px; 
+}
+div[data-testid="metric-container"] { 
+    background: white; 
+    border: 1px solid #f1f5f9; 
+    padding: 24px; 
+    border-radius: 16px; 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); 
+    border-top: 5px solid #3b82f6; 
+    transition: all 0.3s ease;
+}
+div[data-testid="metric-container"]:hover { 
+    transform: translateY(-5px); 
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #0f172a; }
+.stButton>button { 
+    border-radius: 12px; 
+    font-weight: 700; 
+    transition: all 0.2s ease; 
+    border: 1px solid #e2e8f0; 
+    padding: 0.6rem 1rem; 
+    width: 100%; 
+    background-color: white;
+    color: #1e293b;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+.stButton>button:hover { 
+    transform: translateY(-2px); 
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
+    border-color: #cbd5e1;
+    background-color: #f8fafc;
+}
+
+/* ---> CAJAS DE AVISOS Y ALERTAS <--- */
+.alert-box { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #991B1B;}
+.task-box { padding: 18px; border-radius: 12px; border-left: 6px solid #10B981; background-color: #ECFDF5; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #065F46;}
+.task-pend { padding: 18px; border-radius: 12px; border-left: 6px solid #F59E0B; background-color: #FFFBEB; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #92400E;}
+.task-rej { padding: 18px; border-radius: 12px; border-left: 6px solid #EF4444; background-color: #FEF2F2; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #991B1B;}
+.report-box { padding: 18px; border-radius: 12px; border-left: 6px solid #8B5CF6; background-color: #F5F3FF; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #5B21B6;}
+.super-box { padding: 20px; border-radius: 16px; border-left: 6px solid #3B82F6; background-color: #EFF6FF; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); color: #1E40AF;}
+.validation-box { padding: 18px; border-radius: 12px; border: 1px solid #E5E7EB; background-color: #F9FAFB; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: #374151;}
+
+/* ---> CREDENCIAL EMPLEADO <--- */
+.credencial { 
+    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); 
+    color: white; 
+    padding: 25px; 
+    border-radius: 20px; 
+    box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4); 
+    margin-bottom: 25px; 
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.cred-nombre { font-size: 2.2rem; font-weight: 900; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);}
 .cred-rol { font-size: 1.2rem; opacity: 0.95; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
 .cred-nivel { font-size: 1.4rem; font-weight: 800; background-color: rgba(255,255,255,0.25); padding: 8px 20px; border-radius: 25px; display: inline-block; backdrop-filter: blur(5px);}
-.validation-box { padding: 18px; border-radius: 12px; border: 1px solid #E5E7EB; background-color: #F9FAFB; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+
+/* ---> BLOQUEO PANTALLA <--- */
 .bloqueo-pantalla { padding: 40px; background: linear-gradient(180deg, #FEF2F2 0%, #ffffff 100%); border: 4px solid #EF4444; border-radius: 20px; text-align: center; margin-top: 50px; box-shadow: 0 25px 50px -12px rgba(239, 68, 68, 0.25);}
 .bloqueo-titulo { font-size: 3.5rem; color: #B91C1C; font-weight: 900; margin-bottom: 20px;}
 </style>
@@ -209,7 +269,7 @@ def formato_horas_texto(h_decimal):
         nums = {0: "cero", 1: "una", 2: "dos", 3: "tres", 4: "cuatro", 5: "cinco", 6: "seis", 7: "siete", 8: "ocho", 9: "nueve", 10: "diez", 11: "once", 12: "doce", 13: "trece", 14: "catorce", 15: "quince", 16: "dieciséis", 17: "diecisiete", 18: "dieciocho", 19: "diecinueve", 20: "veinte", 21: "veintiuna", 22: "veintidós", 23: "veintitrés", 24: "veinticuatro"}
         h_str = nums.get(horas, str(horas))
         txt_h = "hora" if horas == 1 else "horas"
-        return f"{horas}:{minutos:02d} ({h_str} {txt_h} y {minutos} minutos)"
+        return f"{horas}:{minutos:02d} ({h_str} {txt_h} y {minutos} min)"
     except:
         return str(h_decimal)
 
@@ -231,7 +291,7 @@ elif 'device_id' in st.session_state:
 # ==========================================
 # 4. NAVEGACIÓN FRONTAL PARA CELULARES
 # ==========================================
-st.markdown('<div class="main-title">🏢 Portal Corporativo</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title" style="text-align: center;">🏢 Portal Corporativo</div>', unsafe_allow_html=True)
 pestaña = st.selectbox("Navegación:", ["📱 Portal del Empleado", "💼 Panel de Gerencia", "⚙️ Dueño del Software"], label_visibility="collapsed")
 st.write("---")
 
@@ -406,9 +466,9 @@ if pestaña == "📱 Portal del Empleado":
             mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu, rol_empleado]]
             if mensajes_usuario:
                 for m in mensajes_usuario:
-                    if m['destinatario'] == 'Todos': st.markdown(f"<div class='msg-global alert-box' style='border-color: #3B82F6; background-color: #EFF6FF;'>📢 <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
-                    elif m['destinatario'] == rol_empleado: st.markdown(f"<div class='msg-rol'>📢 <b>Para el equipo de {rol_empleado}s:</b> {m['texto']}</div>", unsafe_allow_html=True)
-                    else: st.markdown(f"<div class='msg-individual report-box'>✉️ <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    if m['destinatario'] == 'Todos': st.markdown(f"<div class='alert-box' style='border-color: #3B82F6; background-color: #EFF6FF; color: #1E40AF;'>📢 <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    elif m['destinatario'] == rol_empleado: st.markdown(f"<div class='task-pend'>📢 <b>Para el equipo de {rol_empleado}s:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    else: st.markdown(f"<div class='report-box'>✉️ <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
                     
             with st.expander("📍 Smart Check-In", expanded=True):
                 st.markdown("### 📡 Radar Automático")
@@ -465,8 +525,9 @@ if pestaña == "📱 Portal del Empleado":
                             min_diff = float('inf')
                             for idx, t_name in enumerate(nombres_turnos):
                                 try:
-                                    h_ing = pd.to_datetime(lista_turnos[t_name]["ingreso"]).time()
-                                    dt_ing = datetime.datetime.combine(ahora.date(), h_ing).replace(tzinfo=zona_arg)
+                                    h_ing_str = lista_turnos[t_name]["ingreso"]
+                                    h_ing_obj = datetime.datetime.strptime(h_ing_str, "%I:%M %p").time()
+                                    dt_ing = datetime.datetime.combine(ahora.date(), h_ing_obj).replace(tzinfo=zona_arg)
                                     diff = abs((ahora - dt_ing).total_seconds())
                                     if diff < min_diff:
                                         min_diff = diff
@@ -483,10 +544,13 @@ if pestaña == "📱 Portal del Empleado":
                             nota_empleado = st.text_input("✍️ Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
                             
                             if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
-                                hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
-                                hora_t_obj = pd.to_datetime(hora_t_str).time()
-                                dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                                estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
+                                estado_llegada = "A tiempo"
+                                try:
+                                    hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
+                                    hora_t_obj = datetime.datetime.strptime(hora_t_str, "%I:%M %p").time()
+                                    dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                    estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
+                                except: pass
                                 
                                 insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": str(nota_empleado)})
                                 
@@ -521,9 +585,11 @@ if pestaña == "📱 Portal del Empleado":
                             
                             estado_llegada = "A tiempo"
                             if turno_seleccionado in lista_turnos:
-                                hora_t_obj = pd.to_datetime(lista_turnos[turno_seleccionado]["ingreso"]).time()
-                                dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                                estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
+                                try:
+                                    hora_t_obj = datetime.datetime.strptime(lista_turnos[turno_seleccionado]["ingreso"], "%I:%M %p").time()
+                                    dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                    estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
+                                except: pass
                             
                             insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": "Ingreso por cambio de local."})
                             
@@ -582,7 +648,7 @@ if pestaña == "📱 Portal del Empleado":
                                     st.rerun()
                             else:
                                 st.error("🚨 El sistema exige que finalices tu turno físicamente dentro de la sucursal.")
-                            
+                                
             with st.expander("📬 Buzón de Reportes Confidenciales", expanded=False):
                 tipo_rep = st.selectbox("Tipo:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
                 implicado = st.selectbox("Compañero implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu]) if tipo_rep == "Incumplimiento de un compañero" else "N/A"
@@ -789,8 +855,19 @@ elif pestaña == "💼 Panel de Gerencia":
                 df_dl = df_activos.copy()
                 df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
                 
-                # --- AQUÍ ESTÁ EL ARREGLO DEL CÁLCULO DE HORAS (CRUCE DE MEDIANOCHE) ---
-                df_dl['Timestamp'] = pd.to_datetime(df_dl['Fecha'] + ' ' + df_dl['Hora'], errors='coerce')
+                # ---> SOLUCIÓN FILTRO DE SUCURSAL <---
+                # Filtramos la tabla general ANTES de exportar, así las descargas y el loop respetan la sucursal.
+                if local_descarga != "Todas las sucursales":
+                    df_dl = df_dl[df_dl['Sucursal'] == local_descarga]
+                    st.info(f"📍 **Modo filtrado activo:** Mostrando y exportando únicamente datos de la sucursal **{local_descarga}**.")
+                
+                # ---> SOLUCIÓN CÁLCULO DE HORAS (CRUCE DE MEDIANOCHE Y PARSEO DE FECHAS) <---
+                # Aseguramos que el Timestamp se procese bien aunque el horario sea AM/PM.
+                try:
+                    df_dl['Timestamp'] = pd.to_datetime(df_dl['Fecha'] + ' ' + df_dl['Hora'], errors='coerce')
+                except:
+                    pass # Fallback nativo
+                
                 df_dl = df_dl.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
                 
                 datos_horas_dict = {}
@@ -809,6 +886,7 @@ elif pestaña == "💼 Panel de Gerencia":
                                 turno_eval = entrada_actual["Turno"]
                                 suc_eval = entrada_actual["Sucursal"]
                                 
+                                # Doble chequeo por las dudas (ya filtramos el df entero arriba)
                                 if local_descarga != "Todas las sucursales" and suc_eval != local_descarga:
                                     entrada_actual = None
                                     continue
@@ -818,20 +896,31 @@ elif pestaña == "💼 Panel de Gerencia":
                                     h_ofi_in_str = lista_turnos[turno_eval].get("ingreso")
                                     h_ofi_out_str = lista_turnos[turno_eval].get("salida")
                                     if h_ofi_in_str and h_ofi_out_str:
-                                        h_in_oficial = pd.to_datetime(h_ofi_in_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
-                                        h_out_oficial = pd.to_datetime(h_ofi_out_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
-                                        if h_out_oficial < h_in_oficial: h_out_oficial += datetime.timedelta(days=1)
-                                        
-                                        horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
-                                        if config_app.get("desc_tarde", True):
-                                            diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
-                                            if diff_tarde > 0: horas_tramo -= diff_tarde
-                                        if config_app.get("desc_temp", True):
-                                            diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
-                                            if diff_temp > 0: horas_tramo -= diff_temp
-                                    else:
-                                        horas_tramo = (h_out - h_in).total_seconds() / 3600.0
+                                        try:
+                                            # Parseo súper seguro de horas usando datetime nativo
+                                            t_in_obj = datetime.datetime.strptime(h_ofi_in_str, "%I:%M %p").time()
+                                            t_out_obj = datetime.datetime.strptime(h_ofi_out_str, "%I:%M %p").time()
+                                            
+                                            h_in_oficial = datetime.datetime.combine(h_in.date(), t_in_obj)
+                                            h_out_oficial = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                            
+                                            if h_out_oficial < h_in_oficial: 
+                                                h_out_oficial += datetime.timedelta(days=1)
+                                            
+                                            horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
+                                            
+                                            if config_app.get("desc_tarde", True):
+                                                diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
+                                                if diff_tarde > 0: horas_tramo -= diff_tarde
+                                                
+                                            if config_app.get("desc_temp", True):
+                                                diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
+                                                if diff_temp > 0: horas_tramo -= diff_temp
+                                        except Exception as e:
+                                            # Si falla el parseo, caemos directo a la hora real
+                                            horas_tramo = (h_out - h_in).total_seconds() / 3600.0
                                 else:
+                                    # Para turnos manuales o no definidos, cuenta el tiempo exacto que estuvo
                                     horas_tramo = (h_out - h_in).total_seconds() / 3600.0
                                 
                                 if horas_tramo < 0: horas_tramo += 24.0
@@ -869,12 +958,12 @@ elif pestaña == "💼 Panel de Gerencia":
                             with c_cards[col_idx]:
                                 with st.container():
                                     st.markdown(f"""
-                                    <div class='super-box' style='padding: 15px; margin-bottom: 10px;'>
-                                        <h4 style='margin:0;'>👤 {row['Personal']}</h4>
+                                    <div class='super-box' style='padding: 20px; margin-bottom: 15px; border-radius: 12px;'>
+                                        <h4 style='margin:0; font-size: 1.3rem;'>👤 {row['Personal']}</h4>
                                         <small style='color:gray;'>{row['Rol']} | {row['Sucursal']}</small>
-                                        <hr style='margin: 10px 0;'>
-                                        <h3 style='margin:0;'>{formato_horas_texto(row["⏱️ Horas Computadas"])}</h3>
-                                        <h2 style='margin:0; color:#065F46;'>${row['💰 Pago Est.']:,.2f}</h2>
+                                        <hr style='margin: 12px 0; border: 0; border-top: 1px solid #E5E7EB;'>
+                                        <p style='margin:0; font-size: 1.1rem; color: #4B5563;'>{formato_horas_texto(row["⏱️ Horas Computadas"])}</p>
+                                        <h2 style='margin: 5px 0 0 0; color:#059669; font-weight: 900;'>${row['💰 Pago Est.']:,.2f}</h2>
                                     </div>
                                     """, unsafe_allow_html=True)
                                     
@@ -885,37 +974,38 @@ elif pestaña == "💼 Panel de Gerencia":
                                         data=csv_ind,
                                         file_name=f"Ficha_{row['Personal'].replace(' ', '_')}.csv",
                                         mime="text/csv",
-                                        key=f"dl_btn_{idx}"
+                                        key=f"dl_btn_{idx}",
+                                        use_container_width=True
                                     )
                                     st.write("")
                             col_idx = (col_idx + 1) % 3
 
                         st.write("---")
-                        st.write("⬇️ **Descarga General de Registros (Nativo)**")
+                        st.write("### ⬇️ Descargas Generales (Para RRHH)")
                         c_btn1, c_btn2 = st.columns(2)
                         
-                        # BOTÓN NATIVO PARA LIQUIDACIÓN GLOBAL
+                        # BOTÓN NATIVO PARA LIQUIDACIÓN GLOBAL (AHORA RESPETA EL FILTRO)
                         csv_horas = df_horas_final.to_csv(index=False).encode('utf-8')
                         c_btn1.download_button(
-                            label="📥 Descargar Liquidación Completa (CSV)",
+                            label="📥 Liquidación General de Sueldos (CSV)",
                             data=csv_horas,
                             file_name=f"Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv",
                             mime="text/csv",
                             use_container_width=True
                         )
                         
-                        # BOTÓN NATIVO PARA ASISTENCIA
+                        # BOTÓN NATIVO PARA ASISTENCIA CRUDO (AHORA RESPETA EL FILTRO)
                         df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
                         csv_asist = df_asist_dl.to_csv(index=False).encode('utf-8')
                         c_btn2.download_button(
-                            label="📥 Descargar Fichajes Crudos (CSV)",
+                            label="📥 Todos los Fichajes Crudos (CSV)",
                             data=csv_asist,
                             file_name=f"Fichajes_{local_descarga}_{fecha_in_dl}.csv",
                             mime="text/csv",
                             use_container_width=True
                         )
                 else:
-                    st.info("Sin registros de horas para la sucursal y fechas seleccionadas.")
+                    st.info("📭 Sin registros de horas completados (Entrada + Salida) para la sucursal y fechas seleccionadas.")
 
         with tab_caja:
             st.markdown('<div class="main-title" style="font-size: 2rem;">💰 Control de Caja y Estadísticas</div>', unsafe_allow_html=True)
@@ -1504,19 +1594,25 @@ elif pestaña == "💼 Panel de Gerencia":
                                     h_ofi_in_str = lista_turnos[turno_actual_eval].get("ingreso")
                                     h_ofi_out_str = lista_turnos[turno_actual_eval].get("salida")
                                     if h_ofi_in_str and h_ofi_out_str:
-                                        h_in_oficial = pd.to_datetime(h_ofi_in_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
-                                        h_out_oficial = pd.to_datetime(h_ofi_out_str, errors='coerce').replace(year=h_in.year, month=h_in.month, day=h_in.day)
-                                        if h_out_oficial < h_in_oficial: h_out_oficial += datetime.timedelta(days=1)
-                                        
-                                        horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
-                                        if config_app.get("desc_tarde", True):
-                                            diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
-                                            if diff_tarde > 0: horas_tramo -= diff_tarde
-                                        if config_app.get("desc_temp", True):
-                                            diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
-                                            if diff_temp > 0: horas_tramo -= diff_temp
-                                    else:
-                                        horas_tramo = (h_out - h_in).total_seconds() / 3600.0
+                                        try:
+                                            t_in_obj = datetime.datetime.strptime(h_ofi_in_str, "%I:%M %p").time()
+                                            t_out_obj = datetime.datetime.strptime(h_ofi_out_str, "%I:%M %p").time()
+                                            
+                                            h_in_oficial = datetime.datetime.combine(h_in.date(), t_in_obj)
+                                            h_out_oficial = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                            
+                                            if h_out_oficial < h_in_oficial: h_out_oficial += datetime.timedelta(days=1)
+                                            
+                                            horas_tramo = (h_out_oficial - h_in_oficial).total_seconds() / 3600.0
+                                            
+                                            if config_app.get("desc_tarde", True):
+                                                diff_tarde = (h_in - h_in_oficial).total_seconds() / 3600.0
+                                                if diff_tarde > 0: horas_tramo -= diff_tarde
+                                            if config_app.get("desc_temp", True):
+                                                diff_temp = (h_out_oficial - h_out).total_seconds() / 3600.0
+                                                if diff_temp > 0: horas_tramo -= diff_temp
+                                        except:
+                                            horas_tramo = (h_out - h_in).total_seconds() / 3600.0
                                 else:
                                     horas_tramo = (h_out - h_in).total_seconds() / 3600.0
                                 
@@ -1767,8 +1863,8 @@ elif pestaña == "💼 Panel de Gerencia":
                 if turno_mod != "Seleccionar...":
                     n_turno_mod = st.text_input("Modificar Nombre Turno:", value=turno_mod)
                     try:
-                        time_ing_def = pd.to_datetime(lista_turnos[turno_mod].get('ingreso')).time()
-                        time_sal_def = pd.to_datetime(lista_turnos[turno_mod].get('salida')).time()
+                        time_ing_def = datetime.datetime.strptime(lista_turnos[turno_mod].get('ingreso'), "%I:%M %p").time()
+                        time_sal_def = datetime.datetime.strptime(lista_turnos[turno_mod].get('salida'), "%I:%M %p").time()
                     except:
                         time_ing_def, time_sal_def = ahora.time(), ahora.time()
                         
