@@ -169,7 +169,6 @@ def load_json(key_name, default_data):
         
     if key_name in settings:
         data = settings[key_name]
-        # MEJORA: Fusión de diccionarios para persistencia ante actualizaciones del código
         if isinstance(data, dict) and isinstance(default_data, dict):
             for k, v in default_data.items():
                 if k not in data:
@@ -211,7 +210,7 @@ def insert_row(table_name, row_dict):
         st.error(f"❌ Error guardando en la tabla '{table_name}': {e}")
 
 # ==========================================
-# 2. CARGA DE DATOS CENTRALIZADA Y BOOLEAN SAFE
+# 2. CARGA DE DATOS CENTRALIZADA
 # ==========================================
 zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
 ahora = datetime.datetime.now(zona_arg)
@@ -226,7 +225,7 @@ config_defecto = {
     "ip_wifi_oficial": "", "radio_metros": 150, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
     "desc_tarde": True, "desc_temp": True, "perdonar_tolerancia": True,
     "mostrar_horas_empleado": False, "dia_inicio_semana": "Lunes",
-    "mostrar_top3": False, "top3_ocultar": [],
+    "rankings_muro": [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"]}],
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
 config_app = load_json("config", config_defecto)
@@ -247,7 +246,7 @@ owner_config_defecto = {
 }
 owner_config = load_json("owner_config", owner_config_defecto)
 
-lista_roles_disponibles = load_json("lista_roles", ["Vendedor", "Cajero", "Encargado", "Depósito", "Otro"])
+lista_roles_disponibles = load_json("lista_roles", ["Vendedor", "Cajero", "Encargado", "Depósito", "Planchero", "Otro"])
 lista_empleados = load_json("empleados", ["Abril Gonzalez", "Agustina Lopez", "Daniela Perez", "Macarena Silva"])
 roles_empleados = load_json("roles", {e: "Vendedor" for e in lista_empleados})
 tareas_roles = load_json("tareas_roles", {"Vendedor": [{"tarea": "Acomodar Sector", "puntos": 5}]})
@@ -393,6 +392,7 @@ if pestaña == "📱 Portal del Empleado":
                     st.balloons()
                 del st.session_state['fichaje_exitoso']
 
+            # 1. CÁLCULO DE PUNTOS Y CREDENCIAL
             puntos_actuales = config_app["reglas_puntos"]["base"]
             f_inicio_str = config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d"))
             d_inicio_puntos = datetime.datetime.strptime(f_inicio_str, "%Y-%m-%d").date()
@@ -428,238 +428,8 @@ if pestaña == "📱 Portal del Empleado":
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
             
-            top3_ocultar = config_app.get("top3_ocultar", [])
-            puede_ver_top3 = True
-            if rol_empleado in top3_ocultar or empleado_en_celu in top3_ocultar:
-                puede_ver_top3 = False
-
-            if get_bool_config("mostrar_top3", False) and puede_ver_top3:
-                inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
-                hoy_dt_top = ahora.date()
-                dias_desde_inicio_top = (hoy_dt_top.weekday() - inicio_semana_int) % 7
-                fecha_inicio_sem_actual = hoy_dt_top - datetime.timedelta(days=dias_desde_inicio_top)
-                
-                p_in_top = fecha_inicio_sem_actual - datetime.timedelta(days=7)
-                p_fi_top = fecha_inicio_sem_actual - datetime.timedelta(days=1)
-                
-                with st.expander("🏆 Muro de la Fama: Top 3 de la Semana Pasada", expanded=True):
-                    df_p_top = df_punt[(df_punt['F_Obj'] >= p_in_top) & (df_punt['F_Obj'] <= p_fi_top)] if not df_punt.empty else pd.DataFrame()
-                    df_t_top = df_tl[(df_tl['F_Obj'] >= p_in_top) & (df_tl['F_Obj'] <= p_fi_top)] if not df_tl.empty else pd.DataFrame()
-                    ajustes_top = [p for p in lista_puntos if p_in_top <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= p_fi_top]
-                    reg_top = config_app.get("reglas_puntos", {})
-                    
-                    ranking_sp = []
-                    for emp_r in lista_empleados:
-                        df_e_p_top = df_p_top[df_p_top["Empleado"] == emp_r] if not df_p_top.empty else pd.DataFrame()
-                        
-                        suc_ppal = "Sin Asignar"
-                        if not df_e_p_top.empty:
-                            sucursales_emp = df_e_p_top[df_e_p_top["Sucursal"] != ""]["Sucursal"].value_counts()
-                            if not sucursales_emp.empty:
-                                suc_ppal = sucursales_emp.index[0]
-                        
-                        e_aj_top = sum([int(p.get('Puntos', 0)) for p in ajustes_top if p.get('Empleado') == emp_r and p.get('Estado', 'Aprobada') == 'Aprobada'])
-                        e_tp_top = pd.to_numeric(df_t_top[(df_t_top["Empleado"] == emp_r) & (df_t_top["Estado"] == "Aprobada")]["Puntos"], errors='coerce').fillna(0).astype(int).sum() if not df_t_top.empty else 0
-                        
-                        e_ok_top = len(df_e_p_top[df_e_p_top["Estado"] == "A tiempo"]) if not df_e_p_top.empty else 0
-                        e_tar_top = len(df_e_p_top[df_e_p_top["Estado"] == "Tarde"]) if not df_e_p_top.empty else 0
-                        e_au_top = len(df_e_p_top[df_e_p_top["Tipo"] == "Ausente"]) if not df_e_p_top.empty else 0
-                        
-                        puntaje_semana = (e_ok_top * reg_top.get('A tiempo', 0)) + (e_tar_top * reg_top.get('Tarde', -5)) + (e_au_top * reg_top.get('Ausente', -15)) + e_aj_top + e_tp_top
-                        
-                        if not df_e_p_top.empty or e_tp_top > 0 or e_aj_top != 0:
-                            ranking_sp.append({"Empleado": emp_r, "Puntos": puntaje_semana, "Sucursal": suc_ppal})
-                    
-                    ranking_sp = sorted(ranking_sp, key=lambda x: x["Puntos"], reverse=True)
-                    
-                    suc_hoy_muro = None
-                    if not df_hoy.empty:
-                        df_hoy_s = df_hoy.sort_values(by="id_num") if 'id_num' in df_hoy.columns else df_hoy
-                        suc_hoy_muro = str(df_hoy_s.iloc[-1]["Sucursal"])
-                    
-                    st.markdown(f"<p style='text-align: center; color: #64748b; margin-bottom: 10px;'>Desempeño del {p_in_top.strftime('%d/%m')} al {p_fi_top.strftime('%d/%m')}</p>", unsafe_allow_html=True)
-                    
-                    def render_podio(lista_top, titulo):
-                        if not lista_top: return
-                        st.markdown(f"<h5 style='text-align: center; color: #1e3a8a;'>{titulo}</h5>", unsafe_allow_html=True)
-                        c1, c2, c3 = st.columns(3)
-                        if len(lista_top) > 0: c2.markdown(f"<div style='text-align:center; padding:10px; background:#FEF08A; border-radius:10px; border:2px solid #F59E0B;'><b>🥇 1ro</b><br>{lista_top[0]['Empleado']}<br>{lista_top[0]['Puntos']} pts</div>", unsafe_allow_html=True)
-                        if len(lista_top) > 1: c1.markdown(f"<div style='text-align:center; padding:10px; background:#E2E8F0; border-radius:10px; border:2px solid #94A3B8; margin-top:20px;'><b>🥈 2do</b><br>{lista_top[1]['Empleado']}<br>{lista_top[1]['Puntos']} pts</div>", unsafe_allow_html=True)
-                        if len(lista_top) > 2: c3.markdown(f"<div style='text-align:center; padding:10px; background:#FFEDD5; border-radius:10px; border:2px solid #D97706; margin-top:40px;'><b>🥉 3ro</b><br>{lista_top[2]['Empleado']}<br>{lista_top[2]['Puntos']} pts</div>", unsafe_allow_html=True)
-                        st.markdown("<br>", unsafe_allow_html=True)
-
-                    if suc_hoy_muro and suc_hoy_muro != "Sin Asignar" and suc_hoy_muro != "nan":
-                        top_suc = [r for r in ranking_sp if r["Sucursal"] == suc_hoy_muro][:3]
-                        render_podio(top_suc, f"🏢 Top 3 - {suc_hoy_muro} (Tu sucursal de hoy)")
-                        if not top_suc: st.info(f"Nadie sumó puntos en {suc_hoy_muro} la semana pasada.")
-                    else:
-                        render_podio(ranking_sp[:3], "🌍 Ranking Global (Aún no fichaste hoy)")
-                        if not ranking_sp: st.info("No hubo actividad registrada la semana pasada.")
-
-            if get_bool_config("mostrar_horas_empleado", False):
-                inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
-                hoy_dt = ahora.date()
-                dias_desde_inicio = (hoy_dt.weekday() - inicio_semana_int) % 7
-                fecha_inicio_sem = hoy_dt - datetime.timedelta(days=dias_desde_inicio)
-                fecha_fin_sem = fecha_inicio_sem + datetime.timedelta(days=6)
-                
-                df_horas_emp = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt['F_Obj'] >= fecha_inicio_sem) & (df_punt['F_Obj'] <= fecha_fin_sem)].copy()
-                horas_semanales_acumuladas = 0.0
-                
-                if not df_horas_emp.empty:
-                    df_horas_emp['Timestamp'] = pd.to_datetime(df_horas_emp['Fecha'].astype(str) + ' ' + df_horas_emp['Hora'].astype(str), errors='coerce')
-                    df_horas_emp = df_horas_emp.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
-                    
-                    def procesar_tramo_emp(entrada_row, salida_row):
-                        h_in = entrada_row["Timestamp"]
-                        h_out_real = salida_row["Timestamp"] if salida_row is not None else None
-                        t_eval = str(entrada_row["Turno"]).strip()
-                        
-                        if not h_out_real:
-                            if t_eval in lista_turnos:
-                                try:
-                                    t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
-                                    h_out_real = datetime.datetime.combine(h_in.date(), t_out_obj)
-                                    if h_out_real < h_in: h_out_real += datetime.timedelta(days=1)
-                                except: h_out_real = h_in
-                            else: h_out_real = h_in
-                        
-                        if t_eval in lista_turnos:
-                            try:
-                                t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
-                                t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
-                                h_in_ofi = datetime.datetime.combine(h_in.date(), t_in_obj)
-                                h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
-                                if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
-                                
-                                if (h_in_ofi - h_in).total_seconds() > 43200:
-                                    h_in_ofi -= datetime.timedelta(days=1); h_out_ofi -= datetime.timedelta(days=1)
-                                elif (h_in - h_in_ofi).total_seconds() > 43200:
-                                    h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
-                                    
-                                h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
-                                
-                                minutos_tarde = (h_in - h_in_ofi).total_seconds() / 60.0
-                                if get_bool_config("desc_tarde", True):
-                                    tolerancia_m = int(config_app.get("tolerancia_minutos", 10))
-                                    if get_bool_config("perdonar_tolerancia", True) and (minutos_tarde <= tolerancia_m):
-                                        desc_in = 0.0
-                                    else:
-                                        desc_in = max(0.0, minutos_tarde / 60.0)
-                                else:
-                                    desc_in = 0.0
-                                    
-                                desc_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0 if get_bool_config("desc_temp", True) else 0.0
-                                desc_in = max(0.0, desc_in)
-                                desc_out = max(0.0, desc_out)
-                                
-                                h_tramo = h_tramo_oficial - desc_in - desc_out
-                            except:
-                                h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
-                        else:
-                            h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
-                        return max(0.0, h_tramo)
-
-                    ent_act = None
-                    for _, rf in df_horas_emp.iterrows():
-                        tr = str(rf["Tipo"]).strip()
-                        if tr == "Entrada":
-                            if ent_act is not None: horas_semanales_acumuladas += procesar_tramo_emp(ent_act, None)
-                            ent_act = rf
-                        elif tr in ["Salida", "Salida (Cambio Local)", "Retiro Temprano"] and ent_act is not None:
-                            horas_semanales_acumuladas += procesar_tramo_emp(ent_act, rf)
-                            ent_act = None
-                    if ent_act is not None:
-                        horas_semanales_acumuladas += procesar_tramo_emp(ent_act, None)
-                        
-                st.markdown(f"<div class='super-box' style='padding: 15px; text-align: center; margin-bottom: 20px;'><b>⏱️ Mis horas semanales computadas:</b> {formato_horas_texto(horas_semanales_acumuladas)} <br><small style='color: gray;'>(Semana del {fecha_inicio_sem.strftime('%d/%m')} al {fecha_fin_sem.strftime('%d/%m')})</small></div>", unsafe_allow_html=True)
-
-            if rol_empleado in ["Cajero", "Encargado"]:
-                with st.expander("🛡️ Panel de Responsable de Turno", expanded=False):
-                    st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas y asignar puntos a tus compañeros.</div>", unsafe_allow_html=True)
-                    st.markdown("#### 🚪 Auditar Salida de Compañero")
-                    if estado_laboral == "Adentro":
-                        suc_cajero = datos_turno_activo.get("Sucursal")
-                        st.write(f"📍 Estás auditando la sucursal: **{suc_cajero}**")
-                        auditables = []
-                        df_hoy_todos = df_punt[df_punt["Fecha"] == fecha_hoy] if not df_punt.empty else pd.DataFrame()
-                        
-                        if not df_hoy_todos.empty:
-                            if 'id' in df_hoy_todos.columns:
-                                df_hoy_todos['id_num'] = pd.to_numeric(df_hoy_todos['id'], errors='coerce')
-                                df_hoy_todos = df_hoy_todos.sort_values(by="id_num")
-                            for e_comp in lista_empleados:
-                                if e_comp != empleado_en_celu:
-                                    df_c = df_hoy_todos[df_hoy_todos["Empleado"] == e_comp]
-                                    if not df_c.empty:
-                                        ult_c = df_c.iloc[-1]
-                                        if ult_c["Tipo"] == "Entrada" and str(ult_c["Sucursal"]) == str(suc_cajero):
-                                            auditables.append(e_comp)
-                                            
-                        if auditables:
-                            with st.form("form_sup_salida"):
-                                c_s1, c_s2 = st.columns(2)
-                                s_emp_salida = c_s1.selectbox("Compañero a retirar:", ["Seleccionar..."] + auditables)
-                                s_hora_salida = c_s2.time_input("Hora exacta de salida:", ahora.time())
-                                s_motivo_salida = st.text_input("Nota de Auditoría (Ej: 'Se fue temprano por el médico'):")
-                                if st.form_submit_button("Fichar Salida"):
-                                    if s_emp_salida == "Seleccionar...":
-                                        st.warning("🚨 Elegí un compañero de la lista.")
-                                    elif not s_motivo_salida.strip():
-                                        st.warning("🚨 Escribí el motivo en la nota (Obligatorio para la auditoría).")
-                                    else:
-                                        ya_pedido = False
-                                        ya_salio = not df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Salida")].empty
-                                        for sp in salidas_pendientes:
-                                            if sp.get("Empleado") == s_emp_salida and sp.get("Fecha") == str(fecha_hoy):
-                                                ya_pedido = True
-                                                break
-                                        if ya_salio:
-                                            st.error(f"🚨 El empleado {s_emp_salida} ya tiene una salida registrada en este turno.")
-                                        elif ya_pedido:
-                                            st.error(f"🚨 Ya enviaste una solicitud de salida para {s_emp_salida} hoy. Gerencia la está revisando.")
-                                        else:
-                                            hora_str_salida = s_hora_salida.strftime("%I:%M:%S %p")
-                                            nota_final = f"[Auditado por {empleado_en_celu}] {s_motivo_salida}"
-                                            turno_del_auditado = "Manual"
-                                            df_aud_turno = df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Entrada")]
-                                            if not df_aud_turno.empty:
-                                                turno_del_auditado = df_aud_turno.iloc[-1]["Turno"]
-                                            salidas_pendientes.append({
-                                                "Fecha": str(fecha_hoy), "Hora": str(hora_str_salida), "Empleado": str(s_emp_salida),
-                                                "Sucursal": str(suc_cajero), "Turno": str(turno_del_auditado),
-                                                "Nota": str(nota_final), "Autor": str(empleado_en_celu)
-                                            })
-                                            save_json("salidas_pendientes", salidas_pendientes)
-                                            st.success(f"✅ Solicitud de salida de {s_emp_salida} enviada a Gerencia para revisión.")
-                                            st.rerun()
-                        else:
-                            st.info("ℹ️ No hay otros compañeros trabajando en esta sucursal en este momento.")
-                    else:
-                        st.warning("🚨 Para auditar la salida de un compañero, primero tenés que registrar tu propia ENTRADA en la sucursal.")
-                        
-                    st.markdown("---")
-                    st.markdown("#### ⭐ Asignar Bono o Multa")
-                    with st.form("form_sup_puntos"):
-                        s_emp = st.selectbox("Compañero:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
-                        s_pts = st.number_input("Puntos (+/-):", value=0, step=1)
-                        s_mot = st.text_input("Motivo:")
-                        if st.form_submit_button("Enviar a Gerencia"):
-                            if s_emp == "Seleccionar...":
-                                st.warning("🚨 ¡Completá todos los campos! (Elegí un compañero y escribí el motivo).")
-                            else:
-                                lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot.strip(), "Autor": empleado_en_celu, "Estado": "Pendiente"})
-                                save_json("ajustes_puntos", lista_puntos)
-                                st.success("✅ Evaluación enviada a Gerencia correctamente.")
-                                
-            mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu, rol_empleado]]
-            if mensajes_usuario:
-                for m in mensajes_usuario:
-                    if m['destinatario'] == 'Todos': st.markdown(f"<div class='alert-box' style='border-color: #3B82F6; background-color: #EFF6FF; color: #1E40AF;'>📢 <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
-                    elif m['destinatario'] == rol_empleado: st.markdown(f"<div class='task-pend'>📢 <b>Para el equipo de {rol_empleado}s:</b> {m['texto']}</div>", unsafe_allow_html=True)
-                    else: st.markdown(f"<div class='report-box'>✉️ <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
-                    
-            with st.expander("📍 Smart Check-In", expanded=True):
+            # 2. SMART CHECK-IN (MOVIDO ARRIBA)
+            with st.expander("📍 Smart Check-In (Registrar Asistencia)", expanded=True):
                 st.markdown("### 📡 Radar Automático")
                 local_detectado = None
                 distancia_real = 0.0
@@ -840,7 +610,231 @@ if pestaña == "📱 Portal del Empleado":
                                     st.rerun()
                             else:
                                 st.error("🚨 El sistema exige que finalices tu turno físicamente dentro de la sucursal.")
+
+            # 3. AVISOS Y MENSAJES
+            mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu, rol_empleado]]
+            if mensajes_usuario:
+                for m in mensajes_usuario:
+                    if m['destinatario'] == 'Todos': st.markdown(f"<div class='alert-box' style='border-color: #3B82F6; background-color: #EFF6FF; color: #1E40AF;'>📢 <b>Aviso General:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    elif m['destinatario'] == rol_empleado: st.markdown(f"<div class='task-pend'>📢 <b>Para el equipo de {rol_empleado}s:</b> {m['texto']}</div>", unsafe_allow_html=True)
+                    else: st.markdown(f"<div class='report-box'>✉️ <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
+
+            # 4. MURO DE LA FAMA (CUSTOM/LIGAS)
+            rankings_actuales = config_app.get("rankings_muro", [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"]}])
+            
+            inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
+            hoy_dt_top = ahora.date()
+            dias_desde_inicio_top = (hoy_dt_top.weekday() - inicio_semana_int) % 7
+            fecha_inicio_sem_actual = hoy_dt_top - datetime.timedelta(days=dias_desde_inicio_top)
+            p_in_top = fecha_inicio_sem_actual - datetime.timedelta(days=7)
+            p_fi_top = fecha_inicio_sem_actual - datetime.timedelta(days=1)
+            
+            df_p_top = df_punt[(df_punt['F_Obj'] >= p_in_top) & (df_punt['F_Obj'] <= p_fi_top)] if not df_punt.empty else pd.DataFrame()
+            df_t_top = df_tl[(df_tl['F_Obj'] >= p_in_top) & (df_tl['F_Obj'] <= p_fi_top)] if not df_tl.empty else pd.DataFrame()
+            ajustes_top = [p for p in lista_puntos if p_in_top <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= p_fi_top]
+            reg_top = config_app.get("reglas_puntos", {})
+            
+            for rank in rankings_actuales:
+                espectadores = rank.get("espectadores", [])
+                puede_ver = False
+                if "Todos" in espectadores or rol_empleado in espectadores or empleado_en_celu in espectadores:
+                    puede_ver = True
+                    
+                if puede_ver:
+                    with st.expander(f"🏆 {rank['nombre']} (Semana Pasada)", expanded=True):
+                        competidores = rank.get("competidores", ["Todos"])
+                        emps_compitiendo = []
+                        for e in lista_empleados:
+                            e_rol = roles_empleados.get(e, "Staff")
+                            if "Todos" in competidores or e_rol in competidores or e in competidores:
+                                emps_compitiendo.append(e)
                                 
+                        ranking_sp = []
+                        for emp_r in emps_compitiendo:
+                            df_e_p_top = df_p_top[df_p_top["Empleado"] == emp_r] if not df_p_top.empty else pd.DataFrame()
+                            e_aj_top = sum([int(p.get('Puntos', 0)) for p in ajustes_top if p.get('Empleado') == emp_r and p.get('Estado', 'Aprobada') == 'Aprobada'])
+                            e_tp_top = pd.to_numeric(df_t_top[(df_t_top["Empleado"] == emp_r) & (df_t_top["Estado"] == "Aprobada")]["Puntos"], errors='coerce').fillna(0).astype(int).sum() if not df_t_top.empty else 0
+                            e_ok_top = len(df_e_p_top[df_e_p_top["Estado"] == "A tiempo"]) if not df_e_p_top.empty else 0
+                            e_tar_top = len(df_e_p_top[df_e_p_top["Estado"] == "Tarde"]) if not df_e_p_top.empty else 0
+                            e_au_top = len(df_e_p_top[df_e_p_top["Tipo"] == "Ausente"]) if not df_e_p_top.empty else 0
+                            
+                            puntaje_semana = (e_ok_top * reg_top.get('A tiempo', 0)) + (e_tar_top * reg_top.get('Tarde', -5)) + (e_au_top * reg_top.get('Ausente', -15)) + e_aj_top + e_tp_top
+                            
+                            if not df_e_p_top.empty or e_tp_top > 0 or e_aj_top != 0:
+                                ranking_sp.append({"Empleado": emp_r, "Puntos": puntaje_semana})
+                        
+                        ranking_sp = sorted(ranking_sp, key=lambda x: x["Puntos"], reverse=True)
+                        st.markdown(f"<p style='text-align: center; color: #64748b; margin-bottom: 10px;'>Desempeño del {p_in_top.strftime('%d/%m')} al {p_fi_top.strftime('%d/%m')}</p>", unsafe_allow_html=True)
+                        
+                        if not ranking_sp:
+                            st.info("No hubo actividad registrada en esta liga la semana pasada.")
+                        else:
+                            st.markdown(f"<h5 style='text-align: center; color: #1e3a8a;'>🥇 Top 3 - {rank['nombre']}</h5>", unsafe_allow_html=True)
+                            c1, c2, c3 = st.columns(3)
+                            if len(ranking_sp) > 0: c2.markdown(f"<div style='text-align:center; padding:10px; background:#FEF08A; border-radius:10px; border:2px solid #F59E0B;'><b>🥇 1ro</b><br>{ranking_sp[0]['Empleado']}<br>{ranking_sp[0]['Puntos']} pts</div>", unsafe_allow_html=True)
+                            if len(ranking_sp) > 1: c1.markdown(f"<div style='text-align:center; padding:10px; background:#E2E8F0; border-radius:10px; border:2px solid #94A3B8; margin-top:20px;'><b>🥈 2do</b><br>{ranking_sp[1]['Empleado']}<br>{ranking_sp[1]['Puntos']} pts</div>", unsafe_allow_html=True)
+                            if len(ranking_sp) > 2: c3.markdown(f"<div style='text-align:center; padding:10px; background:#FFEDD5; border-radius:10px; border:2px solid #D97706; margin-top:40px;'><b>🥉 3ro</b><br>{ranking_sp[2]['Empleado']}<br>{ranking_sp[2]['Puntos']} pts</div>", unsafe_allow_html=True)
+                            st.markdown("<br>", unsafe_allow_html=True)
+
+            # 5. HORAS SEMANALES
+            if get_bool_config("mostrar_horas_empleado", False):
+                inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
+                hoy_dt = ahora.date()
+                dias_desde_inicio = (hoy_dt.weekday() - inicio_semana_int) % 7
+                fecha_inicio_sem = hoy_dt - datetime.timedelta(days=dias_desde_inicio)
+                fecha_fin_sem = fecha_inicio_sem + datetime.timedelta(days=6)
+                
+                df_horas_emp = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt['F_Obj'] >= fecha_inicio_sem) & (df_punt['F_Obj'] <= fecha_fin_sem)].copy()
+                horas_semanales_acumuladas = 0.0
+                
+                if not df_horas_emp.empty:
+                    df_horas_emp['Timestamp'] = pd.to_datetime(df_horas_emp['Fecha'].astype(str) + ' ' + df_horas_emp['Hora'].astype(str), errors='coerce')
+                    df_horas_emp = df_horas_emp.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
+                    
+                    def procesar_tramo_emp(entrada_row, salida_row):
+                        h_in = entrada_row["Timestamp"]
+                        h_out_real = salida_row["Timestamp"] if salida_row is not None else None
+                        t_eval = str(entrada_row["Turno"]).strip()
+                        
+                        if not h_out_real:
+                            if t_eval in lista_turnos:
+                                try:
+                                    t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
+                                    h_out_real = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                    if h_out_real < h_in: h_out_real += datetime.timedelta(days=1)
+                                except: h_out_real = h_in
+                            else: h_out_real = h_in
+                        
+                        if t_eval in lista_turnos:
+                            try:
+                                t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
+                                t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
+                                h_in_ofi = datetime.datetime.combine(h_in.date(), t_in_obj)
+                                h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
+                                
+                                if (h_in_ofi - h_in).total_seconds() > 43200:
+                                    h_in_ofi -= datetime.timedelta(days=1); h_out_ofi -= datetime.timedelta(days=1)
+                                elif (h_in - h_in_ofi).total_seconds() > 43200:
+                                    h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
+                                    
+                                h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
+                                
+                                minutos_tarde = (h_in - h_in_ofi).total_seconds() / 60.0
+                                if get_bool_config("desc_tarde", True):
+                                    tolerancia_m = int(config_app.get("tolerancia_minutos", 10))
+                                    if get_bool_config("perdonar_tolerancia", True) and (minutos_tarde <= tolerancia_m):
+                                        desc_in = 0.0
+                                    else:
+                                        desc_in = max(0.0, minutos_tarde / 60.0)
+                                else:
+                                    desc_in = 0.0
+                                    
+                                desc_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0 if get_bool_config("desc_temp", True) else 0.0
+                                desc_in = max(0.0, desc_in)
+                                desc_out = max(0.0, desc_out)
+                                
+                                h_tramo = h_tramo_oficial - desc_in - desc_out
+                            except:
+                                h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                        else:
+                            h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                        return max(0.0, h_tramo)
+
+                    ent_act = None
+                    for _, rf in df_horas_emp.iterrows():
+                        tr = str(rf["Tipo"]).strip()
+                        if tr == "Entrada":
+                            if ent_act is not None: horas_semanales_acumuladas += procesar_tramo_emp(ent_act, None)
+                            ent_act = rf
+                        elif tr in ["Salida", "Salida (Cambio Local)", "Retiro Temprano"] and ent_act is not None:
+                            horas_semanales_acumuladas += procesar_tramo_emp(ent_act, rf)
+                            ent_act = None
+                    if ent_act is not None:
+                        horas_semanales_acumuladas += procesar_tramo_emp(ent_act, None)
+                        
+                st.markdown(f"<div class='super-box' style='padding: 15px; text-align: center; margin-bottom: 20px;'><b>⏱️ Mis horas semanales computadas:</b> {formato_horas_texto(horas_semanales_acumuladas)} <br><small style='color: gray;'>(Semana del {fecha_inicio_sem.strftime('%d/%m')} al {fecha_fin_sem.strftime('%d/%m')})</small></div>", unsafe_allow_html=True)
+
+            # 6. PANEL SUPERVISOR
+            if rol_empleado in ["Cajero", "Encargado"]:
+                with st.expander("🛡️ Panel de Responsable de Turno", expanded=False):
+                    st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas y asignar puntos a tus compañeros.</div>", unsafe_allow_html=True)
+                    st.markdown("#### 🚪 Auditar Salida de Compañero")
+                    if estado_laboral == "Adentro":
+                        suc_cajero = datos_turno_activo.get("Sucursal")
+                        st.write(f"📍 Estás auditando la sucursal: **{suc_cajero}**")
+                        auditables = []
+                        df_hoy_todos = df_punt[df_punt["Fecha"] == fecha_hoy] if not df_punt.empty else pd.DataFrame()
+                        
+                        if not df_hoy_todos.empty:
+                            if 'id' in df_hoy_todos.columns:
+                                df_hoy_todos['id_num'] = pd.to_numeric(df_hoy_todos['id'], errors='coerce')
+                                df_hoy_todos = df_hoy_todos.sort_values(by="id_num")
+                            for e_comp in lista_empleados:
+                                if e_comp != empleado_en_celu:
+                                    df_c = df_hoy_todos[df_hoy_todos["Empleado"] == e_comp]
+                                    if not df_c.empty:
+                                        ult_c = df_c.iloc[-1]
+                                        if ult_c["Tipo"] == "Entrada" and str(ult_c["Sucursal"]) == str(suc_cajero):
+                                            auditables.append(e_comp)
+                                            
+                        if auditables:
+                            with st.form("form_sup_salida"):
+                                c_s1, c_s2 = st.columns(2)
+                                s_emp_salida = c_s1.selectbox("Compañero a retirar:", ["Seleccionar..."] + auditables)
+                                s_hora_salida = c_s2.time_input("Hora exacta de salida:", ahora.time())
+                                s_motivo_salida = st.text_input("Nota de Auditoría (Ej: 'Se fue temprano por el médico'):")
+                                if st.form_submit_button("Fichar Salida"):
+                                    if s_emp_salida == "Seleccionar...":
+                                        st.warning("🚨 Elegí un compañero de la lista.")
+                                    elif not s_motivo_salida.strip():
+                                        st.warning("🚨 Escribí el motivo en la nota (Obligatorio para la auditoría).")
+                                    else:
+                                        ya_pedido = False
+                                        ya_salio = not df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Salida")].empty
+                                        for sp in salidas_pendientes:
+                                            if sp.get("Empleado") == s_emp_salida and sp.get("Fecha") == str(fecha_hoy):
+                                                ya_pedido = True
+                                                break
+                                        if ya_salio:
+                                            st.error(f"🚨 El empleado {s_emp_salida} ya tiene una salida registrada en este turno.")
+                                        elif ya_pedido:
+                                            st.error(f"🚨 Ya enviaste una solicitud de salida para {s_emp_salida} hoy. Gerencia la está revisando.")
+                                        else:
+                                            hora_str_salida = s_hora_salida.strftime("%I:%M:%S %p")
+                                            nota_final = f"[Auditado por {empleado_en_celu}] {s_motivo_salida}"
+                                            turno_del_auditado = "Manual"
+                                            df_aud_turno = df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Entrada")]
+                                            if not df_aud_turno.empty:
+                                                turno_del_auditado = df_aud_turno.iloc[-1]["Turno"]
+                                            salidas_pendientes.append({
+                                                "Fecha": str(fecha_hoy), "Hora": str(hora_str_salida), "Empleado": str(s_emp_salida),
+                                                "Sucursal": str(suc_cajero), "Turno": str(turno_del_auditado),
+                                                "Nota": str(nota_final), "Autor": str(empleado_en_celu)
+                                            })
+                                            save_json("salidas_pendientes", salidas_pendientes)
+                                            st.success(f"✅ Solicitud de salida de {s_emp_salida} enviada a Gerencia para revisión.")
+                                            st.rerun()
+                        else:
+                            st.info("ℹ️ No hay otros compañeros trabajando en esta sucursal en este momento.")
+                    else:
+                        st.warning("🚨 Para auditar la salida de un compañero, primero tenés que registrar tu propia ENTRADA en la sucursal.")
+                        
+                    st.markdown("---")
+                    st.markdown("#### ⭐ Asignar Bono o Multa")
+                    with st.form("form_sup_puntos"):
+                        s_emp = st.selectbox("Compañero:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
+                        s_pts = st.number_input("Puntos (+/-):", value=0, step=1)
+                        s_mot = st.text_input("Motivo:")
+                        if st.form_submit_button("Enviar a Gerencia"):
+                            if s_emp == "Seleccionar...":
+                                st.warning("🚨 ¡Completá todos los campos! (Elegí un compañero y escribí el motivo).")
+                            else:
+                                lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot.strip(), "Autor": empleado_en_celu, "Estado": "Pendiente"})
+                                save_json("ajustes_puntos", lista_puntos)
+                                st.success("✅ Evaluación enviada a Gerencia correctamente.")
+
+            # 7. BUZÓN
             with st.expander("📬 Buzón de Reportes Confidenciales", expanded=False):
                 tipo_rep = st.selectbox("Tipo:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
                 implicado = st.selectbox("Compañero implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu]) if tipo_rep == "Incumplimiento de un compañero" else "N/A"
@@ -853,6 +847,7 @@ if pestaña == "📱 Portal del Empleado":
                         save_json("reportes", reportes_log)
                         st.success("✅ ¡Reporte enviado confidencialmente a Gerencia!")
                         
+            # 8. MIS TAREAS
             tareas_totales = tareas_roles.get(rol_empleado, []) + tareas_individuales.get(empleado_en_celu, [])
             if tareas_totales:
                 with st.expander("📝 Mis Tareas del Día", expanded=True):
@@ -872,6 +867,7 @@ if pestaña == "📱 Portal del Empleado":
                                 insert_row("tareas_log", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Tarea": str(t_nombre), "Puntos": str(t_puntos), "Estado": "Pendiente"})
                                 st.rerun()
                                 
+            # 9. HISTORIAL RECIENTE
             with st.expander("🕒 Mi historial reciente"):
                 if not df_punt.empty:
                     df_emp = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["F_Obj"] >= (ahora.date() - datetime.timedelta(days=7)))].copy()
@@ -883,6 +879,7 @@ if pestaña == "📱 Portal del Empleado":
                     else: st.write("Sin fichajes recientes.")
             st.markdown("<br><br>", unsafe_allow_html=True)
             
+            # 10. QUIÉNES SOMOS
             with st.expander("ℹ️ Quiénes Somos / Soporte Técnico", expanded=False):
                 st.markdown(f"### {owner_config.get('empresa_nombre', 'Nuestra Empresa')}")
                 st.write(owner_config.get('quienes_somos', ''))
@@ -1726,7 +1723,7 @@ elif pestaña == "💼 Panel de Gerencia":
         with tab_puntos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Ranking de Puntos</div>', unsafe_allow_html=True)
             c_fil1, c_fil2 = st.columns([1,3])
-            filtro_p = c_fil1.selectbox("⏳ Filtrar Ranking:", ["Período Activo (Desde Reseteo)", "Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_p")
+            filtro_p = c_fil1.selectbox("⏳ Filtrar Ranking:", ["Período Activo (Desde Reseteo)", "Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_p_gr")
             rango_punt = c_fil2.date_input("📅 Fechas:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_p == "Personalizado" else None
             
             if filtro_p == "Período Activo (Desde Reseteo)":
@@ -2241,16 +2238,37 @@ elif pestaña == "💼 Panel de Gerencia":
                         config_app["reglas_puntos"] = {"base": r_base, "A tiempo": r_ok, "Tarde": r_tar, "Ausente": r_aus, "Falta Justificada": r_fj}
                         save_json("config", config_app); st.rerun()
                         
-                st.subheader("🏆 Muro de la Fama (Top 3)")
-                with st.form("form_top3"):
-                    v_mostrar_top3 = st.checkbox("🏆 Mostrar Top 3 de la Semana Pasada en el Portal", value=get_bool_config("mostrar_top3", False))
-                    v_top3_ocultar = st.multiselect("🚫 ¿Quiénes NO pueden ver el Muro de la Fama ni su puntuación?", lista_roles_disponibles + sorted(lista_empleados), default=config_app.get("top3_ocultar", []))
+                st.subheader("🏆 Muro de la Fama (Ligas y Rankings)")
+                st.write("Creá múltiples vistas para que los empleados compitan. Ej: 'Plancheros' compiten entre ellos, o un 'Global' para todos.")
+                
+                rankings_actuales = config_app.get("rankings_muro", [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"]}])
+                
+                for idx, rank in enumerate(rankings_actuales):
+                    with st.expander(f"🏅 {rank['nombre']}"):
+                        st.write(f"**Compiten:** {', '.join(rank['competidores'])}")
+                        st.write(f"**Lo ven:** {', '.join(rank['espectadores'])}")
+                        if st.button("🗑️ Eliminar vista", key=f"del_rank_{idx}"):
+                            rankings_actuales.pop(idx)
+                            config_app["rankings_muro"] = rankings_actuales
+                            save_json("config", config_app)
+                            st.rerun()
+                            
+                with st.form("form_nuevo_ranking"):
+                    st.markdown("**➕ Crear Nueva Vista / Liga**")
+                    n_rank = st.text_input("Nombre de la vista (Ej: 'Top Plancheros'):")
+                    opciones_r = ["Todos"] + lista_roles_disponibles + sorted(lista_empleados)
+                    comp_rank = st.multiselect("¿Quiénes compiten en esta liga?", opciones_r, default=["Todos"])
+                    esp_rank = st.multiselect("¿Quiénes pueden ver esta liga?", opciones_r, default=["Todos"])
                     
-                    if st.form_submit_button("💾 Guardar Ajustes Top 3"):
-                        config_app.update({"mostrar_top3": v_mostrar_top3, "top3_ocultar": v_top3_ocultar})
-                        save_json("config", config_app)
-                        st.success("Configuración del Muro de la Fama guardada.")
-                        st.rerun()
+                    if st.form_submit_button("💾 Guardar Nueva Vista"):
+                        if n_rank and comp_rank and esp_rank:
+                            rankings_actuales.append({"nombre": n_rank, "competidores": comp_rank, "espectadores": esp_rank})
+                            config_app["rankings_muro"] = rankings_actuales
+                            save_json("config", config_app)
+                            st.success("Vista agregada correctamente.")
+                            st.rerun()
+                        else:
+                            st.warning("Completá todos los campos para crear la vista.")
                         
             with col_aj2:
                 st.subheader("🛡️ Seguridad de Red y Ajustes")
