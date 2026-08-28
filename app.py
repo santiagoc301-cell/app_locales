@@ -218,7 +218,7 @@ config_defecto = {
     "mensaje_llegada_tarde": "🚨 Llegada fuera del margen de tolerancia.", "verificar_gps": True,
     "verificar_wifi": False, "salida_estricta": False, "exigir_salida_manual": False, "autoregistro": False,
     "ip_wifi_oficial": "", "radio_metros": 150, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
-    "desc_tarde": True, "desc_temp": True,
+    "desc_tarde": True, "desc_temp": True, "perdonar_tolerancia": True,
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
 config_app = load_json("config", config_defecto)
@@ -933,7 +933,7 @@ elif pestaña == "💼 Panel de Gerencia":
                                 else:
                                     h_out_real = h_in
                             
-                            # CÁLCULO ESTRICTO DE PENALIDADES
+                            # CÁLCULO ESTRICTO DE PENALIDADES E INTELIGENCIA DE TOLERANCIA
                             if t_eval in lista_turnos:
                                 try:
                                     t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
@@ -950,12 +950,18 @@ elif pestaña == "💼 Panel de Gerencia":
                                     
                                     h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
                                     
-                                    # Aplicar descuentos matemáticamente de forma segura (usando get_bool_config)
-                                    desc_in = (h_in - h_in_ofi).total_seconds() / 3600.0 if get_bool_config("desc_tarde", True) else 0.0
+                                    # LÓGICA NUEVA: PERDONAR LLEGADA TARDE DENTRO DE LA TOLERANCIA
+                                    minutos_tarde = (h_in - h_in_ofi).total_seconds() / 60.0
+                                    if get_bool_config("desc_tarde", True):
+                                        tolerancia_m = int(config_app.get("tolerancia_minutos", 10))
+                                        if get_bool_config("perdonar_tolerancia", True) and (minutos_tarde <= tolerancia_m):
+                                            desc_in = 0.0
+                                        else:
+                                            desc_in = max(0.0, minutos_tarde / 60.0)
+                                    else:
+                                        desc_in = 0.0
+
                                     desc_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0 if get_bool_config("desc_temp", True) else 0.0
-                                    
-                                    # No permitimos bonificar horas si llegaron antes o se fueron después
-                                    desc_in = max(0.0, desc_in)
                                     desc_out = max(0.0, desc_out)
                                     
                                     h_tramo = h_tramo_oficial - desc_in - desc_out
@@ -1016,10 +1022,14 @@ elif pestaña == "💼 Panel de Gerencia":
                         st.write("### ⬇️ Descargas Generales (Para RRHH)")
                         c_btn1, c_btn2 = st.columns(2)
                         
-                        # --- MODIFICADO: DESCARGAS COMPATIBLES CON CELULARES ---
+                        # EXPORTACIÓN SÚPER FILTRADA PARA LIQUIDACIÓN
                         c_btn1.markdown(generate_html_download(df_horas_final, f"Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv", "📥 Descargar Liquidación General (Móvil/PC)"), unsafe_allow_html=True)
                         
+                        # EXPORTACIÓN SÚPER FILTRADA PARA FICHAJES
                         df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
+                        if local_descarga != "Todas las sucursales":
+                            df_asist_dl = df_asist_dl[df_asist_dl["Sucursal"] == local_descarga]
+                        
                         c_btn2.markdown(generate_html_download(df_asist_dl, f"Fichajes_{local_descarga}_{fecha_in_dl}.csv", "📥 Descargar Fichajes Crudos (Móvil/PC)"), unsafe_allow_html=True)
                 else:
                     st.info("📭 Sin registros para liquidar en la sucursal y fechas seleccionadas.")
@@ -1175,7 +1185,6 @@ elif pestaña == "💼 Panel de Gerencia":
                     df_mostrar_caja["Total_Ventas"] = df_mostrar_caja["Total_Ventas"].apply(lambda x: f"${x:,.2f}")
                     st.dataframe(df_mostrar_caja.sort_values(by=["Fecha", "Hora"], ascending=[False, False])[["Fecha", "Hora", "Sucursal", "Cajero", "Efectivo", "Tarjeta", "Transferencia", "Total_Ventas", "Nota"]], use_container_width=True, hide_index=True)
                     
-                    # --- MODIFICADO: DESCARGA COMPATIBLE CON CELULARES ---
                     st.markdown(generate_html_download(df_caja, f"Reporte_Cajas_{c_in}_al_{c_fi}.csv", "📥 Descargar Reporte Completo en CSV (Móvil/PC)"), unsafe_allow_html=True)
                 else:
                     st.info("📭 No hay registros de caja para las fechas seleccionadas.")
@@ -1250,8 +1259,6 @@ elif pestaña == "💼 Panel de Gerencia":
                 add_tipo = c_add6.selectbox("Tipo:", ["Entrada", "Salida"])
 
                 c_add7, c_add8 = st.columns([1, 2])
-                
-                # --- MODIFICADO: AUTOMATIZACIÓN DEL ESTADO ---
                 add_estado = c_add7.selectbox("Estado:", ["Automático (Calculado)"] + ESTADOS_POSIBLES)
                 add_nota = c_add8.text_input("Nota / Motivo:")
 
@@ -1263,7 +1270,6 @@ elif pestaña == "💼 Panel de Gerencia":
                         str_fecha = add_fecha.strftime("%Y-%m-%d")
                         dt_fichaje = datetime.datetime.combine(add_fecha, add_hora)
                         
-                        # --- MODIFICADO: LÓGICA DE CÁLCULO DE ESTADO ---
                         estado_final = add_estado
                         if add_estado == "Automático (Calculado)":
                             if add_turno in lista_turnos:
@@ -1274,7 +1280,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                     dt_ing_ofi = datetime.datetime.combine(add_fecha, t_ing_obj)
                                     dt_sal_ofi = datetime.datetime.combine(add_fecha, t_sal_obj)
                                     
-                                    # Lógica inteligente para turnos de noche
                                     if dt_sal_ofi < dt_ing_ofi:
                                         if add_tipo == "Salida" and add_hora < datetime.time(12, 0): 
                                             dt_ing_ofi -= datetime.timedelta(days=1)
@@ -1654,7 +1659,18 @@ elif pestaña == "💼 Panel de Gerencia":
                                     h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
                                     
                                 h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
-                                desc_in = (h_in - h_in_ofi).total_seconds() / 3600.0 if get_bool_config("desc_tarde", True) else 0.0
+                                
+                                # LÓGICA DE PERDÓN DE TOLERANCIA
+                                minutos_tarde = (h_in - h_in_ofi).total_seconds() / 60.0
+                                if get_bool_config("desc_tarde", True):
+                                    tolerancia_m = int(config_app.get("tolerancia_minutos", 10))
+                                    if get_bool_config("perdonar_tolerancia", True) and (minutos_tarde <= tolerancia_m):
+                                        desc_in = 0.0
+                                    else:
+                                        desc_in = max(0.0, minutos_tarde / 60.0)
+                                else:
+                                    desc_in = 0.0
+                                    
                                 desc_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0 if get_bool_config("desc_temp", True) else 0.0
                                 
                                 desc_in = max(0.0, desc_in)
@@ -2019,9 +2035,13 @@ elif pestaña == "💼 Panel de Gerencia":
                     st.markdown("#### Ajustes de Recuento de Horas")
                     v_exigir_salida_manual = st.checkbox("🚪 Exigir Fichaje de Salida Manual", value=get_bool_config("exigir_salida_manual", False), help="Si se desactiva, la salida es automática y no se les pedirá fichar al irse.")
                     v_desc_tarde = st.checkbox("⏱️ Descontar Llegada Tarde del total de horas", value=get_bool_config("desc_tarde", True))
+                    
+                    # --- NUEVA OPCIÓN: PERDONAR TOLERANCIA ---
+                    v_perdonar_tolerancia = st.checkbox("⏳ Perdonar descuento si llega dentro de la tolerancia (A tiempo)", value=get_bool_config("perdonar_tolerancia", True), help="Si el empleado llega tarde pero dentro del margen de minutos de tolerancia, se le pagan las horas completas. Si llega después de la tolerancia, se le descuenta el tiempo.")
+                    
                     v_desc_temp = st.checkbox("🏃‍♂️ Descontar Salida Temprano del total de horas", value=get_bool_config("desc_temp", True))
                     if st.form_submit_button("💾 Guardar Ajustes"):
-                        config_app.update({"titulo_portal": v_titulo_portal, "autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "desc_tarde": v_desc_tarde, "desc_temp": v_desc_temp})
+                        config_app.update({"titulo_portal": v_titulo_portal, "autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "desc_tarde": v_desc_tarde, "perdonar_tolerancia": v_perdonar_tolerancia, "desc_temp": v_desc_temp})
                         save_json("config", config_app); st.rerun()
                         
                 st.write("🔑 **Cambiar Clave de Gerencia**")
