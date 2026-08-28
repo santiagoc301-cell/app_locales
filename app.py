@@ -219,6 +219,7 @@ config_defecto = {
     "verificar_wifi": False, "salida_estricta": False, "exigir_salida_manual": False, "autoregistro": False,
     "ip_wifi_oficial": "", "radio_metros": 150, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
     "desc_tarde": True, "desc_temp": True, "perdonar_tolerancia": True,
+    "mostrar_horas_empleado": False, "dia_inicio_semana": "Lunes",
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
 config_app = load_json("config", config_defecto)
@@ -269,7 +270,11 @@ def procesar_rango_fechas(rango):
 def get_fechas_filtro(opcion, custom_rango=None):
     hoy = ahora.date()
     if opcion == "Hoy": return hoy, hoy
-    elif opcion == "Esta Semana": return hoy - datetime.timedelta(days=hoy.weekday()), hoy
+    elif opcion == "Esta Semana": 
+        # CÁLCULO DE SEMANA CORRELACIONADA
+        inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
+        dias_desde_inicio = (hoy.weekday() - inicio_semana_int) % 7
+        return hoy - datetime.timedelta(days=dias_desde_inicio), hoy
     elif opcion == "Este Mes": return hoy.replace(day=1), hoy
     elif opcion == "Mes Anterior":
         u_dia = hoy.replace(day=1) - datetime.timedelta(days=1)
@@ -419,6 +424,85 @@ if pestaña == "📱 Portal del Empleado":
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
             
+            # --- CÁLCULO DE HORAS PARA MOSTRAR AL EMPLEADO ---
+            if get_bool_config("mostrar_horas_empleado", False):
+                inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
+                hoy_dt = ahora.date()
+                dias_desde_inicio = (hoy_dt.weekday() - inicio_semana_int) % 7
+                fecha_inicio_sem = hoy_dt - datetime.timedelta(days=dias_desde_inicio)
+                fecha_fin_sem = fecha_inicio_sem + datetime.timedelta(days=6)
+                
+                df_horas_emp = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt['F_Obj'] >= fecha_inicio_sem) & (df_punt['F_Obj'] <= fecha_fin_sem)].copy()
+                horas_semanales_acumuladas = 0.0
+                
+                if not df_horas_emp.empty:
+                    df_horas_emp['Timestamp'] = pd.to_datetime(df_horas_emp['Fecha'].astype(str) + ' ' + df_horas_emp['Hora'].astype(str), errors='coerce')
+                    df_horas_emp = df_horas_emp.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
+                    
+                    def procesar_tramo_emp(entrada_row, salida_row):
+                        h_in = entrada_row["Timestamp"]
+                        h_out_real = salida_row["Timestamp"] if salida_row is not None else None
+                        t_eval = str(entrada_row["Turno"]).strip()
+                        
+                        if not h_out_real:
+                            if t_eval in lista_turnos:
+                                try:
+                                    t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
+                                    h_out_real = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                    if h_out_real < h_in: h_out_real += datetime.timedelta(days=1)
+                                except: h_out_real = h_in
+                            else: h_out_real = h_in
+                        
+                        if t_eval in lista_turnos:
+                            try:
+                                t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
+                                t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
+                                h_in_ofi = datetime.datetime.combine(h_in.date(), t_in_obj)
+                                h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
+                                
+                                if (h_in_ofi - h_in).total_seconds() > 43200:
+                                    h_in_ofi -= datetime.timedelta(days=1); h_out_ofi -= datetime.timedelta(days=1)
+                                elif (h_in - h_in_ofi).total_seconds() > 43200:
+                                    h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
+                                    
+                                h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
+                                
+                                minutos_tarde = (h_in - h_in_ofi).total_seconds() / 60.0
+                                if get_bool_config("desc_tarde", True):
+                                    tolerancia_m = int(config_app.get("tolerancia_minutos", 10))
+                                    if get_bool_config("perdonar_tolerancia", True) and (minutos_tarde <= tolerancia_m):
+                                        desc_in = 0.0
+                                    else:
+                                        desc_in = max(0.0, minutos_tarde / 60.0)
+                                else:
+                                    desc_in = 0.0
+                                    
+                                desc_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0 if get_bool_config("desc_temp", True) else 0.0
+                                desc_in = max(0.0, desc_in)
+                                desc_out = max(0.0, desc_out)
+                                
+                                h_tramo = h_tramo_oficial - desc_in - desc_out
+                            except:
+                                h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                        else:
+                            h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                        return max(0.0, h_tramo)
+
+                    ent_act = None
+                    for _, rf in df_horas_emp.iterrows():
+                        tr = str(rf["Tipo"]).strip()
+                        if tr == "Entrada":
+                            if ent_act is not None: horas_semanales_acumuladas += procesar_tramo_emp(ent_act, None)
+                            ent_act = rf
+                        elif tr in ["Salida", "Salida (Cambio Local)", "Retiro Temprano"] and ent_act is not None:
+                            horas_semanales_acumuladas += procesar_tramo_emp(ent_act, rf)
+                            ent_act = None
+                    if ent_act is not None:
+                        horas_semanales_acumuladas += procesar_tramo_emp(ent_act, None)
+                        
+                st.markdown(f"<div class='super-box' style='padding: 15px; text-align: center; margin-bottom: 20px;'><b>⏱️ Mis horas semanales computadas:</b> {formato_horas_texto(horas_semanales_acumuladas)} <br><small style='color: gray;'>(Semana del {fecha_inicio_sem.strftime('%d/%m')} al {fecha_fin_sem.strftime('%d/%m')})</small></div>", unsafe_allow_html=True)
+
             if rol_empleado in ["Cajero", "Encargado"]:
                 with st.expander("🛡️ Panel de Responsable de Turno", expanded=False):
                     st.markdown("<div class='super-box'><b>Rol Supervisor:</b> Podés auditar salidas y asignar puntos a tus compañeros.</div>", unsafe_allow_html=True)
@@ -886,9 +970,15 @@ elif pestaña == "💼 Panel de Gerencia":
                 st.write("---")
                 st.markdown("### 🧮 Recuento de Horas y Exportaciones")
                 st.write("Configurá los filtros acá abajo para calcular las horas de tu equipo y descargar las planillas para liquidación.")
+                
+                # --- FECHA SUGERIDA BASADA EN LA SEMANA CONFIGURADA ---
+                inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
+                dias_desde_inicio_def = (ahora.date().weekday() - inicio_semana_int) % 7
+                fecha_inicio_semana_def = ahora.date() - datetime.timedelta(days=dias_desde_inicio_def)
+                
                 c_dl1, c_dl2, c_dl3 = st.columns(3)
                 local_descarga = c_dl1.selectbox("🏢 Sucursal a evaluar:", ["Todas las sucursales"] + list(lista_locales.keys()), key="dl_loc")
-                fecha_in_dl = c_dl2.date_input("📅 Desde el día:", value=ahora.date() - datetime.timedelta(days=7), key="dl_in")
+                fecha_in_dl = c_dl2.date_input("📅 Desde el día:", value=fecha_inicio_semana_def, key="dl_in")
                 fecha_fi_dl = c_dl3.date_input("📅 Hasta el día:", value=ahora.date(), key="dl_fi")
                 
                 df_dl = df_activos.copy()
@@ -950,7 +1040,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                     
                                     h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
                                     
-                                    # LÓGICA NUEVA: PERDONAR LLEGADA TARDE DENTRO DE LA TOLERANCIA
                                     minutos_tarde = (h_in - h_in_ofi).total_seconds() / 60.0
                                     if get_bool_config("desc_tarde", True):
                                         tolerancia_m = int(config_app.get("tolerancia_minutos", 10))
@@ -1022,10 +1111,8 @@ elif pestaña == "💼 Panel de Gerencia":
                         st.write("### ⬇️ Descargas Generales (Para RRHH)")
                         c_btn1, c_btn2 = st.columns(2)
                         
-                        # EXPORTACIÓN SÚPER FILTRADA PARA LIQUIDACIÓN
                         c_btn1.markdown(generate_html_download(df_horas_final, f"Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv", "📥 Descargar Liquidación General (Móvil/PC)"), unsafe_allow_html=True)
                         
-                        # EXPORTACIÓN SÚPER FILTRADA PARA FICHAJES
                         df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
                         if local_descarga != "Todas las sucursales":
                             df_asist_dl = df_asist_dl[df_asist_dl["Sucursal"] == local_descarga]
@@ -1385,19 +1472,26 @@ elif pestaña == "💼 Panel de Gerencia":
             st.markdown("---")
             st.subheader("🗓️ Planilla Semanal de Turnos (Roster)")
             today_date = ahora.date()
-            lunes_actual = today_date - datetime.timedelta(days=today_date.weekday())
+            
+            # --- CÁLCULO DE INICIO DE SEMANA CORRELACIONADO ---
+            inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
+            dia_inicio_actual = today_date - datetime.timedelta(days=(today_date.weekday() - inicio_semana_int) % 7)
+            
             c_plan1, c_plan2 = st.columns([1,3])
             semana_sel = c_plan1.selectbox("Seleccionar Semana a organizar:", ["Esta Semana", "Semana Próxima", "Semana Anterior", "Elegir Fecha"])
             
-            if semana_sel == "Esta Semana": start_date_plan = lunes_actual
-            elif semana_sel == "Semana Próxima": start_date_plan = lunes_actual + datetime.timedelta(days=7)
-            elif semana_sel == "Semana Anterior": start_date_plan = lunes_actual - datetime.timedelta(days=7)
+            if semana_sel == "Esta Semana": start_date_plan = dia_inicio_actual
+            elif semana_sel == "Semana Próxima": start_date_plan = dia_inicio_actual + datetime.timedelta(days=7)
+            elif semana_sel == "Semana Anterior": start_date_plan = dia_inicio_actual - datetime.timedelta(days=7)
             else:
-                start_date_plan = c_plan2.date_input("Elegir Lunes de inicio:", value=lunes_actual)
+                start_date_plan = c_plan2.date_input("Elegir Inicio de semana:", value=dia_inicio_actual)
                 
-            if start_date_plan.weekday() != 0: start_date_plan = start_date_plan - datetime.timedelta(days=start_date_plan.weekday())
+            if (start_date_plan.weekday() - inicio_semana_int) % 7 != 0: 
+                start_date_plan = start_date_plan - datetime.timedelta(days=(start_date_plan.weekday() - inicio_semana_int) % 7)
+                
             fechas_semana = [start_date_plan + datetime.timedelta(days=i) for i in range(7)]
-            nombres_dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+            nombres_dias_todos = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+            nombres_dias = nombres_dias_todos[inicio_semana_int:] + nombres_dias_todos[:inicio_semana_int]
             cols_fechas = [f"{nombres_dias[i]} {fechas_semana[i].strftime('%d/%m')}" for i in range(7)]
             str_fechas = [f.strftime("%Y-%m-%d") for f in fechas_semana]
             
@@ -2031,17 +2125,21 @@ elif pestaña == "💼 Panel de Gerencia":
                     radio_m = st.number_input("Radio en metros:", value=int(config_app.get("radio_metros", 50)))
                     v_wifi = st.checkbox("📶 Requerir Wi-Fi para Entrada", value=get_bool_config("verificar_wifi", False))
                     nueva_tolerancia = st.number_input("Minutos tolerancia (llegada tarde):", value=int(config_app.get("tolerancia_minutos", 10)))
+                    
                     st.markdown("---")
                     st.markdown("#### Ajustes de Recuento de Horas")
+                    
+                    # --- NUEVO: MOSTRAR HORAS Y CONFIGURAR SEMANA ---
+                    v_mostrar_horas_empleado = st.checkbox("👁️ Mostrar horas semanales computadas en el portal del empleado", value=get_bool_config("mostrar_horas_empleado", False), help="El empleado podrá ver cuántas horas oficiales lleva acumuladas en su semana laboral en curso.")
+                    v_dia_inicio_semana = st.selectbox("📅 Día de inicio de la semana laboral:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")))
+                    
                     v_exigir_salida_manual = st.checkbox("🚪 Exigir Fichaje de Salida Manual", value=get_bool_config("exigir_salida_manual", False), help="Si se desactiva, la salida es automática y no se les pedirá fichar al irse.")
                     v_desc_tarde = st.checkbox("⏱️ Descontar Llegada Tarde del total de horas", value=get_bool_config("desc_tarde", True))
-                    
-                    # --- NUEVA OPCIÓN: PERDONAR TOLERANCIA ---
                     v_perdonar_tolerancia = st.checkbox("⏳ Perdonar descuento si llega dentro de la tolerancia (A tiempo)", value=get_bool_config("perdonar_tolerancia", True), help="Si el empleado llega tarde pero dentro del margen de minutos de tolerancia, se le pagan las horas completas. Si llega después de la tolerancia, se le descuenta el tiempo.")
-                    
                     v_desc_temp = st.checkbox("🏃‍♂️ Descontar Salida Temprano del total de horas", value=get_bool_config("desc_temp", True))
+                    
                     if st.form_submit_button("💾 Guardar Ajustes"):
-                        config_app.update({"titulo_portal": v_titulo_portal, "autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "desc_tarde": v_desc_tarde, "perdonar_tolerancia": v_perdonar_tolerancia, "desc_temp": v_desc_temp})
+                        config_app.update({"titulo_portal": v_titulo_portal, "autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "desc_tarde": v_desc_tarde, "perdonar_tolerancia": v_perdonar_tolerancia, "desc_temp": v_desc_temp, "mostrar_horas_empleado": v_mostrar_horas_empleado, "dia_inicio_semana": v_dia_inicio_semana})
                         save_json("config", config_app); st.rerun()
                         
                 st.write("🔑 **Cambiar Clave de Gerencia**")
