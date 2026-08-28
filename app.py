@@ -198,6 +198,21 @@ def calcular_nivel(puntos):
     elif puntos < 200: return "💎 Platino"
     else: return "👑 Leyenda"
 
+def formato_horas_texto(h_decimal):
+    try:
+        h_decimal = float(h_decimal)
+        horas = int(h_decimal)
+        minutos = int(round((h_decimal - horas) * 60))
+        if minutos == 60:
+            horas += 1
+            minutos = 0
+        nums = {0: "cero", 1: "una", 2: "dos", 3: "tres", 4: "cuatro", 5: "cinco", 6: "seis", 7: "siete", 8: "ocho", 9: "nueve", 10: "diez", 11: "once", 12: "doce", 13: "trece", 14: "catorce", 15: "quince", 16: "dieciséis", 17: "diecisiete", 18: "dieciocho", 19: "diecinueve", 20: "veinte", 21: "veintiuna", 22: "veintidós", 23: "veintitrés", 24: "veinticuatro"}
+        h_str = nums.get(horas, str(horas))
+        txt_h = "hora" if horas == 1 else "horas"
+        return f"{horas}:{minutos:02d} ({h_str} {txt_h} y {minutos} minutos)"
+    except:
+        return str(h_decimal)
+
 # ==========================================
 # 3. IDENTIFICACIÓN Y MODO INCÓGNITO (ESPÍA)
 # ==========================================
@@ -605,7 +620,6 @@ if pestaña == "📱 Portal del Empleado":
                     n_emp = nuevo_nombre_emp.strip()
                     match = next((e for e in lista_empleados if e.lower() == n_emp.lower()), None)
                     
-                    # --- RESTRICCIÓN ESTRICTA DE 1 CELULAR POR PERSONA / ANTI-INCÓGNITO ---
                     if device_id in dispositivos_vinculados.values():
                         st.error("❌ Este celular ya está vinculado a otra persona. No se permite compartir dispositivos.")
                     elif match and match in dispositivos_vinculados:
@@ -628,10 +642,8 @@ if pestaña == "📱 Portal del Empleado":
                         st.rerun()
             else:
                 st.info("🔒 **Auto-registro deshabilitado.** Pedile a gerencia que te dé de alta en la lista o seleccioná tu nombre si ya existís.")
-                # Ahora se muestran todos en el selectbox para poder arrojarles el error si ya tienen un dispositivo o si entran en incógnito
                 emp_vincular = st.selectbox("Identificate:", ["Seleccionar..."] + sorted(lista_empleados))
                 if st.button("🔗 Enlazar mi teléfono") and emp_vincular != "Seleccionar...":
-                    # --- RESTRICCIÓN ESTRICTA DE 1 CELULAR POR PERSONA / ANTI-INCÓGNITO ---
                     if emp_vincular in dispositivos_vinculados:
                         st.error(f"❌ La cuenta de '{emp_vincular}' ya está vinculada a otro celular. No puedes ingresar desde otro equipo ni usar el Navegador en Modo Incógnito. Si cambiaste tu teléfono, pedile a Gerencia que libere tu usuario.")
                     elif device_id in dispositivos_vinculados.values():
@@ -817,6 +829,10 @@ elif pestaña == "💼 Panel de Gerencia":
                     if datos_horas:
                         df_horas_final = pd.DataFrame(datos_horas).sort_values(by=["Personal", "⏱️ Horas Computadas"], ascending=[True, False])
                         df_mostrar = df_horas_final.copy()
+                        
+                        # --- NUEVO FORMATO DE HORAS EN PANTALLA ---
+                        df_mostrar["⏱️ Horas Computadas"] = df_mostrar["⏱️ Horas Computadas"].apply(formato_horas_texto)
+                        
                         df_mostrar["💰 Pago Est."] = df_mostrar["💰 Pago Est."].apply(lambda x: f"${x:,.2f}")
                         def style_pago(val): return 'background-color: #ECFDF5; color: #065F46; font-weight: 800;'
                         try: styled_df = df_mostrar.style.map(style_pago, subset=["💰 Pago Est."])
@@ -1337,7 +1353,10 @@ elif pestaña == "💼 Panel de Gerencia":
                     reg = config_app.get("reglas_puntos", {})
                     puntaje = reg.get('base', 100) + (e_atiempo * reg.get('A tiempo', 0)) + (e_tardes * reg.get('Tarde', -5)) + (e_ausencias * reg.get('Ausente', -15)) + e_aj + e_tp
                     c_pf1, c_pf2, c_pf3, c_pf4 = st.columns(4)
-                    c_pf1.metric("⏱️ Horas Trabajadas", f"{round(horas_totales, 1)} hs")
+                    
+                    # --- NUEVO FORMATO DE HORAS EN EL PERFIL ---
+                    c_pf1.metric("⏱️ Horas Trabajadas", formato_horas_texto(horas_totales))
+                    
                     c_pf2.metric("⭐ Puntos", f"{puntaje} pts")
                     c_pf3.metric("🚨 Tardes", e_tardes)
                     c_pf4.metric("❌ Ausencias", e_ausencias)
