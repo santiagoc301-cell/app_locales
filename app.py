@@ -43,6 +43,27 @@ footer { display: none !important; }
 }
 .stTabs [data-baseweb="tab"]:hover { background-color: #e2e8f0; }
 
+/* ---> BOTONES DE FICHAJE GIGANTES (EXCLUSIVOS) <--- */
+button[data-testid="baseButton-primary"] {
+    min-height: 85px !important;
+    font-size: 1.8rem !important;
+    border-radius: 20px !important;
+    font-weight: 900 !important;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    background: linear-gradient(135deg, #2563EB, #1D4ED8) !important;
+    color: white !important;
+    box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.4) !important;
+    border: none !important;
+    margin-top: 15px !important;
+    margin-bottom: 15px !important;
+}
+button[data-testid="baseButton-primary"]:hover {
+    transform: scale(1.02) translateY(-2px);
+    background: linear-gradient(135deg, #1D4ED8, #1e3a8a) !important;
+    box-shadow: 0 15px 30px -5px rgba(37, 99, 235, 0.6) !important;
+}
+
 /* ---> DISEÑO GENERAL DE LA APP <--- */
 .main-title { 
     font-size: 2.5rem; 
@@ -68,7 +89,7 @@ div[data-testid="metric-container"]:hover {
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #0f172a; }
-.stButton>button { 
+.stButton>button:not([data-testid="baseButton-primary"]) { 
     border-radius: 12px; 
     font-weight: 700; 
     transition: all 0.2s ease; 
@@ -79,7 +100,7 @@ div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #
     color: #1e293b;
     box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
-.stButton>button:hover { 
+.stButton>button:not([data-testid="baseButton-primary"]):hover { 
     transform: translateY(-2px); 
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
     border-color: #cbd5e1;
@@ -184,7 +205,7 @@ def insert_row(table_name, row_dict):
         st.error(f"❌ Error guardando en la tabla '{table_name}': {e}")
 
 # ==========================================
-# 2. CARGA DE DATOS CENTRALIZADA
+# 2. CARGA DE DATOS CENTRALIZADA Y BOOLEAN SAFE
 # ==========================================
 zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
 ahora = datetime.datetime.now(zona_arg)
@@ -201,6 +222,12 @@ config_defecto = {
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
 config_app = load_json("config", config_defecto)
+
+# Parseo de booleanos a prueba de fallos para las deducciones
+def get_bool_config(key, default=True):
+    val = config_app.get(key, default)
+    if isinstance(val, str): return val.lower() in ['true', '1', 'yes', 't']
+    return bool(val)
 
 owner_config_defecto = {
     "estado_licencia": "Activo", "plan_pago": "Mensual", "fecha_vencimiento": "2030-12-31",
@@ -458,8 +485,8 @@ if pestaña == "📱 Portal del Empleado":
                         s_pts = st.number_input("Puntos (+/-):", value=0, step=1)
                         s_mot = st.text_input("Motivo:")
                         if st.form_submit_button("Enviar a Gerencia"):
-                            if s_emp == "Seleccionar..." or s_pts == 0 or not s_mot.strip():
-                                st.warning("🚨 ¡Completá todos los campos! (Elegí un compañero, poné un puntaje distinto a 0 y escribí el motivo).")
+                            if s_emp == "Seleccionar...":
+                                st.warning("🚨 ¡Completá todos los campos! (Elegí un compañero y escribí el motivo).")
                             else:
                                 lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot.strip(), "Autor": empleado_en_celu, "Estado": "Pendiente"})
                                 save_json("ajustes_puntos", lista_puntos)
@@ -479,7 +506,7 @@ if pestaña == "📱 Portal del Empleado":
                 metodo_det = ""
                 client_ip_local = None
                 
-                if config_app.get("verificar_wifi", False):
+                if get_bool_config("verificar_wifi", False):
                     if 'client_ip' not in st.session_state:
                         js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
                         cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
@@ -487,17 +514,17 @@ if pestaña == "📱 Portal del Empleado":
                     client_ip_local = st.session_state.get('client_ip')
                     
                 ubicacion = None
-                if config_app.get("verificar_gps", True):
+                if get_bool_config("verificar_gps", True):
                     ubicacion = get_geolocation()
                     
-                if config_app.get("verificar_wifi", False) and client_ip_local and client_ip_local != 'Error':
+                if get_bool_config("verificar_wifi", False) and client_ip_local and client_ip_local != 'Error':
                     for loc, d_loc in lista_locales.items():
                         if d_loc.get("ip", "").strip() == client_ip_local:
                             local_detectado = loc
                             metodo_det = "📶 Red Wi-Fi de la tienda"
                             break
                             
-                if not local_detectado and config_app.get("verificar_gps", True):
+                if not local_detectado and get_bool_config("verificar_gps", True):
                     if ubicacion and 'coords' in ubicacion:
                         coord_usuario = (ubicacion['coords']['latitude'], ubicacion['coords']['longitude'])
                         for loc, d_loc in lista_locales.items():
@@ -545,7 +572,9 @@ if pestaña == "📱 Portal del Empleado":
                             st.markdown(f"<small style='color: gray;'>El horario oficial de este turno es de {lista_turnos[turno_seleccionado]['ingreso']} a {lista_turnos[turno_seleccionado]['salida']}</small>", unsafe_allow_html=True)
                             nota_empleado = st.text_input("✍️ Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
                             
-                            if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True):
+                            # BOTÓN DE ENTRADA GIGANTE
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True, type="primary"):
                                 estado_llegada = "A tiempo"
                                 try:
                                     hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
@@ -566,7 +595,7 @@ if pestaña == "📱 Portal del Empleado":
                         else:
                             st.warning("No hay turnos configurados en el sistema. Avisale a Gerencia.")
                     else:
-                        if config_app.get("verificar_gps", True) and (not ubicacion or 'coords' not in ubicacion):
+                        if get_bool_config("verificar_gps", True) and (not ubicacion or 'coords' not in ubicacion):
                             st.info("⏳ Detectando ubicación satelital... Por favor, permití el acceso al GPS en tu celular.")
                         else:
                             st.error(f"❌ Estás fuera del rango de todas las sucursales. Acercate al local para habilitar el fichaje.")
@@ -601,19 +630,19 @@ if pestaña == "📱 Portal del Empleado":
                         st.markdown("### 🏃‍♂️ Finalizar Turno")
                         st.success(f"🏢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
                         
-                        if not config_app.get("exigir_salida_manual", False):
+                        if not get_bool_config("exigir_salida_manual", False):
                             st.info("🟢 **Salida Automática Activada:** No necesitás registrar tu salida. El sistema computará tu turno automáticamente.")
                         else:
                             puede_salir = True
                             distancia_salida = datos_turno_activo.get("Distancia_m", 0.0)
-                            if config_app.get("salida_estricta", False) and local_actual in lista_locales:
+                            if get_bool_config("salida_estricta", False) and local_actual in lista_locales:
                                 st.markdown("🔒 **Verificación requerida para finalizar turno:**")
-                                ubicacion_sal = get_geolocation() if config_app.get("verificar_gps", True) else None
+                                ubicacion_sal = get_geolocation() if get_bool_config("verificar_gps", True) else None
                                 en_rango_sal = True
                                 wifi_aprobado_sal = True
                                 radio_permitido = int(config_app.get("radio_metros", 50))
                                 
-                                if config_app.get("verificar_gps", True):
+                                if get_bool_config("verificar_gps", True):
                                     if ubicacion_sal and 'coords' in ubicacion_sal:
                                         coord_us = (ubicacion_sal['coords']['latitude'], ubicacion_sal['coords']['longitude'])
                                         coord_loc = (lista_locales[local_actual]["lat"], lista_locales[local_actual]["lon"])
@@ -628,7 +657,7 @@ if pestaña == "📱 Portal del Empleado":
                                         st.markdown("<div class='validation-box' style='border-left: 5px solid #F59E0B;'>⏳ <b>Obteniendo GPS...</b></div>", unsafe_allow_html=True)
                                         
                                 client_ip_local = None
-                                if config_app.get("verificar_wifi", False):
+                                if get_bool_config("verificar_wifi", False):
                                     if 'client_ip' not in st.session_state:
                                         js_get_ip = "fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')"
                                         cip = streamlit_js_eval(js_expressions=js_get_ip, want_output=True, key="get_client_ip")
@@ -639,12 +668,15 @@ if pestaña == "📱 Portal del Empleado":
                                     elif client_ip_local and client_ip_local == ip_tienda: st.markdown("<div class='validation-box'>✅ <b>Red Aprobada.</b></div>", unsafe_allow_html=True)
                                     else: wifi_aprobado_sal = False
                                     
-                                if config_app.get("verificar_wifi", False) and not wifi_aprobado_sal: puede_salir = False
-                                if config_app.get("verificar_gps", True) and not en_rango_sal: puede_salir = False
+                                if get_bool_config("verificar_wifi", False) and not wifi_aprobado_sal: puede_salir = False
+                                if get_bool_config("verificar_gps", True) and not en_rango_sal: puede_salir = False
                                 
                             if puede_salir:
                                 nota_empleado = st.text_input("✍️ Novedad al salir (Opcional):")
-                                if st.button("🔴 REGISTRAR SALIDA", use_container_width=True):
+                                
+                                # BOTÓN DE SALIDA GIGANTE
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                if st.button("🔴 REGISTRAR SALIDA", use_container_width=True, type="primary"):
                                     insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(distancia_salida), 1), "Nota": str(nota_empleado)})
                                     st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
                                     st.rerun()
@@ -700,7 +732,7 @@ if pestaña == "📱 Portal del Empleado":
                 st.markdown("📞 **Contactos Útiles:**")
                 st.write(owner_config.get('contactos', ''))
         else:
-            if config_app.get("autoregistro", False):
+            if get_bool_config("autoregistro", False):
                 st.info("📝 **El Auto-registro está habilitado.** Escribí tu nombre, elegí tu rol y vinculá tu celular.")
                 nuevo_nombre_emp = st.text_input("Tu Nombre Completo:")
                 rol_elegido_auto = st.selectbox("Tu Rol / Puesto:", lista_roles_disponibles)
@@ -860,6 +892,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 if local_descarga != "Todas las sucursales":
                     st.info(f"📍 **Modo filtrado activo:** Mostrando y exportando únicamente datos de **{local_descarga}**.")
                 
+                # CÁLCULO SÚPER ROBUSTO DE HORAS Y PENALIZACIONES DE DESCUENTO
                 df_dl['Timestamp'] = pd.to_datetime(df_dl['Fecha'].astype(str) + ' ' + df_dl['Hora'].astype(str), errors='coerce')
                 df_dl = df_dl.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
                 
@@ -870,47 +903,65 @@ elif pestaña == "💼 Panel de Gerencia":
                         df_e = df_dl[df_dl["Empleado"] == emp]
                         entrada_actual = None
                         
-                        def procesar_tramo(entrada_row, salida_row):
+                        def procesar_tramo_estricto(entrada_row, salida_row):
                             h_in = entrada_row["Timestamp"]
-                            t_eval = str(entrada_row["Turno"])
-                            s_eval = str(entrada_row["Sucursal"])
+                            h_out_real = salida_row["Timestamp"] if salida_row is not None else None
                             
+                            t_eval = str(entrada_row["Turno"]).strip()
+                            s_eval = str(entrada_row["Sucursal"]).strip()
+                            
+                            # Filtro por sucursal
                             if local_descarga != "Todas las sucursales" and s_eval != local_descarga:
                                 return
                                 
                             h_tramo = 0.0
-                            h_out_real = salida_row["Timestamp"] if salida_row is not None else None
                             
+                            # Si no hay salida real, lo auto-cerramos (siempre y cuando sepa a qué hora debió salir)
+                            if not h_out_real:
+                                if t_eval in lista_turnos:
+                                    try:
+                                        t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
+                                        h_out_real = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                        if h_out_real < h_in: h_out_real += datetime.timedelta(days=1)
+                                    except:
+                                        h_out_real = h_in
+                                else:
+                                    h_out_real = h_in
+                            
+                            # CÁLCULO ESTRICTO DE PENALIDADES
                             if t_eval in lista_turnos:
                                 try:
                                     t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
                                     t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
-                                    
                                     h_in_ofi = datetime.datetime.combine(h_in.date(), t_in_obj)
                                     h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
-                                    
                                     if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
                                     
+                                    # Ajuste medianoche
                                     if (h_in_ofi - h_in).total_seconds() > 43200:
                                         h_in_ofi -= datetime.timedelta(days=1); h_out_ofi -= datetime.timedelta(days=1)
                                     elif (h_in - h_in_ofi).total_seconds() > 43200:
                                         h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
-                                        
-                                    h_tramo = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
                                     
-                                    if config_app.get("desc_tarde", True):
-                                        diff_in = (h_in - h_in_ofi).total_seconds() / 3600.0
-                                        if diff_in > 0: h_tramo -= diff_in
-                                        
-                                    if salida_row is not None and config_app.get("desc_temp", True):
-                                        diff_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0
-                                        if diff_out > 0: h_tramo -= diff_out
-                                except:
-                                    if h_out_real: h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                                    h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
+                                    
+                                    # Aplicar descuentos matemáticamente de forma segura (usando get_bool_config)
+                                    desc_in = (h_in - h_in_ofi).total_seconds() / 3600.0 if get_bool_config("desc_tarde", True) else 0.0
+                                    desc_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0 if get_bool_config("desc_temp", True) else 0.0
+                                    
+                                    # No permitimos bonificar horas si llegaron antes o se fueron después
+                                    desc_in = max(0.0, desc_in)
+                                    desc_out = max(0.0, desc_out)
+                                    
+                                    h_tramo = h_tramo_oficial - desc_in - desc_out
+                                except Exception as e:
+                                    # Fallback a horas reales exactas si falla la config
+                                    h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
                             else:
-                                if h_out_real: h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                                # Fallback a horas reales exactas si es turno libre/manual
+                                h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
                                 
-                            if h_tramo < 0: h_tramo = 0.0
+                            h_tramo = max(0.0, h_tramo)
                             
                             if h_tramo > 0:
                                 sueldo_h = 0.0
@@ -925,18 +976,19 @@ elif pestaña == "💼 Panel de Gerencia":
                                 datos_horas_dict[k]["Horas"] += h_tramo
                                 datos_horas_dict[k]["Pago"] += (h_tramo * sueldo_h)
 
+                        # Bucle inteligente cronológico para evitar bugs si olvidó fichar
                         for _, row_f in df_e.iterrows():
                             tipo_reg = str(row_f["Tipo"]).strip()
                             if tipo_reg == "Entrada":
                                 if entrada_actual is not None:
-                                    procesar_tramo(entrada_actual, None)
+                                    procesar_tramo_estricto(entrada_actual, None)
                                 entrada_actual = row_f
                             elif tipo_reg in ["Salida", "Salida (Cambio Local)", "Retiro Temprano"] and entrada_actual is not None:
-                                procesar_tramo(entrada_actual, row_f)
+                                procesar_tramo_estricto(entrada_actual, row_f)
                                 entrada_actual = None
                                 
                         if entrada_actual is not None:
-                            procesar_tramo(entrada_actual, None)
+                            procesar_tramo_estricto(entrada_actual, None)
                 
                     datos_horas = []
                     for (emp, loc), vals in datos_horas_dict.items():
@@ -946,7 +998,6 @@ elif pestaña == "💼 Panel de Gerencia":
                     if datos_horas:
                         df_horas_final = pd.DataFrame(datos_horas).sort_values(by=["Personal", "⏱️ Horas Computadas"], ascending=[True, False])
                         
-                        # --- CUADRO UNIFICADO DE LIQUIDACIÓN ---
                         st.write("### 🪪 Cuadro de Liquidación")
                         st.write("Acá tenés el desglose de horas y pagos estimado para todo el equipo en un solo cuadro.")
                         
@@ -965,8 +1016,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             label="📥 Liquidación General de Sueldos (CSV)",
                             data=csv_horas,
                             file_name=f"Horas_y_Sueldos_{local_descarga}_{fecha_in_dl}.csv",
-                            mime="text/csv",
-                            use_container_width=True
+                            mime="text/csv"
                         )
                         
                         df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
@@ -975,8 +1025,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             label="📥 Todos los Fichajes Crudos (CSV)",
                             data=csv_asist,
                             file_name=f"Fichajes_{local_descarga}_{fecha_in_dl}.csv",
-                            mime="text/csv",
-                            use_container_width=True
+                            mime="text/csv"
                         )
                 else:
                     st.info("📭 Sin registros para liquidar en la sucursal y fechas seleccionadas.")
@@ -1198,7 +1247,6 @@ elif pestaña == "💼 Panel de Gerencia":
         with tab_horarios:
             st.markdown('<div class="main-title" style="font-size: 2rem;">📅 Planificación y Horarios</div>', unsafe_allow_html=True)
             
-            # --- AGREGAR FICHAJE MANUALMENTE ---
             st.markdown("### ➕ Agregar Fichaje Manualmente")
             st.write("Registrá una entrada o salida que un empleado olvidó marcar en la app.")
             with st.form("form_add_fichaje"):
@@ -1237,7 +1285,6 @@ elif pestaña == "💼 Panel de Gerencia":
                         st.rerun()
             st.markdown("---")
             
-            # --- MODIFICAR FICHAJES EXISTENTES ---
             st.markdown("### ✏️ Modificar Fichajes Existentes")
             st.write("Editá cualquier dato de un registro o eliminalo.")
             c_edh1, c_edh2 = st.columns(2)
@@ -1351,7 +1398,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     nuevos_datos_plan[(loc, turno)] = df_editado_t
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-            if st.button("💾 Guardar Planificación Semanal", use_container_width=True, type="primary"):
+            if st.button("💾 Guardar Planificación Semanal", use_container_width=True):
                 for f_str in str_fechas:
                     if f_str not in planificacion_turnos: planificacion_turnos[f_str] = {}
                     for loc in lista_locales.keys():
@@ -1546,6 +1593,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     e_tardes = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "Tarde")])
                     e_ausencias = len(df_e_p[df_e_p["Tipo"] == "Ausente"])
                     
+                    # --- NUEVO CÁLCULO INTELIGENTE PERFIL ---
                     df_e_p['Timestamp'] = pd.to_datetime(df_e_p['Fecha'].astype(str) + ' ' + df_e_p['Hora'].astype(str), errors='coerce')
                     df_e_p = df_e_p.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
                     
@@ -1554,18 +1602,26 @@ elif pestaña == "💼 Panel de Gerencia":
                     
                     def procesar_tramo_perfil(entrada_row, salida_row):
                         h_in = entrada_row["Timestamp"]
-                        t_eval = str(entrada_row["Turno"])
+                        t_eval = str(entrada_row["Turno"]).strip()
                         h_tramo = 0.0
                         h_out_real = salida_row["Timestamp"] if salida_row is not None else None
+                        
+                        if not h_out_real:
+                            if t_eval in lista_turnos:
+                                try:
+                                    t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
+                                    h_out_real = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                    if h_out_real < h_in: h_out_real += datetime.timedelta(days=1)
+                                except: h_out_real = h_in
+                            else:
+                                h_out_real = h_in
                         
                         if t_eval in lista_turnos:
                             try:
                                 t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
                                 t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
-                                
                                 h_in_ofi = datetime.datetime.combine(h_in.date(), t_in_obj)
                                 h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
-                                
                                 if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
                                 
                                 if (h_in_ofi - h_in).total_seconds() > 43200:
@@ -1573,19 +1629,18 @@ elif pestaña == "💼 Panel de Gerencia":
                                 elif (h_in - h_in_ofi).total_seconds() > 43200:
                                     h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
                                     
-                                h_tramo = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
+                                h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
+                                desc_in = (h_in - h_in_ofi).total_seconds() / 3600.0 if get_bool_config("desc_tarde", True) else 0.0
+                                desc_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0 if get_bool_config("desc_temp", True) else 0.0
                                 
-                                if config_app.get("desc_tarde", True):
-                                    diff_in = (h_in - h_in_ofi).total_seconds() / 3600.0
-                                    if diff_in > 0: h_tramo -= diff_in
-                                    
-                                if salida_row is not None and config_app.get("desc_temp", True):
-                                    diff_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0
-                                    if diff_out > 0: h_tramo -= diff_out
+                                desc_in = max(0.0, desc_in)
+                                desc_out = max(0.0, desc_out)
+                                
+                                h_tramo = h_tramo_oficial - desc_in - desc_out
                             except:
-                                if h_out_real: h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                                h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
                         else:
-                            if h_out_real: h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
+                            h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
                             
                         return max(0.0, h_tramo)
 
@@ -1931,16 +1986,16 @@ elif pestaña == "💼 Panel de Gerencia":
                     st.markdown("#### 🎨 Personalización de Marca")
                     v_titulo_portal = st.text_input("Título del Portal (Ej: 🏢 Mi Empresa):", value=config_app.get("titulo_portal", "🏢 Portal Corporativo"))
                     st.markdown("#### ⚙️ Ajustes Técnicos")
-                    v_autoregistro = st.checkbox("📝 Permitir Auto-registro de empleados", value=config_app.get("autoregistro", False), help="Los empleados podrán escribir su propio nombre al abrir la app por primera vez.")
-                    v_gps = st.checkbox("🛰️ Requerir GPS para Entrada", value=config_app.get("verificar_gps", True))
+                    v_autoregistro = st.checkbox("📝 Permitir Auto-registro de empleados", value=get_bool_config("autoregistro", False), help="Los empleados podrán escribir su propio nombre al abrir la app por primera vez.")
+                    v_gps = st.checkbox("🛰️ Requerir GPS para Entrada", value=get_bool_config("verificar_gps", True))
                     radio_m = st.number_input("Radio en metros:", value=int(config_app.get("radio_metros", 50)))
-                    v_wifi = st.checkbox("📶 Requerir Wi-Fi para Entrada", value=config_app.get("verificar_wifi", False))
+                    v_wifi = st.checkbox("📶 Requerir Wi-Fi para Entrada", value=get_bool_config("verificar_wifi", False))
                     nueva_tolerancia = st.number_input("Minutos tolerancia (llegada tarde):", value=int(config_app.get("tolerancia_minutos", 10)))
                     st.markdown("---")
                     st.markdown("#### Ajustes de Recuento de Horas")
-                    v_exigir_salida_manual = st.checkbox("🚪 Exigir Fichaje de Salida Manual", value=config_app.get("exigir_salida_manual", False), help="Si se desactiva, la salida es automática y no se les pedirá fichar al irse.")
-                    v_desc_tarde = st.checkbox("⏱️ Descontar Llegada Tarde del total de horas", value=config_app.get("desc_tarde", True))
-                    v_desc_temp = st.checkbox("🏃‍♂️ Descontar Salida Temprano del total de horas", value=config_app.get("desc_temp", True))
+                    v_exigir_salida_manual = st.checkbox("🚪 Exigir Fichaje de Salida Manual", value=get_bool_config("exigir_salida_manual", False), help="Si se desactiva, la salida es automática y no se les pedirá fichar al irse.")
+                    v_desc_tarde = st.checkbox("⏱️ Descontar Llegada Tarde del total de horas", value=get_bool_config("desc_tarde", True))
+                    v_desc_temp = st.checkbox("🏃‍♂️ Descontar Salida Temprano del total de horas", value=get_bool_config("desc_temp", True))
                     if st.form_submit_button("💾 Guardar Ajustes"):
                         config_app.update({"titulo_portal": v_titulo_portal, "autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "desc_tarde": v_desc_tarde, "desc_temp": v_desc_temp})
                         save_json("config", config_app); st.rerun()
@@ -1954,7 +2009,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 st.subheader("🔄 Reiniciar Sistema de Puntos")
                 st.write("Fijá una nueva fecha de inicio. Los puntos se contarán de cero desde la fecha que elijas (Ideal para cortes semanales o mensuales).")
                 nueva_fecha_puntos = st.date_input("Nueva fecha de inicio:", value=ahora.date())
-                if st.button("🔄 Reiniciar Puntos Ahora", type="primary"):
+                if st.button("🔄 Reiniciar Puntos Ahora"):
                     config_app["fecha_inicio_puntos"] = nueva_fecha_puntos.strftime("%Y-%m-%d")
                     save_json("config", config_app)
                     st.success(f"✅ ¡Puntos reseteados! El contador arrancará desde el {nueva_fecha_puntos.strftime('%d/%m/%Y')}.")
