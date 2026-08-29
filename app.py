@@ -169,7 +169,7 @@ def load_json(key_name, default_data):
         
     if key_name in settings:
         data = settings[key_name]
-        # MEJORA: Fusión de diccionarios para persistencia ante actualizaciones del código
+        # Fusión de diccionarios para persistencia ante actualizaciones del código
         if isinstance(data, dict) and isinstance(default_data, dict):
             for k, v in default_data.items():
                 if k not in data:
@@ -266,7 +266,7 @@ cierres_caja = load_json("cierres_caja", [])
 planificacion_turnos = load_json("planificacion_turnos", {})
 puntos_cajero_pendientes = load_json("puntos_cajero_pendientes", [])
 
-ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A", "Retiro Temprano", "Salida (Cambio Local)"]
+ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida Automática", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A", "Retiro Temprano", "Salida (Cambio Local)"]
 
 def procesar_rango_fechas(rango):
     if isinstance(rango, tuple) or isinstance(rango, list):
@@ -330,6 +330,46 @@ elif 'device_id' in st.session_state:
         if dev == st.session_state['device_id']:
             empleado_en_celu = emp
             break
+
+# ==========================================
+# CERRADO AUTOMÁTICO DE TURNOS (CORRE SIEMPRE AL CARGAR)
+# ==========================================
+df_punt_check = load_df("asistencia")
+if not df_punt_check.empty:
+    df_punt_check['Timestamp'] = pd.to_datetime(df_punt_check['Fecha'].astype(str) + ' ' + df_punt_check['Hora'].astype(str), errors='coerce')
+    df_punt_check = df_punt_check.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
+    
+    # Revisamos empleado por empleado si les quedó un turno de Entrada colgado y ya pasó la hora de salida de ese turno.
+    for emp_check in lista_empleados:
+        df_e_check = df_punt_check[df_punt_check["Empleado"] == emp_check]
+        if not df_e_check.empty:
+            ultimo_fichaje = df_e_check.iloc[-1]
+            if ultimo_fichaje["Tipo"] == "Entrada":
+                turno_activo = str(ultimo_fichaje["Turno"])
+                if turno_activo in lista_turnos:
+                    try:
+                        hora_salida_str = lista_turnos[turno_activo]["salida"]
+                        hora_salida_obj = datetime.datetime.strptime(hora_salida_str, "%I:%M %p").time()
+                        
+                        fecha_entrada = pd.to_datetime(ultimo_fichaje["Fecha"]).date()
+                        dt_salida = datetime.datetime.combine(fecha_entrada, hora_salida_obj).replace(tzinfo=zona_arg)
+                        
+                        # Si la hora de salida configurada del turno ya pasó, hacemos la salida automática
+                        if ahora > dt_salida:
+                            insert_row("asistencia", {
+                                "Fecha": str(fecha_entrada),
+                                "Hora": hora_salida_obj.strftime("%I:%M:%S %p"),
+                                "Empleado": str(emp_check),
+                                "Sucursal": str(ultimo_fichaje["Sucursal"]),
+                                "Turno": turno_activo,
+                                "Tipo": "Salida",
+                                "Estado": "Salida Automática",
+                                "Distancia_m": 0.0,
+                                "Nota": "Cierre automático del sistema al finalizar el horario del turno."
+                            })
+                    except Exception as e:
+                        pass
+
 
 # ==========================================
 # 4. NAVEGACIÓN FRONTAL PARA CELULARES
@@ -749,7 +789,7 @@ if pestaña == "📱 Portal del Empleado":
                         if tr == "Entrada":
                             if ent_act is not None: horas_semanales_acumuladas += procesar_tramo_emp(ent_act, None)
                             ent_act = rf
-                        elif tr in ["Salida", "Salida (Cambio Local)", "Retiro Temprano"] and ent_act is not None:
+                        elif tr in ["Salida", "Salida Automática", "Salida (Cambio Local)", "Retiro Temprano"] and ent_act is not None:
                             horas_semanales_acumuladas += procesar_tramo_emp(ent_act, rf)
                             ent_act = None
                     if ent_act is not None:
@@ -822,17 +862,15 @@ if pestaña == "📱 Portal del Empleado":
                     else:
                         st.warning("🚨 Para auditar la salida de un compañero, primero tenés que registrar tu propia ENTRADA en la sucursal.")
                         
-            # 7. BUZÓN (Agregado Reporte de Bono/Multa para Cajeros)
+            # 7. BUZÓN 
             with st.expander("📬 Buzón de Reportes Confidenciales", expanded=False):
                 opciones_reporte = ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"]
                 
-                # --- NUEVO: Opción de reporte de multas/bonos para cajeros ---
                 if rol_empleado in ["Cajero", "Encargado"]:
                     opciones_reporte.append("⭐ Sugerir Bono/Multa a Compañero (Auditable)")
                     
                 tipo_rep = st.selectbox("Tipo:", opciones_reporte)
                 
-                # Lógica de qué campos mostrar según el reporte
                 if tipo_rep in ["Incumplimiento de un compañero", "⭐ Sugerir Bono/Multa a Compañero (Auditable)"]:
                     implicado = st.selectbox("Compañero implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
                 else:
@@ -1169,7 +1207,7 @@ elif pestaña == "💼 Panel de Gerencia":
                                 if entrada_actual is not None:
                                     procesar_tramo_estricto(entrada_actual, None)
                                 entrada_actual = row_f
-                            elif tipo_reg in ["Salida", "Salida (Cambio Local)", "Retiro Temprano"] and entrada_actual is not None:
+                            elif tipo_reg in ["Salida", "Salida Automática", "Salida (Cambio Local)", "Retiro Temprano"] and entrada_actual is not None:
                                 procesar_tramo_estricto(entrada_actual, row_f)
                                 entrada_actual = None
                                 
@@ -1878,6 +1916,25 @@ elif pestaña == "💼 Panel de Gerencia":
                         supabase.table("tareas_log").update({"Estado": "Rechazada"}).eq("id", int(row['id'])).execute()
                         st.rerun()
                         
+            puntos_pendientes = [p for p in lista_puntos if p.get("Estado") == "Pendiente"]
+            if puntos_pendientes:
+                st.write("**Evaluaciones Pendientes (De Supervisores):**")
+                for idx, p in enumerate(lista_puntos):
+                    if p.get("Estado") == "Pendiente":
+                        c_pp1, c_pp2, c_pp3 = st.columns([4, 1, 1])
+                        c_pp1.markdown(f"**{p['Autor']}** sugiere **{p['Puntos']} pts** a **{p['Empleado']}** (Motivo: {p['Motivo']})")
+                        if c_pp2.button("✅ Aprobar", key=f"apr_p_{idx}"):
+                            lista_puntos[idx]["Estado"] = "Aprobada"; save_json("ajustes_puntos", lista_puntos); st.rerun()
+                        if c_pp3.button("❌ Rechazar", key=f"rec_p_{idx}"):
+                            lista_puntos[idx]["Estado"] = "Rechazada"; save_json("ajustes_puntos", lista_puntos); st.rerun()
+                            
+            st.subheader("📬 Buzón de Quejas y Reportes")
+            for idx, r in enumerate(reportes_log):
+                if r.get("Estado") == "Pendiente de lectura":
+                    st.markdown(f"<div class='report-box'><b>📬 NUEVO REPORTE</b> | Fecha: {r['Fecha']} {r['Hora']}<br><b>Emisor:</b> {r['Emisor']} | <b>Tipo:</b> {r['Tipo']}<br><b>Detalle:</b> <i>'{r['Detalle']}'</i></div>", unsafe_allow_html=True)
+                    if st.button("Marcar como Visto", key=f"visto_rep_{idx}"):
+                        reportes_log[idx]["Estado"] = "Visto"; save_json("reportes", reportes_log); st.rerun()
+
         with tab_perfil:
             st.markdown('<div class="main-title" style="font-size: 2rem;">👤 Dossier Individual 360°</div>', unsafe_allow_html=True)
             col_pf1, col_pf2 = st.columns([1,3])
@@ -1961,7 +2018,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             if entrada_actual is not None:
                                 horas_totales += procesar_tramo_perfil(entrada_actual, None)
                             entrada_actual = row_f
-                        elif tipo_reg in ["Salida", "Salida (Cambio Local)", "Retiro Temprano"] and entrada_actual is not None:
+                        elif tipo_reg in ["Salida", "Salida Automática", "Salida (Cambio Local)", "Retiro Temprano"] and entrada_actual is not None:
                             horas_totales += procesar_tramo_perfil(entrada_actual, row_f)
                             entrada_actual = None
                             
