@@ -169,7 +169,6 @@ def load_json(key_name, default_data):
         
     if key_name in settings:
         data = settings[key_name]
-        # Fusión de diccionarios para persistencia ante actualizaciones del código
         if isinstance(data, dict) and isinstance(default_data, dict):
             for k, v in default_data.items():
                 if k not in data:
@@ -226,7 +225,6 @@ config_defecto = {
     "ip_wifi_oficial": "", "radio_metros": 150, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
     "desc_tarde": True, "desc_temp": True, "perdonar_tolerancia": True,
     "mostrar_horas_empleado": False, "dia_inicio_semana": "Lunes", "fichaje_estricto_plan": False,
-    "limitar_ingreso_anticipado": False, 
     "rankings_muro": [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"]}],
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
@@ -333,7 +331,36 @@ elif 'device_id' in st.session_state:
             break
 
 # ==========================================
-# CERRADO AUTOMÁTICO DE TURNOS (CORRE SIEMPRE AL CARGAR)
+# LÓGICA CORE DE MOTOR DE TIEMPO (FILTRO DINÁMICO)
+# ==========================================
+# Filtra qué turnos están activos EXACTAMENTE AHORA (o dentro de 30 mins)
+turnos_disponibles_ahora = []
+nombres_turnos_todos = list(lista_turnos.keys())
+
+for t_name, t_data in lista_turnos.items():
+    try:
+        h_in_obj = datetime.datetime.strptime(t_data["ingreso"], "%I:%M %p").time()
+        h_out_obj = datetime.datetime.strptime(t_data["salida"], "%I:%M %p").time()
+        
+        dt_in = datetime.datetime.combine(ahora.date(), h_in_obj).replace(tzinfo=zona_arg)
+        dt_out = datetime.datetime.combine(ahora.date(), h_out_obj).replace(tzinfo=zona_arg)
+        
+        # Ajuste por si el turno cruza la medianoche (ej: 22:00 PM a 06:00 AM)
+        if dt_out < dt_in:
+            dt_out += datetime.timedelta(days=1)
+        
+        # Habilitación: 30 minutos antes del inicio oficial del turno
+        dt_habilitacion = dt_in - datetime.timedelta(minutes=30)
+        
+        # Solo lo agregamos a la lista si el reloj actual está dentro de esa ventana
+        if dt_habilitacion <= ahora <= dt_out:
+            turnos_disponibles_ahora.append(t_name)
+    except Exception as e:
+        # Si el usuario escribió un horario inválido, lo pasamos crudo para evitar que se rompa la app
+        turnos_disponibles_ahora.append(t_name)
+
+# ==========================================
+# CERRADO AUTOMÁTICO DE TURNOS VENCIDOS
 # ==========================================
 df_punt_check = load_df("asistencia")
 if not df_punt_check.empty:
@@ -433,7 +460,6 @@ if pestaña == "📱 Portal del Empleado":
                     st.balloons()
                 del st.session_state['fichaje_exitoso']
 
-            # 1. CÁLCULO DE PUNTOS Y CREDENCIAL
             puntos_actuales = config_app["reglas_puntos"]["base"]
             f_inicio_str = config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d"))
             d_inicio_puntos = datetime.datetime.strptime(f_inicio_str, "%Y-%m-%d").date()
@@ -469,7 +495,7 @@ if pestaña == "📱 Portal del Empleado":
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
             
-            # 2. SMART CHECK-IN 
+            # 2. SMART CHECK-IN (AQUÍ ESTÁ LA NUEVA LÓGICA DE BLOQUEO)
             with st.expander("📍 Smart Check-In (Registrar Asistencia)", expanded=True):
                 st.markdown("### 📡 Radar Automático")
                 local_detectado = None
@@ -509,8 +535,7 @@ if pestaña == "📱 Portal del Empleado":
                                 
                 if estado_laboral == "Fuera":
                     if local_detectado:
-                        nombres_turnos = list(lista_turnos.keys())
-                        idx_defecto = 0
+                        # Buscamos qué turno le tocaba en la planilla oficial (Roster)
                         turno_planificado = "Libre"
                         dia_plan = planificacion_turnos.get(fecha_hoy, {})
                         loc_plan_actual = dia_plan.get(local_detectado, {})
@@ -519,87 +544,66 @@ if pestaña == "📱 Portal del Empleado":
                                 if isinstance(emps_asignados, list) and empleado_en_celu in emps_asignados:
                                     turno_planificado = t_name
                                     break
-                        if turno_planificado in nombres_turnos:
-                            idx_defecto = nombres_turnos.index(turno_planificado)
-                        elif nombres_turnos:
-                            min_diff = float('inf')
-                            for idx, t_name in enumerate(nombres_turnos):
+                                    
+                        st.markdown(f"<div class='task-box'>✅ <b>Sucursal Detectada:</b> {local_detectado}<br><small>Verificado por: {metodo_det}</small></div>", unsafe_allow_html=True)
+                        
+                        mostrar_boton_entrada = False
+                        turno_seleccionado = None
+                        
+                        # A) LÓGICA ESTRICTA: El empleado SOLO puede fichar si está en planilla 
+                        if get_bool_config("fichaje_estricto_plan", False):
+                            if turno_planificado == "Libre":
+                                st.error(f"🚫 Tu planilla indica que no tenés turnos asignados hoy en **{local_detectado}**. El ingreso está bloqueado.")
+                            else:
+                                st.markdown(f"📋 **Turno asignado según Gerencia:** **{turno_planificado}**")
+                                if turno_planificado in turnos_disponibles_ahora:
+                                    turno_seleccionado = turno_planificado
+                                    mostrar_boton_entrada = True
+                                else:
+                                    try:
+                                        h_in_str = lista_turnos[turno_planificado]["ingreso"]
+                                        h_out_str = lista_turnos[turno_planificado]["salida"]
+                                        st.warning(f"⏳ Tu turno asignado (**{turno_planificado}**) es de **{h_in_str}** a **{h_out_str}**. No está activo en este momento.")
+                                    except:
+                                        st.warning("⏳ Estás fuera del horario de tu turno asignado.")
+                                        
+                        # B) LÓGICA FLEXIBLE: El empleado elige qué turno fichar, pero SOLO de los que están activos AHORA
+                        else:
+                            if not turnos_disponibles_ahora:
+                                st.error("🚫 No hay ningún turno programado para este horario.")
+                            else:
+                                st.markdown("📋 **Seleccioná el turno a fichar:**")
+                                idx_sel = turnos_disponibles_ahora.index(turno_planificado) if turno_planificado in turnos_disponibles_ahora else 0
+                                turno_seleccionado = st.selectbox("Turno a fichar:", turnos_disponibles_ahora, index=idx_sel, label_visibility="collapsed")
+                                mostrar_boton_entrada = True
+                                
+                                if turno_planificado != "Libre" and turno_planificado != turno_seleccionado:
+                                    st.info(f"💡 Nota: Gerencia te había planificado en el turno **{turno_planificado}**.")
+
+                        # SI SE PASÓ LA VALIDACIÓN DE HORARIO Y PLANILLA
+                        if mostrar_boton_entrada and turno_seleccionado:
+                            nota_empleado = st.text_input("✍️ Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True, type="primary"):
+                                estado_llegada = "A tiempo"
                                 try:
-                                    h_ing_str = lista_turnos[t_name]["ingreso"]
-                                    h_ing_obj = datetime.datetime.strptime(h_ing_str, "%I:%M %p").time()
-                                    dt_ing = datetime.datetime.combine(ahora.date(), h_ing_obj).replace(tzinfo=zona_arg)
-                                    diff = abs((ahora - dt_ing).total_seconds())
-                                    if diff < min_diff:
-                                        min_diff = diff
-                                        idx_defecto = idx
+                                    hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
+                                    hora_t_obj = datetime.datetime.strptime(hora_t_str, "%I:%M %p").time()
+                                    dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                    if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))):
+                                        estado_llegada = "Tarde"
                                 except: pass
                                 
-                        st.markdown(f"<div class='task-box'>✅ <b>Sucursal Detectada:</b> {local_detectado}<br><small>Verificado por: {metodo_det}</small></div>", unsafe_allow_html=True)
-                        if nombres_turnos:
-                            if get_bool_config("fichaje_estricto_plan", False) and turno_planificado == "Libre":
-                                st.error("🚫 Tu planilla indica que hoy estás **Libre** o no tenés turnos en esta sucursal. El botón de ingreso ha sido bloqueado por el administrador.")
-                            else:
-                                st.markdown("📋 **Verificá y confirmá tu turno:**")
-                                if get_bool_config("fichaje_estricto_plan", False):
-                                    st.markdown(f"*(Turno asignado según planilla: **{turno_planificado}**)*")
-                                    turno_seleccionado = turno_planificado
-                                else:
-                                    if turno_planificado != "Libre" and turno_planificado in nombres_turnos:
-                                        st.markdown(f"*(Turno planificado por Gerencia: **{turno_planificado}**)*")
-                                    turno_seleccionado = st.selectbox("Turno a fichar:", nombres_turnos, index=idx_defecto, label_visibility="collapsed")
+                                insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": str(nota_empleado)})
                                 
-                                nota_empleado = st.text_input("✍️ Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
-                                
-                                st.markdown("<br>", unsafe_allow_html=True)
-                                
-                                # --- LÓGICA DE HABILITACIÓN TEMPORAL PARA INGRESO ---
-                                mostrar_boton_entrada = True
-                                if get_bool_config("limitar_ingreso_anticipado", False) and turno_seleccionado in lista_turnos:
-                                    try:
-                                        hora_in_str = lista_turnos[turno_seleccionado]["ingreso"]
-                                        hora_out_str = lista_turnos[turno_seleccionado]["salida"]
-                                        hora_in_obj = datetime.datetime.strptime(hora_in_str, "%I:%M %p").time()
-                                        hora_out_obj = datetime.datetime.strptime(hora_out_str, "%I:%M %p").time()
-                                        
-                                        dt_turno = datetime.datetime.combine(ahora.date(), hora_in_obj).replace(tzinfo=zona_arg)
-                                        dt_salida = datetime.datetime.combine(ahora.date(), hora_out_obj).replace(tzinfo=zona_arg)
-                                        
-                                        # Ajuste si cruza la medianoche
-                                        if dt_salida < dt_turno:
-                                            dt_salida += datetime.timedelta(days=1)
-                                            
-                                        dt_habilitacion = dt_turno - datetime.timedelta(minutes=30)
-                                        
-                                        if ahora < dt_habilitacion:
-                                            mostrar_boton_entrada = False
-                                            st.warning(f"⏳ El turno **{turno_seleccionado}** comienza a las **{hora_in_str}**. Podrás fichar tu entrada a partir de las **{dt_habilitacion.strftime('%I:%M %p')}**.")
-                                        elif ahora > dt_salida:
-                                            mostrar_boton_entrada = False
-                                            st.error(f"🚫 El turno **{turno_seleccionado}** finalizó a las **{hora_out_str}**. No podés registrar entrada en un turno vencido.")
-                                    except Exception as e:
-                                        pass
-
-                                if mostrar_boton_entrada:
-                                    if st.button("🟢 REGISTRAR ENTRADA", use_container_width=True, type="primary"):
-                                        estado_llegada = "A tiempo"
-                                        try:
-                                            hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
-                                            hora_t_obj = datetime.datetime.strptime(hora_t_str, "%I:%M %p").time()
-                                            dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                                            estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
-                                        except: pass
-                                        
-                                        insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": str(nota_empleado)})
-                                        
-                                        msg_final = f"¡Entrada registrada a las {hora_hoy}!"
-                                        if estado_llegada == "Tarde": msg_final += f"\n\n🚨 {config_app.get('mensaje_llegada_tarde')}"
-                                        for a in alertas_ingreso:
-                                            if a['destinatario'] in ['Todos', empleado_en_celu, rol_empleado]:
-                                                msg_final += f"\n\n📢 {a['texto']}"
-                                        st.session_state['fichaje_exitoso'] = msg_final
-                                        st.rerun()
-                        else:
-                            st.warning("No hay turnos configurados en el sistema. Avisale a Gerencia.")
+                                msg_final = f"¡Entrada registrada a las {hora_hoy}!"
+                                if estado_llegada == "Tarde": msg_final += f"\n\n🚨 {config_app.get('mensaje_llegada_tarde')}"
+                                for a in alertas_ingreso:
+                                    if a['destinatario'] in ['Todos', empleado_en_celu, rol_empleado]:
+                                        msg_final += f"\n\n📢 {a['texto']}"
+                                st.session_state['fichaje_exitoso'] = msg_final
+                                st.rerun()
                     else:
                         if get_bool_config("verificar_gps", True) and (not ubicacion or 'coords' not in ubicacion):
                             st.info("⏳ Detectando ubicación satelital... Por favor, permití el acceso al GPS en tu celular.")
@@ -614,8 +618,6 @@ if pestaña == "📱 Portal del Empleado":
                         st.warning(f"🔄 **Cambio de Sucursal Detectado:** Tenías un turno abierto en **{local_actual}**, pero detectamos que llegaste a **{local_detectado}**.")
                         st.write("Podés cerrar automáticamente el turno anterior y registrar tu ingreso en esta nueva sucursal con un solo botón.")
                         
-                        nombres_turnos = list(lista_turnos.keys())
-                        
                         nuevo_turno_planificado = "Libre"
                         dia_plan = planificacion_turnos.get(fecha_hoy, {})
                         loc_plan_actual = dia_plan.get(local_detectado, {})
@@ -625,63 +627,49 @@ if pestaña == "📱 Portal del Empleado":
                                     nuevo_turno_planificado = t_name
                                     break
                                     
-                        if get_bool_config("fichaje_estricto_plan", False) and nuevo_turno_planificado == "Libre":
-                            st.error(f"🚫 Tu planilla indica que no tenés turnos asignados en {local_detectado}. El ingreso está bloqueado por el administrador.")
-                        else:
-                            if get_bool_config("fichaje_estricto_plan", False):
-                                turno_seleccionado = nuevo_turno_planificado
-                                st.write(f"Turno asignado acá: **{turno_seleccionado}**")
+                        mostrar_btn_cambio = False
+                        turno_seleccionado = None
+                        
+                        if get_bool_config("fichaje_estricto_plan", False):
+                            if nuevo_turno_planificado == "Libre":
+                                st.error(f"🚫 Tu planilla indica que no tenés turnos asignados en {local_detectado}. El ingreso está bloqueado.")
                             else:
-                                turno_seleccionado = st.selectbox("Turno a fichar acá:", nombres_turnos) if nombres_turnos else "Manual"
-                            
-                            # --- LÓGICA DE HABILITACIÓN TEMPORAL PARA CAMBIO DE LOCAL ---
-                            mostrar_btn_cambio = True
-                            if get_bool_config("limitar_ingreso_anticipado", False) and turno_seleccionado in lista_turnos:
-                                try:
-                                    hora_in_str = lista_turnos[turno_seleccionado]["ingreso"]
-                                    hora_out_str = lista_turnos[turno_seleccionado]["salida"]
-                                    hora_in_obj = datetime.datetime.strptime(hora_in_str, "%I:%M %p").time()
-                                    hora_out_obj = datetime.datetime.strptime(hora_out_str, "%I:%M %p").time()
-                                    
-                                    dt_turno = datetime.datetime.combine(ahora.date(), hora_in_obj).replace(tzinfo=zona_arg)
-                                    dt_salida = datetime.datetime.combine(ahora.date(), hora_out_obj).replace(tzinfo=zona_arg)
-                                    
-                                    if dt_salida < dt_turno:
-                                        dt_salida += datetime.timedelta(days=1)
-                                        
-                                    dt_habilitacion = dt_turno - datetime.timedelta(minutes=30)
-                                    
-                                    if ahora < dt_habilitacion:
-                                        mostrar_btn_cambio = False
-                                        st.warning(f"⏳ El turno **{turno_seleccionado}** en esta sucursal comienza a las **{hora_in_str}**. Podrás ingresar a partir de las **{dt_habilitacion.strftime('%I:%M %p')}**.")
-                                    elif ahora > dt_salida:
-                                        mostrar_btn_cambio = False
-                                        st.error(f"🚫 El turno **{turno_seleccionado}** finalizó a las **{hora_out_str}**. No podés ingresar a un turno vencido.")
-                                except:
-                                    pass
+                                if nuevo_turno_planificado in turnos_disponibles_ahora:
+                                    st.write(f"Turno asignado acá: **{nuevo_turno_planificado}**")
+                                    turno_seleccionado = nuevo_turno_planificado
+                                    mostrar_btn_cambio = True
+                                else:
+                                    st.warning(f"⏳ El turno {nuevo_turno_planificado} no está activo en este horario.")
+                        else:
+                            if not turnos_disponibles_ahora:
+                                st.error("🚫 No hay ningún turno programado para este horario en esta sucursal.")
+                            else:
+                                idx_sel = turnos_disponibles_ahora.index(nuevo_turno_planificado) if nuevo_turno_planificado in turnos_disponibles_ahora else 0
+                                turno_seleccionado = st.selectbox("Turno a fichar acá:", turnos_disponibles_ahora, index=idx_sel)
+                                mostrar_btn_cambio = True
 
-                            if mostrar_btn_cambio:
-                                if st.button("🔄 Cambiar de Sucursal (Cerrar anterior e Ingresar acá)", use_container_width=True):
-                                    insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida (Cambio Local)", "Distancia_m": 0.0, "Nota": "Cierre automático al cambiar de local."})
-                                    
-                                    estado_llegada = "A tiempo"
-                                    if turno_seleccionado in lista_turnos:
-                                        try:
-                                            hora_t_obj = datetime.datetime.strptime(lista_turnos[turno_seleccionado]["ingreso"], "%I:%M %p").time()
-                                            dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                                            estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
-                                        except: pass
-                                    
-                                    insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": "Ingreso por cambio de local."})
-                                    
-                                    st.session_state['fichaje_exitoso'] = f"¡Saliste de {local_actual} e ingresaste a {local_detectado} a las {hora_hoy}!"
-                                    st.rerun()
+                        if mostrar_btn_cambio and turno_seleccionado:
+                            if st.button("🔄 Cambiar de Sucursal (Cerrar anterior e Ingresar acá)", use_container_width=True):
+                                insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida (Cambio Local)", "Distancia_m": 0.0, "Nota": "Cierre automático al cambiar de local."})
+                                
+                                estado_llegada = "A tiempo"
+                                if turno_seleccionado in lista_turnos:
+                                    try:
+                                        hora_t_obj = datetime.datetime.strptime(lista_turnos[turno_seleccionado]["ingreso"], "%I:%M %p").time()
+                                        dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                        estado_llegada = "Tarde" if ahora > (dt_turno + datetime.timedelta(minutes=int(config_app.get("tolerancia_minutos", 10)))) else "A tiempo"
+                                    except: pass
+                                
+                                insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": "Ingreso por cambio de local."})
+                                
+                                st.session_state['fichaje_exitoso'] = f"¡Saliste de {local_actual} e ingresaste a {local_detectado} a las {hora_hoy}!"
+                                st.rerun()
                     else:
                         st.markdown("### 🏃‍♂️ Finalizar Turno")
                         st.success(f"🏢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
                         
                         if not get_bool_config("exigir_salida_manual", False):
-                            st.info("🟢 **Salida Automática Activada:** No necesitás registrar tu salida. El sistema computará tu turno automáticamente.")
+                            st.info("🟢 **Salida Automática Activada:** No necesitás registrar tu salida manual. El sistema cerrará el turno automáticamente en la base de datos cuando termine el horario oficial.")
                         else:
                             puede_salir = True
                             distancia_salida = datos_turno_activo.get("Distancia_m", 0.0)
@@ -2481,15 +2469,13 @@ elif pestaña == "💼 Panel de Gerencia":
                     v_dia_inicio_semana = st.selectbox("📅 Día de inicio de la semana laboral:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")))
                     v_fichaje_estricto_plan = st.checkbox("🔒 Bloquear fichaje si el empleado no tiene turno asignado", value=get_bool_config("fichaje_estricto_plan", False), help="Si se activa, el empleado solo podrá registrar entrada si tiene un turno asignado en la planilla semanal para esa sucursal. Si está 'Libre', se oculta el botón de fichaje.")
                     
-                    v_limitar_ingreso = st.checkbox("⏳ Bloquear fichaje fuera de horario (Solo permite fichar entre 30 min antes del inicio y el fin del turno)", value=get_bool_config("limitar_ingreso_anticipado", False), help="El empleado no podrá registrar entrada si el turno ya terminó o si falta más de 30 minutos para que comience.")
-                    
                     v_exigir_salida_manual = st.checkbox("🚪 Exigir Fichaje de Salida Manual", value=get_bool_config("exigir_salida_manual", False), help="Si se desactiva, la salida es automática y no se les pedirá fichar al irse.")
                     v_desc_tarde = st.checkbox("⏱️ Descontar Llegada Tarde del total de horas", value=get_bool_config("desc_tarde", True))
                     v_perdonar_tolerancia = st.checkbox("⏳ Perdonar descuento si llega dentro de la tolerancia (A tiempo)", value=get_bool_config("perdonar_tolerancia", True), help="Si el empleado llega tarde pero dentro del margen de minutos de tolerancia, se le pagan las horas completas. Si llega después de la tolerancia, se le descuenta el tiempo.")
                     v_desc_temp = st.checkbox("🏃‍♂️ Descontar Salida Temprano del total de horas", value=get_bool_config("desc_temp", True))
                     
                     if st.form_submit_button("💾 Guardar Ajustes"):
-                        config_app.update({"titulo_portal": v_titulo_portal, "autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "desc_tarde": v_desc_tarde, "perdonar_tolerancia": v_perdonar_tolerancia, "desc_temp": v_desc_temp, "mostrar_horas_empleado": v_mostrar_horas_empleado, "dia_inicio_semana": v_dia_inicio_semana, "fichaje_estricto_plan": v_fichaje_estricto_plan, "limitar_ingreso_anticipado": v_limitar_ingreso})
+                        config_app.update({"titulo_portal": v_titulo_portal, "autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "desc_tarde": v_desc_tarde, "perdonar_tolerancia": v_perdonar_tolerancia, "desc_temp": v_desc_temp, "mostrar_horas_empleado": v_mostrar_horas_empleado, "dia_inicio_semana": v_dia_inicio_semana, "fichaje_estricto_plan": v_fichaje_estricto_plan})
                         save_json("config", config_app); st.rerun()
                         
                 st.write("🔑 **Cambiar Clave de Gerencia**")
