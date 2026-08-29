@@ -226,7 +226,7 @@ config_defecto = {
     "ip_wifi_oficial": "", "radio_metros": 150, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
     "desc_tarde": True, "desc_temp": True, "perdonar_tolerancia": True,
     "mostrar_horas_empleado": False, "dia_inicio_semana": "Lunes", "fichaje_estricto_plan": False,
-    "limitar_ingreso_anticipado": False, # NUEVO: Limitar el ingreso a 30 mins antes
+    "limitar_ingreso_anticipado": False, 
     "rankings_muro": [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"]}],
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
@@ -552,21 +552,31 @@ if pestaña == "📱 Portal del Empleado":
                                 
                                 st.markdown("<br>", unsafe_allow_html=True)
                                 
-                                # --- NUEVA LOGICA DE HABILITACION 30 MIN ANTES ---
+                                # --- LÓGICA DE HABILITACIÓN TEMPORAL PARA INGRESO ---
                                 mostrar_boton_entrada = True
                                 if get_bool_config("limitar_ingreso_anticipado", False) and turno_seleccionado in lista_turnos:
                                     try:
-                                        hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
-                                        hora_t_obj = datetime.datetime.strptime(hora_t_str, "%I:%M %p").time()
-                                        dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
-                                        # Restamos 30 minutos a la hora oficial de ingreso
+                                        hora_in_str = lista_turnos[turno_seleccionado]["ingreso"]
+                                        hora_out_str = lista_turnos[turno_seleccionado]["salida"]
+                                        hora_in_obj = datetime.datetime.strptime(hora_in_str, "%I:%M %p").time()
+                                        hora_out_obj = datetime.datetime.strptime(hora_out_str, "%I:%M %p").time()
+                                        
+                                        dt_turno = datetime.datetime.combine(ahora.date(), hora_in_obj).replace(tzinfo=zona_arg)
+                                        dt_salida = datetime.datetime.combine(ahora.date(), hora_out_obj).replace(tzinfo=zona_arg)
+                                        
+                                        # Ajuste si cruza la medianoche
+                                        if dt_salida < dt_turno:
+                                            dt_salida += datetime.timedelta(days=1)
+                                            
                                         dt_habilitacion = dt_turno - datetime.timedelta(minutes=30)
                                         
-                                        # Si todavía no es la hora de habilitación (y tampoco pasamos el turno)
                                         if ahora < dt_habilitacion:
                                             mostrar_boton_entrada = False
-                                            st.warning(f"⏳ Tu turno comienza a las **{hora_t_str}**. Podrás fichar tu entrada a partir de las **{dt_habilitacion.strftime('%I:%M %p')}**.")
-                                    except:
+                                            st.warning(f"⏳ El turno **{turno_seleccionado}** comienza a las **{hora_in_str}**. Podrás fichar tu entrada a partir de las **{dt_habilitacion.strftime('%I:%M %p')}**.")
+                                        elif ahora > dt_salida:
+                                            mostrar_boton_entrada = False
+                                            st.error(f"🚫 El turno **{turno_seleccionado}** finalizó a las **{hora_out_str}**. No podés registrar entrada en un turno vencido.")
+                                    except Exception as e:
                                         pass
 
                                 if mostrar_boton_entrada:
@@ -624,17 +634,29 @@ if pestaña == "📱 Portal del Empleado":
                             else:
                                 turno_seleccionado = st.selectbox("Turno a fichar acá:", nombres_turnos) if nombres_turnos else "Manual"
                             
+                            # --- LÓGICA DE HABILITACIÓN TEMPORAL PARA CAMBIO DE LOCAL ---
                             mostrar_btn_cambio = True
                             if get_bool_config("limitar_ingreso_anticipado", False) and turno_seleccionado in lista_turnos:
                                 try:
-                                    hora_t_str = lista_turnos[turno_seleccionado]["ingreso"]
-                                    hora_t_obj = datetime.datetime.strptime(hora_t_str, "%I:%M %p").time()
-                                    dt_turno = datetime.datetime.combine(ahora.date(), hora_t_obj).replace(tzinfo=zona_arg)
+                                    hora_in_str = lista_turnos[turno_seleccionado]["ingreso"]
+                                    hora_out_str = lista_turnos[turno_seleccionado]["salida"]
+                                    hora_in_obj = datetime.datetime.strptime(hora_in_str, "%I:%M %p").time()
+                                    hora_out_obj = datetime.datetime.strptime(hora_out_str, "%I:%M %p").time()
+                                    
+                                    dt_turno = datetime.datetime.combine(ahora.date(), hora_in_obj).replace(tzinfo=zona_arg)
+                                    dt_salida = datetime.datetime.combine(ahora.date(), hora_out_obj).replace(tzinfo=zona_arg)
+                                    
+                                    if dt_salida < dt_turno:
+                                        dt_salida += datetime.timedelta(days=1)
+                                        
                                     dt_habilitacion = dt_turno - datetime.timedelta(minutes=30)
                                     
                                     if ahora < dt_habilitacion:
                                         mostrar_btn_cambio = False
-                                        st.warning(f"⏳ El turno en esta sucursal comienza a las **{hora_t_str}**. Podrás ingresar a partir de las **{dt_habilitacion.strftime('%I:%M %p')}**.")
+                                        st.warning(f"⏳ El turno **{turno_seleccionado}** en esta sucursal comienza a las **{hora_in_str}**. Podrás ingresar a partir de las **{dt_habilitacion.strftime('%I:%M %p')}**.")
+                                    elif ahora > dt_salida:
+                                        mostrar_btn_cambio = False
+                                        st.error(f"🚫 El turno **{turno_seleccionado}** finalizó a las **{hora_out_str}**. No podés ingresar a un turno vencido.")
                                 except:
                                     pass
 
@@ -1472,8 +1494,12 @@ elif pestaña == "💼 Panel de Gerencia":
                     f_fin = datetime.date(2099, 12, 31) if es_actual else st.date_input("Vigente Hasta:", value=ahora.date())
                     
                     if st.form_submit_button("💾 Guardar Tarifa"):
-                        if emp_s == "Seleccionar..." or val_s <= 0: st.warning("🚨 Tenés que seleccionar un empleado y poner un valor mayor a $0.")
-                        elif f_ini > f_fin: st.warning("🚨 La fecha 'Desde' no puede ser mayor a la fecha 'Hasta'.")
+                        if emp_s == "Seleccionar...":
+                            st.warning("🚨 Tenés que seleccionar un empleado.")
+                        elif val_s <= 0:
+                            st.warning("🚨 Tenés que poner un valor mayor a $0.")
+                        elif f_ini > f_fin:
+                            st.warning("🚨 La fecha 'Desde' no puede ser mayor a la fecha 'Hasta'.")
                         else:
                             sueldos_historico.append({"Empleado": emp_s, "Fecha_Desde": f_ini.strftime("%Y-%m-%d"), "Fecha_Hasta": f_fin.strftime("%Y-%m-%d"), "Valor_Hora": val_s})
                             save_json("sueldos_historico", sueldos_historico)
@@ -1882,6 +1908,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     if pt.get("Estado") == "Pendiente de auditoría":
                         st.markdown(f"<div class='task-pend'><b>{pt['Emisor']}</b> quiere {'dar' if pt['Puntos_Sugeridos'] > 0 else 'quitar'} <b>{abs(pt['Puntos_Sugeridos'])} pts</b> a <b>{pt['Compañero']}</b><br>Motivo: <i>{pt['Motivo']}</i></div>", unsafe_allow_html=True)
                         
+                        # El gerente decide cuántos puntos darle de recompensa al cajero por hacer el reporte
                         recompensa_cajero = st.number_input("Puntos de recompensa para el Cajero/Encargado por reportar:", value=10, step=1, key=f"rec_cajero_{idx}")
                         
                         c1, c2, c3 = st.columns([1,1,2])
@@ -1929,7 +1956,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 ap_puntos = c_b3.number_input("Puntos (+/-):", value=0, step=1)
                 ap_motivo = c_b4.text_input("Motivo:")
                 if st.form_submit_button("Aplicar a Puntuación"):
-                    if ap_emp == "Seleccionar...":
+                    if ap_emp == "Seleccionar..." or ap_puntos == 0 or not ap_motivo.strip():
                         st.warning("⚠️ Faltan completar datos.")
                     else:
                         lista_puntos.append({"Fecha": ap_fecha.strftime("%Y-%m-%d"), "Empleado": ap_emp, "Puntos": ap_puntos, "Motivo": ap_motivo.strip(), "Autor": "Gerencia", "Estado": "Aprobada"})
@@ -2454,8 +2481,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     v_dia_inicio_semana = st.selectbox("📅 Día de inicio de la semana laboral:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")))
                     v_fichaje_estricto_plan = st.checkbox("🔒 Bloquear fichaje si el empleado no tiene turno asignado", value=get_bool_config("fichaje_estricto_plan", False), help="Si se activa, el empleado solo podrá registrar entrada si tiene un turno asignado en la planilla semanal para esa sucursal. Si está 'Libre', se oculta el botón de fichaje.")
                     
-                    # --- NUEVO AJUSTE AÑADIDO ACÁ ---
-                    v_limitar_ingreso = st.checkbox("⏳ Bloquear ingreso temprano (Habilitar botón solo 30 min antes del turno)", value=get_bool_config("limitar_ingreso_anticipado", False), help="Si se activa, el empleado que intente fichar su entrada más de 30 minutos antes de la hora oficial del turno, verá un mensaje y no podrá hacerlo hasta que falte media hora.")
+                    v_limitar_ingreso = st.checkbox("⏳ Bloquear fichaje fuera de horario (Solo permite fichar entre 30 min antes del inicio y el fin del turno)", value=get_bool_config("limitar_ingreso_anticipado", False), help="El empleado no podrá registrar entrada si el turno ya terminó o si falta más de 30 minutos para que comience.")
                     
                     v_exigir_salida_manual = st.checkbox("🚪 Exigir Fichaje de Salida Manual", value=get_bool_config("exigir_salida_manual", False), help="Si se desactiva, la salida es automática y no se les pedirá fichar al irse.")
                     v_desc_tarde = st.checkbox("⏱️ Descontar Llegada Tarde del total de horas", value=get_bool_config("desc_tarde", True))
