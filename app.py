@@ -169,7 +169,9 @@ def load_json(key_name, default_data):
         
     if key_name in settings:
         data = settings[key_name]
-        if isinstance(data, dict) and isinstance(default_data, dict):
+        # SOLUCIÓN DE PERSISTENCIA: Solo fusionamos diccionarios si son de configuración global.
+        # Las listas y configuraciones del usuario (turnos, empleados, sueldos) no deben sobrescribirse.
+        if isinstance(data, dict) and isinstance(default_data, dict) and key_name in ["config", "owner_config"]:
             for k, v in default_data.items():
                 if k not in data:
                     data[k] = v
@@ -225,6 +227,7 @@ config_defecto = {
     "ip_wifi_oficial": "", "radio_metros": 150, "fecha_inicio_puntos": ahora.date().replace(day=1).strftime("%Y-%m-%d"),
     "desc_tarde": True, "desc_temp": True, "perdonar_tolerancia": True,
     "mostrar_horas_empleado": False, "dia_inicio_semana": "Lunes", "fichaje_estricto_plan": False,
+    "recompensa_auditoria_cajero": 10,
     "rankings_muro": [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"]}],
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
 }
@@ -242,7 +245,8 @@ owner_config_defecto = {
     "mensaje_aviso": "🚨 Tu suscripción está próxima a vencer. Por favor, renová tu plan para evitar interrupciones en el servicio.",
     "empresa_nombre": "SyncroRetail Solutions",
     "quienes_somos": "Nacimos con una misión clara: revolucionar la gestión del personal y potenciar el rendimiento de los equipos de trabajo...",
-    "contactos": "🏢 Oficina Central: Salta Capital, Argentina\n📧 Soporte y Soluciones: soporte@syncroretail.com\n💡 Sugerencias y Nuevas Funciones: desarrollo@syncroretail.com"
+    "contactos": "🏢 Oficina Central: Salta Capital, Argentina\n📧 Soporte y Soluciones: soporte@syncroretail.com\n💡 Sugerencias y Nuevas Funciones: desarrollo@syncroretail.com",
+    "nombre_tab_dueno": "⚙️ Dueño del Software"
 }
 owner_config = load_json("owner_config", owner_config_defecto)
 
@@ -333,7 +337,6 @@ elif 'device_id' in st.session_state:
 # ==========================================
 # LÓGICA CORE DE MOTOR DE TIEMPO (FILTRO DINÁMICO)
 # ==========================================
-# Filtra qué turnos están activos EXACTAMENTE AHORA (o dentro de 30 mins)
 turnos_disponibles_ahora = []
 nombres_turnos_todos = list(lista_turnos.keys())
 
@@ -345,18 +348,13 @@ for t_name, t_data in lista_turnos.items():
         dt_in = datetime.datetime.combine(ahora.date(), h_in_obj).replace(tzinfo=zona_arg)
         dt_out = datetime.datetime.combine(ahora.date(), h_out_obj).replace(tzinfo=zona_arg)
         
-        # Ajuste por si el turno cruza la medianoche (ej: 22:00 PM a 06:00 AM)
         if dt_out < dt_in:
             dt_out += datetime.timedelta(days=1)
         
-        # Habilitación: 30 minutos antes del inicio oficial del turno
         dt_habilitacion = dt_in - datetime.timedelta(minutes=30)
-        
-        # Solo lo agregamos a la lista si el reloj actual está dentro de esa ventana
         if dt_habilitacion <= ahora <= dt_out:
             turnos_disponibles_ahora.append(t_name)
     except Exception as e:
-        # Si el usuario escribió un horario inválido, lo pasamos crudo para evitar que se rompa la app
         turnos_disponibles_ahora.append(t_name)
 
 # ==========================================
@@ -396,13 +394,14 @@ if not df_punt_check.empty:
                     except Exception as e:
                         pass
 
-
 # ==========================================
 # 4. NAVEGACIÓN FRONTAL PARA CELULARES
 # ==========================================
 titulo_app_personalizado = config_app.get("titulo_portal", "🏢 Portal Corporativo")
+nombre_tab_dueno = owner_config.get("nombre_tab_dueno", "⚙️ Dueño del Software")
+
 st.markdown(f'<div class="main-title" style="text-align: center;">{titulo_app_personalizado}</div>', unsafe_allow_html=True)
-pestaña = st.selectbox("Navegación:", ["📱 Portal del Empleado", "💼 Panel de Gerencia", "⚙️ Dueño del Software"], label_visibility="collapsed")
+pestaña = st.selectbox("Navegación:", ["📱 Portal del Empleado", "💼 Panel de Gerencia", nombre_tab_dueno], label_visibility="collapsed")
 st.write("---")
 
 # ==========================================
@@ -495,7 +494,6 @@ if pestaña == "📱 Portal del Empleado":
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
             
-            # 2. SMART CHECK-IN (AQUÍ ESTÁ LA NUEVA LÓGICA DE BLOQUEO)
             with st.expander("📍 Smart Check-In (Registrar Asistencia)", expanded=True):
                 st.markdown("### 📡 Radar Automático")
                 local_detectado = None
@@ -535,7 +533,6 @@ if pestaña == "📱 Portal del Empleado":
                                 
                 if estado_laboral == "Fuera":
                     if local_detectado:
-                        # Buscamos qué turno le tocaba en la planilla oficial (Roster)
                         turno_planificado = "Libre"
                         dia_plan = planificacion_turnos.get(fecha_hoy, {})
                         loc_plan_actual = dia_plan.get(local_detectado, {})
@@ -550,7 +547,6 @@ if pestaña == "📱 Portal del Empleado":
                         mostrar_boton_entrada = False
                         turno_seleccionado = None
                         
-                        # A) LÓGICA ESTRICTA: El empleado SOLO puede fichar si está en planilla 
                         if get_bool_config("fichaje_estricto_plan", False):
                             if turno_planificado == "Libre":
                                 st.error(f"🚫 Tu planilla indica que no tenés turnos asignados hoy en **{local_detectado}**. El ingreso está bloqueado.")
@@ -567,7 +563,6 @@ if pestaña == "📱 Portal del Empleado":
                                     except:
                                         st.warning("⏳ Estás fuera del horario de tu turno asignado.")
                                         
-                        # B) LÓGICA FLEXIBLE: El empleado elige qué turno fichar, pero SOLO de los que están activos AHORA
                         else:
                             if not turnos_disponibles_ahora:
                                 st.error("🚫 No hay ningún turno programado para este horario.")
@@ -580,7 +575,6 @@ if pestaña == "📱 Portal del Empleado":
                                 if turno_planificado != "Libre" and turno_planificado != turno_seleccionado:
                                     st.info(f"💡 Nota: Gerencia te había planificado en el turno **{turno_planificado}**.")
 
-                        # SI SE PASÓ LA VALIDACIÓN DE HORARIO Y PLANILLA
                         if mostrar_boton_entrada and turno_seleccionado:
                             nota_empleado = st.text_input("✍️ Novedades (Opcional):", placeholder="¿Llegaste tarde por el colectivo? Dejá tu nota acá...")
                             st.markdown("<br>", unsafe_allow_html=True)
@@ -945,6 +939,9 @@ if pestaña == "📱 Portal del Empleado":
                     
                 pts_sugeridos = 0
                 if tipo_rep == "⭐ Sugerir Bono/Multa a Compañero (Auditable)":
+                    pts_recompensa_info = config_app.get("recompensa_auditoria_cajero", 10)
+                    if rol_empleado == "Cajero":
+                        st.info(f"💡 Como Cajero, si Gerencia aprueba esta auditoría, recibirás automáticamente una recompensa de **+{pts_recompensa_info} pts** por mantener el control del equipo.")
                     pts_sugeridos = st.number_input("Puntos a sugerir (+ o -):", value=0, step=1)
                     
                 detalle_rep = st.text_area("Detalle / Motivo:")
@@ -1897,7 +1894,7 @@ elif pestaña == "💼 Panel de Gerencia":
                         st.markdown(f"<div class='task-pend'><b>{pt['Emisor']}</b> quiere {'dar' if pt['Puntos_Sugeridos'] > 0 else 'quitar'} <b>{abs(pt['Puntos_Sugeridos'])} pts</b> a <b>{pt['Compañero']}</b><br>Motivo: <i>{pt['Motivo']}</i></div>", unsafe_allow_html=True)
                         
                         # El gerente decide cuántos puntos darle de recompensa al cajero por hacer el reporte
-                        recompensa_cajero = st.number_input("Puntos de recompensa para el Cajero/Encargado por reportar:", value=10, step=1, key=f"rec_cajero_{idx}")
+                        recompensa_cajero = st.number_input(f"Puntos de recompensa para el Cajero '{pt['Emisor']}' si apruebas su auditoría:", value=int(config_app.get("recompensa_auditoria_cajero", 10)), step=1, key=f"rec_cajero_{idx}")
                         
                         c1, c2, c3 = st.columns([1,1,2])
                         if c1.button("✅ Aprobar e imputar", key=f"apr_caj_{idx}"):
@@ -1910,30 +1907,34 @@ elif pestaña == "💼 Panel de Gerencia":
                                 "Autor": "Gerencia", 
                                 "Estado": "Aprobada"
                             })
-                            # 2. Le damos la recompensa al cajero
-                            if recompensa_cajero > 0:
+                            
+                            # 2. Le damos la recompensa al cajero (SOLO SI TIENE ROL DE CAJERO)
+                            rol_emisor = roles_empleados.get(pt["Emisor"], "")
+                            if recompensa_cajero > 0 and rol_emisor == "Cajero":
                                 lista_puntos.append({
                                     "Fecha": fecha_hoy, 
                                     "Empleado": pt["Emisor"], 
                                     "Puntos": recompensa_cajero, 
-                                    "Motivo": "Recompensa por reporte de auditoría aprobado.", 
+                                    "Motivo": "Recompensa por reporte de auditoría de personal aprobado.", 
                                     "Autor": "Gerencia", 
                                     "Estado": "Aprobada"
                                 })
+                            elif recompensa_cajero > 0 and rol_emisor != "Cajero":
+                                st.warning(f"La sugerencia fue aprobada, pero la recompensa de {recompensa_cajero} pts no se aplicó porque el empleado {pt['Emisor']} no tiene el rol exclusivo de 'Cajero' (es {rol_emisor}).")
                             
                             pt["Estado"] = "Aprobado"
                             save_json("ajustes_puntos", lista_puntos)
                             save_json("puntos_cajero_pendientes", puntos_cajero_pendientes)
-                            st.success("Bono/Multa aplicado al compañero y recompensa otorgada al cajero.")
+                            st.success("Bono/Multa aplicado al compañero exitosamente.")
                             st.rerun()
                             
                         if c2.button("❌ Denegar y descartar", key=f"den_caj_{idx}"):
                             pt["Estado"] = "Rechazado"
                             save_json("puntos_cajero_pendientes", puntos_cajero_pendientes)
-                            st.info("Sugerencia de puntos rechazada.")
+                            st.info("Sugerencia de puntos rechazada y descartada.")
                             st.rerun()
             else:
-                st.info("No hay sugerencias de puntos pendientes de los cajeros.")
+                st.info("No hay sugerencias de puntos pendientes de auditoría.")
             
             st.markdown("---")
             st.subheader("✍️ Cargar Bono o Multa Manual (Gerencia)")
@@ -2409,14 +2410,17 @@ elif pestaña == "💼 Panel de Gerencia":
                 if st.button("🗑️ Eliminar Rol") and borrar_rol_cat != "Seleccionar...":
                     lista_roles_disponibles.remove(borrar_rol_cat); save_json("lista_roles", lista_roles_disponibles); st.rerun()
                     
-                st.subheader("⚖️ Reglas de Asistencia")
+                st.subheader("⚖️ Reglas de Asistencia y Premios")
                 with st.form("form_reglas"):
                     r_base = st.number_input("Puntaje Base:", value=config_app.get("reglas_puntos", {}).get("base", 100))
+                    r_cajero = st.number_input("🎁 Recompensa a Cajeros por auditoría aprobada:", value=int(config_app.get("recompensa_auditoria_cajero", 10)))
+                    
                     c_r1, c_r2 = st.columns(2)
                     r_ok, r_tar = c_r1.number_input("✔️ A Tiempo:", value=config_app.get("reglas_puntos", {}).get("A tiempo", 0)), c_r2.number_input("Tarde:", value=config_app.get("reglas_puntos", {}).get("Tarde", -5))
                     r_aus, r_fj = c_r1.number_input("❌ Ausente:", value=config_app.get("reglas_puntos", {}).get("Ausente", -15)), c_r2.number_input("📝 Justif:", value=config_app.get("reglas_puntos", {}).get("Falta Justificada", 0))
                     if st.form_submit_button("💾 Guardar Reglas"):
                         config_app["reglas_puntos"] = {"base": r_base, "A tiempo": r_ok, "Tarde": r_tar, "Ausente": r_aus, "Falta Justificada": r_fj}
+                        config_app["recompensa_auditoria_cajero"] = r_cajero
                         save_json("config", config_app); st.rerun()
                         
                 st.subheader("🏆 Muro de la Fama (Ligas y Rankings)")
@@ -2494,23 +2498,39 @@ elif pestaña == "💼 Panel de Gerencia":
                     st.rerun()
                     
                 st.markdown("---")
+                # --- NUEVO: BORRADO SELECTIVO POR EMPLEADO Y FECHA ---
                 st.subheader("🧹 Reseteo Quirúrgico en Nube")
                 c_cl1, c_cl2 = st.columns(2)
                 with c_cl1:
                     del_asist = st.checkbox("Registros de Asistencia")
                     del_tareas = st.checkbox("Tareas Realizadas")
                     del_bonos = st.checkbox("Bonos/Multas Manuales")
+                    emp_borrado = st.selectbox("👤 Empleado a limpiar:", ["Todos los empleados"] + sorted(lista_empleados))
                 with c_cl2:
                     filtro_b = st.selectbox("⏳ Rango a borrar:", ["Hoy", "Esta Semana", "Este Mes", "Mes Anterior", "Todo el Historial", "Personalizado"], key="filtro_borrado")
                     rango_borrado = st.date_input("📅 Fechas a limpiar:", value=(ahora.date(), ahora.date())) if filtro_b == "Personalizado" else None
+                    
                 if st.button("🗑️ CONFIRMAR BORRADO"):
                     b_in, b_fi = get_fechas_filtro(filtro_b, rango_borrado)
-                    if del_asist: supabase.table("asistencia").delete().gte("Fecha", b_in.strftime("%Y-%m-%d")).lte("Fecha", b_fi.strftime("%Y-%m-%d")).execute()
-                    if del_tareas: supabase.table("tareas_log").delete().gte("Fecha", b_in.strftime("%Y-%m-%d")).lte("Fecha", b_fi.strftime("%Y-%m-%d")).execute()
+                    
+                    if del_asist: 
+                        query_a = supabase.table("asistencia").delete().gte("Fecha", b_in.strftime("%Y-%m-%d")).lte("Fecha", b_fi.strftime("%Y-%m-%d"))
+                        if emp_borrado != "Todos los empleados": query_a = query_a.eq("Empleado", emp_borrado)
+                        query_a.execute()
+                        
+                    if del_tareas: 
+                        query_t = supabase.table("tareas_log").delete().gte("Fecha", b_in.strftime("%Y-%m-%d")).lte("Fecha", b_fi.strftime("%Y-%m-%d"))
+                        if emp_borrado != "Todos los empleados": query_t = query_t.eq("Empleado", emp_borrado)
+                        query_t.execute()
+                        
                     if del_bonos:
-                        lista_puntos = [p for p in lista_puntos if not (b_in <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= b_fi)]
+                        if emp_borrado != "Todos los empleados":
+                            lista_puntos = [p for p in lista_puntos if not (b_in <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= b_fi and p.get('Empleado') == emp_borrado)]
+                        else:
+                            lista_puntos = [p for p in lista_puntos if not (b_in <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= b_fi)]
                         save_json("ajustes_puntos", lista_puntos)
-                    st.success("¡Datos borrados de la nube exitosamente!")
+                        
+                    st.success(f"¡Datos de '{emp_borrado}' borrados de la nube exitosamente!")
                     st.rerun()
 
         with tab_espia:
@@ -2522,7 +2542,7 @@ elif pestaña == "💼 Panel de Gerencia":
 # ==========================================
 # 7. PANEL EXCLUSIVO DEL DUEÑO DEL SOFTWARE
 # ==========================================
-elif pestaña == "⚙️ Dueño del Software":
+elif pestaña == nombre_tab_dueno:
     st.markdown('<div class="main-title">👨‍💻 Administrador del Sistema</div>', unsafe_allow_html=True)
     st.info("🔒 Área restringida exclusiva para el propietario y desarrollador del software.")
     pass_dueño = st.text_input("Ingrese la Clave Maestra:", type="password")
@@ -2571,8 +2591,14 @@ elif pestaña == "⚙️ Dueño del Software":
                 nombre_empresa = st.text_input("Nombre de la Empresa o Cliente:", value=owner_config.get("empresa_nombre", ""))
                 historia = st.text_area("Historia / Quiénes Somos:", value=owner_config.get("quienes_somos", ""))
                 datos_contacto = st.text_area("Datos de Contacto (Teléfonos, mails, etc):", value=owner_config.get("contactos", ""))
+                
+                # --- NUEVO: RENOMBRAR MENÚ DEL DUEÑO ---
+                st.markdown("---")
+                st.markdown("#### ⚙️ Opciones del Menú Principal")
+                nuevo_nombre_tab_dueno = st.text_input("Renombrar el botón 'Dueño del Software' en el menú:", value=owner_config.get("nombre_tab_dueno", "⚙️ Dueño del Software"))
+                
                 if st.form_submit_button("💾 Actualizar Pantalla Pública"):
-                    owner_config.update({"empresa_nombre": nombre_empresa, "quienes_somos": historia, "contactos": datos_contacto})
+                    owner_config.update({"empresa_nombre": nombre_empresa, "quienes_somos": historia, "contactos": datos_contacto, "nombre_tab_dueno": nuevo_nombre_tab_dueno.strip()})
                     save_json("owner_config", owner_config)
                     st.success("¡Información actualizada con éxito!")
                     st.rerun()
