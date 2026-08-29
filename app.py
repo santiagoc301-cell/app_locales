@@ -169,8 +169,7 @@ def load_json(key_name, default_data):
         
     if key_name in settings:
         data = settings[key_name]
-        # SOLUCIÓN DE PERSISTENCIA: Solo fusionamos diccionarios si son de configuración global.
-        # Las listas y configuraciones del usuario (turnos, empleados, sueldos) no deben sobrescribirse.
+        # SOLUCIÓN DE PERSISTENCIA
         if isinstance(data, dict) and isinstance(default_data, dict) and key_name in ["config", "owner_config"]:
             for k, v in default_data.items():
                 if k not in data:
@@ -229,7 +228,7 @@ config_defecto = {
     "mostrar_horas_empleado": False, "dia_inicio_semana": "Lunes", "fichaje_estricto_plan": False,
     "recompensa_auditoria_cajero": 10,
     "rankings_muro": [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"]}],
-    "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0}
+    "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0, "Olvido Fichaje": -10}
 }
 config_app = load_json("config", config_defecto)
 
@@ -264,6 +263,7 @@ lista_intentos = load_json("intentos_seguridad", [])
 lista_puntos = load_json("ajustes_puntos", [])
 reportes_log = load_json("reportes", [])
 salidas_pendientes = load_json("salidas_pendientes", [])
+correcciones_pendientes = load_json("correcciones_pendientes", [])
 sueldos_historico = load_json("sueldos_historico", [])
 cierres_caja = load_json("cierres_caja", [])
 planificacion_turnos = load_json("planificacion_turnos", {})
@@ -714,7 +714,55 @@ if pestaña == "📱 Portal del Empleado":
                             else:
                                 st.error("🚨 El sistema exige que finalices tu turno físicamente dentro de la sucursal.")
 
+            # --- NUEVO: OLVIDO DE FICHAJE ---
+            st.markdown("---")
+            with st.expander("🆘 ¿Olvidaste marcar tu ingreso? (Solicitar Corrección)", expanded=False):
+                st.markdown("""
+                <div class='alert-box' style='background-color: #FFFBEB; border-color: #F59E0B; color: #92400E;'>
+                <b>⚠️ Atención: ¿Te olvidaste de marcar el ingreso?</b><br>
+                Escribinos tu horario correcto acá abajo y será enviado a Gerencia para ser auditado. Si es aprobado, se corregirá tu hora en el sistema para que no pierdas el pago de esas horas. 
+                <br><b>Importante:</b> Reportar un olvido te restará puntos en el ranking por la falta de atención, pero salvará tus horas de trabajo. <i>Solo podés enviar una solicitud por turno/día.</i>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                ya_pidio = False
+                for cp in correcciones_pendientes:
+                    if cp['Empleado'] == empleado_en_celu and cp['Fecha'] == str(fecha_hoy):
+                        ya_pidio = True
+                        break
+                        
+                if ya_pidio:
+                    st.info("⏳ Ya enviaste una solicitud de corrección para el día de hoy. Está en revisión por Gerencia.")
+                else:
+                    with st.form("form_olvido_ingreso"):
+                        c_olv1, c_olv2 = st.columns(2)
+                        suc_olv = c_olv1.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()))
+                        turno_olv = c_olv2.selectbox("Turno a corregir:", ["Seleccionar..."] + list(lista_turnos.keys()))
+                        
+                        c_olv3, c_olv4 = st.columns(2)
+                        fecha_olvido = c_olv3.date_input("Fecha:", value=ahora.date())
+                        hora_real = c_olv4.time_input("Hora REAL en la que ingresaste:", value=ahora.time())
+                        
+                        motivo_olv = st.text_input("📝 Explicá brevemente qué pasó (Ej: 'Me olvidé de fichar por atender rápido al proveedor'):")
+                        
+                        if st.form_submit_button("📤 Enviar a Auditoría"):
+                            if suc_olv == "Seleccionar..." or turno_olv == "Seleccionar..." or not motivo_olv.strip():
+                                st.warning("🚨 Por favor, completá todos los campos antes de enviar.")
+                            else:
+                                correcciones_pendientes.append({
+                                    "Empleado": empleado_en_celu,
+                                    "Fecha": str(fecha_olvido),
+                                    "Hora_Real": hora_real.strftime("%I:%M:%S %p"),
+                                    "Sucursal": suc_olv,
+                                    "Turno": turno_olv,
+                                    "Motivo": motivo_olv.strip()
+                                })
+                                save_json("correcciones_pendientes", correcciones_pendientes)
+                                st.success("✅ ¡Solicitud enviada a Gerencia! Se te notificará cuando sea auditada.")
+                                st.rerun()
+
             # 3. AVISOS Y MENSAJES
+            st.markdown("---")
             mensajes_usuario = [m for m in lista_mensajes if m.get('destinatario') in ['Todos', empleado_en_celu, rol_empleado]]
             if mensajes_usuario:
                 for m in mensajes_usuario:
@@ -1884,7 +1932,6 @@ elif pestaña == "💼 Panel de Gerencia":
             st.dataframe(pd.DataFrame(ranking_data).sort_values(by="⭐ PUNTOS", ascending=False), use_container_width=True, hide_index=True)
             st.markdown("---")
             
-            # --- NUEVO: Auditoría de sugerencias de puntos por parte de Cajeros/Encargados ---
             st.subheader("⚖️ Auditoría de Multas/Bonos de Cajeros")
             puntos_cajero_pendientes = load_json("puntos_cajero_pendientes", [])
             
@@ -1893,12 +1940,10 @@ elif pestaña == "💼 Panel de Gerencia":
                     if pt.get("Estado") == "Pendiente de auditoría":
                         st.markdown(f"<div class='task-pend'><b>{pt['Emisor']}</b> quiere {'dar' if pt['Puntos_Sugeridos'] > 0 else 'quitar'} <b>{abs(pt['Puntos_Sugeridos'])} pts</b> a <b>{pt['Compañero']}</b><br>Motivo: <i>{pt['Motivo']}</i></div>", unsafe_allow_html=True)
                         
-                        # El gerente decide cuántos puntos darle de recompensa al cajero por hacer el reporte
                         recompensa_cajero = st.number_input(f"Puntos de recompensa para el Cajero '{pt['Emisor']}' si apruebas su auditoría:", value=int(config_app.get("recompensa_auditoria_cajero", 10)), step=1, key=f"rec_cajero_{idx}")
                         
                         c1, c2, c3 = st.columns([1,1,2])
                         if c1.button("✅ Aprobar e imputar", key=f"apr_caj_{idx}"):
-                            # 1. Le aplicamos los puntos al empleado implicado
                             lista_puntos.append({
                                 "Fecha": pt["Fecha"], 
                                 "Empleado": pt["Compañero"], 
@@ -1908,7 +1953,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                 "Estado": "Aprobada"
                             })
                             
-                            # 2. Le damos la recompensa al cajero (SOLO SI TIENE ROL DE CAJERO)
                             rol_emisor = roles_empleados.get(pt["Emisor"], "")
                             if recompensa_cajero > 0 and rol_emisor == "Cajero":
                                 lista_puntos.append({
@@ -1973,6 +2017,83 @@ elif pestaña == "💼 Panel de Gerencia":
             else:
                 st.info("No hay solicitudes de retiro temprano pendientes.")
                 
+            # --- NUEVO: AUDITORÍA DE CORRECCIÓN DE FICHAJES (OLVIDOS) ---
+            st.markdown("---")
+            st.subheader("⏰ Solicitudes de Corrección de Ingreso (Olvidos)")
+            if correcciones_pendientes:
+                for idx, cp in enumerate(correcciones_pendientes):
+                    st.markdown(f"<div class='task-pend'><b>{cp['Empleado']}</b> olvidó fichar su entrada el <b>{cp['Fecha']}</b>.<br>Declara haber ingresado realmente a las <b>{cp['Hora_Real']}</b> en {cp['Sucursal']} ({cp['Turno']}).<br>Motivo: <i>{cp['Motivo']}</i></div>", unsafe_allow_html=True)
+                    c1, c2 = st.columns(2)
+                    
+                    pts_penalidad = config_app.get("reglas_puntos", {}).get("Olvido Fichaje", -10)
+                    
+                    if c1.button(f"✅ Aprobar e Imputar ({pts_penalidad} pts)", key=f"apr_olv_{idx}"):
+                        df_asist_olv = load_df("asistencia")
+                        ya_existe = False
+                        id_modificar = None
+                        
+                        if not df_asist_olv.empty:
+                            filtro = df_asist_olv[(df_asist_olv["Empleado"] == cp["Empleado"]) & (df_asist_olv["Fecha"] == cp["Fecha"]) & (df_asist_olv["Tipo"] == "Entrada") & (df_asist_olv["Turno"] == cp["Turno"])]
+                            if not filtro.empty:
+                                id_modificar = filtro.iloc[-1]["id"]
+                                ya_existe = True
+                        
+                        estado_final = "A tiempo"
+                        try:
+                            t_ing_obj = datetime.datetime.strptime(lista_turnos[cp["Turno"]]["ingreso"], "%I:%M %p").time()
+                            dt_ing_ofi = datetime.datetime.combine(datetime.datetime.strptime(cp["Fecha"], "%Y-%m-%d").date(), t_ing_obj)
+                            dt_fichaje_real = datetime.datetime.combine(datetime.datetime.strptime(cp["Fecha"], "%Y-%m-%d").date(), datetime.datetime.strptime(cp["Hora_Real"], "%I:%M:%S %p").time())
+                            
+                            tolerancia = int(config_app.get("tolerancia_minutos", 10))
+                            if dt_fichaje_real > (dt_ing_ofi + datetime.timedelta(minutes=tolerancia)):
+                                estado_final = "Tarde"
+                        except: pass
+                        
+                        nota_final = f"[Corregido por Gerencia] {cp['Motivo']}"
+                        
+                        if ya_existe:
+                            supabase.table("asistencia").update({
+                                "Hora": cp["Hora_Real"],
+                                "Estado": estado_final,
+                                "Nota": nota_final
+                            }).eq("id", int(id_modificar)).execute()
+                        else:
+                            insert_row("asistencia", {
+                                "Fecha": cp["Fecha"],
+                                "Hora": cp["Hora_Real"],
+                                "Empleado": cp["Empleado"],
+                                "Sucursal": cp["Sucursal"],
+                                "Turno": cp["Turno"],
+                                "Tipo": "Entrada",
+                                "Estado": estado_final,
+                                "Distancia_m": 0.0,
+                                "Nota": nota_final
+                            })
+                        
+                        lista_puntos.append({
+                            "Fecha": str(fecha_hoy),
+                            "Empleado": cp["Empleado"],
+                            "Puntos": pts_penalidad,
+                            "Motivo": "Penalidad automática por olvidar registrar ingreso a tiempo",
+                            "Autor": "Gerencia (Auto)",
+                            "Estado": "Aprobada"
+                        })
+                        save_json("ajustes_puntos", lista_puntos)
+                        
+                        correcciones_pendientes.pop(idx)
+                        save_json("correcciones_pendientes", correcciones_pendientes)
+                        
+                        st.success(f"✅ Ingreso corregido correctamente. Se aplicó la penalidad de {pts_penalidad} pts a {cp['Empleado']}.")
+                        st.rerun()
+                        
+                    if c2.button("❌ Denegar", key=f"den_olv_{idx}"):
+                        correcciones_pendientes.pop(idx)
+                        save_json("correcciones_pendientes", correcciones_pendientes)
+                        st.info("❌ Solicitud de corrección rechazada.")
+                        st.rerun()
+            else:
+                st.info("No hay solicitudes de corrección de ingreso (olvidos) pendientes.")
+
             st.markdown("---")
             st.subheader("📋 Tareas Pendientes de Aprobación")
             df_tl_all = load_df("tareas_log")
@@ -2180,6 +2301,9 @@ elif pestaña == "💼 Panel de Gerencia":
                                     if sp.get('Empleado') == emp_mod: sp['Empleado'] = nn
                                     if sp.get('Autor') == emp_mod: sp['Autor'] = nn
                                 save_json("salidas_pendientes", salidas_pendientes)
+                                for cp in correcciones_pendientes:
+                                    if cp.get('Empleado') == emp_mod: cp['Empleado'] = nn
+                                save_json("correcciones_pendientes", correcciones_pendientes)
                                 for r in reportes_log:
                                     if r.get('Emisor') == emp_mod: r['Emisor'] = nn
                                     if r.get('Implicado') == emp_mod: r['Implicado'] = nn
@@ -2416,10 +2540,16 @@ elif pestaña == "💼 Panel de Gerencia":
                     r_cajero = st.number_input("🎁 Recompensa a Cajeros por auditoría aprobada:", value=int(config_app.get("recompensa_auditoria_cajero", 10)))
                     
                     c_r1, c_r2 = st.columns(2)
-                    r_ok, r_tar = c_r1.number_input("✔️ A Tiempo:", value=config_app.get("reglas_puntos", {}).get("A tiempo", 0)), c_r2.number_input("Tarde:", value=config_app.get("reglas_puntos", {}).get("Tarde", -5))
-                    r_aus, r_fj = c_r1.number_input("❌ Ausente:", value=config_app.get("reglas_puntos", {}).get("Ausente", -15)), c_r2.number_input("📝 Justif:", value=config_app.get("reglas_puntos", {}).get("Falta Justificada", 0))
+                    r_ok = c_r1.number_input("✔️ A Tiempo:", value=config_app.get("reglas_puntos", {}).get("A tiempo", 0))
+                    r_tar = c_r2.number_input("Tarde:", value=config_app.get("reglas_puntos", {}).get("Tarde", -5))
+                    r_aus = c_r1.number_input("❌ Ausente:", value=config_app.get("reglas_puntos", {}).get("Ausente", -15))
+                    r_fj = c_r2.number_input("📝 Justif:", value=config_app.get("reglas_puntos", {}).get("Falta Justificada", 0))
+                    
+                    # --- NUEVO: CONFIG PENALIDAD OLVIDO DE FICHAJE ---
+                    r_olv = st.number_input("🆘 Olvido de Ingreso (Penalidad en puntos):", value=config_app.get("reglas_puntos", {}).get("Olvido Fichaje", -10), step=1)
+                    
                     if st.form_submit_button("💾 Guardar Reglas"):
-                        config_app["reglas_puntos"] = {"base": r_base, "A tiempo": r_ok, "Tarde": r_tar, "Ausente": r_aus, "Falta Justificada": r_fj}
+                        config_app["reglas_puntos"] = {"base": r_base, "A tiempo": r_ok, "Tarde": r_tar, "Ausente": r_aus, "Falta Justificada": r_fj, "Olvido Fichaje": r_olv}
                         config_app["recompensa_auditoria_cajero"] = r_cajero
                         save_json("config", config_app); st.rerun()
                         
@@ -2498,7 +2628,6 @@ elif pestaña == "💼 Panel de Gerencia":
                     st.rerun()
                     
                 st.markdown("---")
-                # --- NUEVO: BORRADO SELECTIVO POR EMPLEADO Y FECHA ---
                 st.subheader("🧹 Reseteo Quirúrgico en Nube")
                 c_cl1, c_cl2 = st.columns(2)
                 with c_cl1:
@@ -2592,7 +2721,6 @@ elif pestaña == nombre_tab_dueno:
                 historia = st.text_area("Historia / Quiénes Somos:", value=owner_config.get("quienes_somos", ""))
                 datos_contacto = st.text_area("Datos de Contacto (Teléfonos, mails, etc):", value=owner_config.get("contactos", ""))
                 
-                # --- NUEVO: RENOMBRAR MENÚ DEL DUEÑO ---
                 st.markdown("---")
                 st.markdown("#### ⚙️ Opciones del Menú Principal")
                 nuevo_nombre_tab_dueno = st.text_input("Renombrar el botón 'Dueño del Software' en el menú:", value=owner_config.get("nombre_tab_dueno", "⚙️ Dueño del Software"))
@@ -2611,7 +2739,7 @@ elif pestaña == nombre_tab_dueno:
                 save_json("empleados", []); save_json("roles", {}); save_json("tareas_roles", {}); save_json("tareas_individuales", {}); save_json("dispositivos", {})
                 save_json("locales", {}); save_json("turnos", {}); save_json("mensajes", []); save_json("alertas_ingreso", []); save_json("intentos_seguridad", [])
                 save_json("ajustes_puntos", []); save_json("reportes", []); save_json("salidas_pendientes", []); save_json("sueldos_historico", []); save_json("cierres_caja", [])
-                save_json("planificacion_turnos", {})
+                save_json("planificacion_turnos", {}); save_json("correcciones_pendientes", [])
                 try:
                     supabase.table("asistencia").delete().neq("id", 0).execute()
                     supabase.table("tareas_log").delete().neq("id", 0).execute()
