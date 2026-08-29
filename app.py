@@ -169,6 +169,7 @@ def load_json(key_name, default_data):
         
     if key_name in settings:
         data = settings[key_name]
+        # MEJORA: Fusión de diccionarios para persistencia ante actualizaciones del código
         if isinstance(data, dict) and isinstance(default_data, dict):
             for k, v in default_data.items():
                 if k not in data:
@@ -210,7 +211,7 @@ def insert_row(table_name, row_dict):
         st.error(f"❌ Error guardando en la tabla '{table_name}': {e}")
 
 # ==========================================
-# 2. CARGA DE DATOS CENTRALIZADA
+# 2. CARGA DE DATOS CENTRALIZADA Y BOOLEAN SAFE
 # ==========================================
 zona_arg = datetime.timezone(datetime.timedelta(hours=-3))
 ahora = datetime.datetime.now(zona_arg)
@@ -263,6 +264,7 @@ salidas_pendientes = load_json("salidas_pendientes", [])
 sueldos_historico = load_json("sueldos_historico", [])
 cierres_caja = load_json("cierres_caja", [])
 planificacion_turnos = load_json("planificacion_turnos", {})
+puntos_cajero_pendientes = load_json("puntos_cajero_pendientes", [])
 
 ESTADOS_POSIBLES = ["A tiempo", "Tarde", "Salida", "Salida (Fuera de Rango)", "Ausente", "Falta Justificada", "Pausa", "N/A", "Retiro Temprano", "Salida (Cambio Local)"]
 
@@ -428,7 +430,7 @@ if pestaña == "📱 Portal del Empleado":
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
             st.markdown(f"<div class='credencial'><p class='cred-nombre'>👤 {empleado_en_celu}</p><p class='cred-rol'>Rol: {rol_empleado}</p><div class='cred-nivel'>{calcular_nivel(puntos_actuales)} ({puntos_actuales} pts)</div></div>", unsafe_allow_html=True)
             
-            # 2. SMART CHECK-IN (MOVIDO ARRIBA)
+            # 2. SMART CHECK-IN 
             with st.expander("📍 Smart Check-In (Registrar Asistencia)", expanded=True):
                 st.markdown("### 📡 Radar Automático")
                 local_detectado = None
@@ -820,32 +822,52 @@ if pestaña == "📱 Portal del Empleado":
                     else:
                         st.warning("🚨 Para auditar la salida de un compañero, primero tenés que registrar tu propia ENTRADA en la sucursal.")
                         
-                    st.markdown("---")
-                    st.markdown("#### ⭐ Asignar Bono o Multa")
-                    with st.form("form_sup_puntos"):
-                        s_emp = st.selectbox("Compañero:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
-                        s_pts = st.number_input("Puntos (+/-):", value=0, step=1)
-                        s_mot = st.text_input("Motivo:")
-                        if st.form_submit_button("Enviar a Gerencia"):
-                            if s_emp == "Seleccionar...":
-                                st.warning("🚨 ¡Completá todos los campos! (Elegí un compañero y escribí el motivo).")
-                            else:
-                                lista_puntos.append({"Fecha": fecha_hoy, "Empleado": s_emp, "Puntos": s_pts, "Motivo": s_mot.strip(), "Autor": empleado_en_celu, "Estado": "Pendiente"})
-                                save_json("ajustes_puntos", lista_puntos)
-                                st.success("✅ Evaluación enviada a Gerencia correctamente.")
-
-            # 7. BUZÓN
+            # 7. BUZÓN (Agregado Reporte de Bono/Multa para Cajeros)
             with st.expander("📬 Buzón de Reportes Confidenciales", expanded=False):
-                tipo_rep = st.selectbox("Tipo:", ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"])
-                implicado = st.selectbox("Compañero implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu]) if tipo_rep == "Incumplimiento de un compañero" else "N/A"
-                detalle_rep = st.text_area("Detalle:")
+                opciones_reporte = ["Falla de equipo/sistema", "Incumplimiento de un compañero", "Queja general", "Otra observación"]
+                
+                # --- NUEVO: Opción de reporte de multas/bonos para cajeros ---
+                if rol_empleado in ["Cajero", "Encargado"]:
+                    opciones_reporte.append("⭐ Sugerir Bono/Multa a Compañero (Auditable)")
+                    
+                tipo_rep = st.selectbox("Tipo:", opciones_reporte)
+                
+                # Lógica de qué campos mostrar según el reporte
+                if tipo_rep in ["Incumplimiento de un compañero", "⭐ Sugerir Bono/Multa a Compañero (Auditable)"]:
+                    implicado = st.selectbox("Compañero implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
+                else:
+                    implicado = "N/A"
+                    
+                pts_sugeridos = 0
+                if tipo_rep == "⭐ Sugerir Bono/Multa a Compañero (Auditable)":
+                    pts_sugeridos = st.number_input("Puntos a sugerir (+ o -):", value=0, step=1)
+                    
+                detalle_rep = st.text_area("Detalle / Motivo:")
+                
                 if st.button("📤 Enviar a Gerencia"):
-                    if not detalle_rep.strip(): st.warning("🚨 Error: Tenés que escribir el detalle del reporte para poder enviarlo.")
-                    elif tipo_rep == "Incumplimiento de un compañero" and implicado == "Seleccionar...": st.warning("🚨 Error: Tenés que seleccionar al compañero implicado.")
+                    if not detalle_rep.strip(): 
+                        st.warning("🚨 Error: Tenés que escribir el detalle del reporte/motivo para poder enviarlo.")
+                    elif implicado == "Seleccionar...": 
+                        st.warning("🚨 Error: Tenés que seleccionar al compañero implicado.")
+                    elif tipo_rep == "⭐ Sugerir Bono/Multa a Compañero (Auditable)" and pts_sugeridos == 0:
+                        st.warning("🚨 Error: Los puntos sugeridos no pueden ser 0.")
                     else:
-                        reportes_log.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Emisor": empleado_en_celu, "Tipo": tipo_rep, "Implicado": implicado, "Detalle": detalle_rep.strip(), "Estado": "Pendiente de lectura"})
-                        save_json("reportes", reportes_log)
-                        st.success("✅ ¡Reporte enviado confidencialmente a Gerencia!")
+                        if tipo_rep == "⭐ Sugerir Bono/Multa a Compañero (Auditable)":
+                            puntos_cajero_pendientes.append({
+                                "Fecha": fecha_hoy,
+                                "Hora": hora_hoy,
+                                "Emisor": empleado_en_celu,
+                                "Compañero": implicado,
+                                "Puntos_Sugeridos": pts_sugeridos,
+                                "Motivo": detalle_rep.strip(),
+                                "Estado": "Pendiente de auditoría"
+                            })
+                            save_json("puntos_cajero_pendientes", puntos_cajero_pendientes)
+                            st.success("✅ ¡Sugerencia de puntos enviada a Gerencia para revisión! Si la aprueban, te llevarás una recompensa.")
+                        else:
+                            reportes_log.append({"Fecha": fecha_hoy, "Hora": hora_hoy, "Emisor": empleado_en_celu, "Tipo": tipo_rep, "Implicado": implicado, "Detalle": detalle_rep.strip(), "Estado": "Pendiente de lectura"})
+                            save_json("reportes", reportes_log)
+                            st.success("✅ ¡Reporte enviado confidencialmente a Gerencia!")
                         
             # 8. MIS TAREAS
             tareas_totales = tareas_roles.get(rol_empleado, []) + tareas_individuales.get(empleado_en_celu, [])
@@ -1755,7 +1777,57 @@ elif pestaña == "💼 Panel de Gerencia":
                 
             st.dataframe(pd.DataFrame(ranking_data).sort_values(by="⭐ PUNTOS", ascending=False), use_container_width=True, hide_index=True)
             st.markdown("---")
-            st.subheader("✍️ Cargar Bono o Multa Manual")
+            
+            # --- NUEVO: Auditoría de sugerencias de puntos por parte de Cajeros/Encargados ---
+            st.subheader("⚖️ Auditoría de Multas/Bonos de Cajeros")
+            puntos_cajero_pendientes = load_json("puntos_cajero_pendientes", [])
+            
+            if puntos_cajero_pendientes:
+                for idx, pt in enumerate(puntos_cajero_pendientes):
+                    if pt.get("Estado") == "Pendiente de auditoría":
+                        st.markdown(f"<div class='task-pend'><b>{pt['Emisor']}</b> quiere {'dar' if pt['Puntos_Sugeridos'] > 0 else 'quitar'} <b>{abs(pt['Puntos_Sugeridos'])} pts</b> a <b>{pt['Compañero']}</b><br>Motivo: <i>{pt['Motivo']}</i></div>", unsafe_allow_html=True)
+                        
+                        # El gerente decide cuántos puntos darle de recompensa al cajero por hacer el reporte
+                        recompensa_cajero = st.number_input("Puntos de recompensa para el Cajero/Encargado por reportar:", value=10, step=1, key=f"rec_cajero_{idx}")
+                        
+                        c1, c2, c3 = st.columns([1,1,2])
+                        if c1.button("✅ Aprobar e imputar", key=f"apr_caj_{idx}"):
+                            # 1. Le aplicamos los puntos al empleado implicado
+                            lista_puntos.append({
+                                "Fecha": pt["Fecha"], 
+                                "Empleado": pt["Compañero"], 
+                                "Puntos": pt["Puntos_Sugeridos"], 
+                                "Motivo": f"[{pt['Emisor']}] {pt['Motivo']}", 
+                                "Autor": "Gerencia", 
+                                "Estado": "Aprobada"
+                            })
+                            # 2. Le damos la recompensa al cajero
+                            if recompensa_cajero > 0:
+                                lista_puntos.append({
+                                    "Fecha": fecha_hoy, 
+                                    "Empleado": pt["Emisor"], 
+                                    "Puntos": recompensa_cajero, 
+                                    "Motivo": "Recompensa por reporte de auditoría aprobado.", 
+                                    "Autor": "Gerencia", 
+                                    "Estado": "Aprobada"
+                                })
+                            
+                            pt["Estado"] = "Aprobado"
+                            save_json("ajustes_puntos", lista_puntos)
+                            save_json("puntos_cajero_pendientes", puntos_cajero_pendientes)
+                            st.success("Bono/Multa aplicado al compañero y recompensa otorgada al cajero.")
+                            st.rerun()
+                            
+                        if c2.button("❌ Denegar y descartar", key=f"den_caj_{idx}"):
+                            pt["Estado"] = "Rechazado"
+                            save_json("puntos_cajero_pendientes", puntos_cajero_pendientes)
+                            st.info("Sugerencia de puntos rechazada.")
+                            st.rerun()
+            else:
+                st.info("No hay sugerencias de puntos pendientes de los cajeros.")
+            
+            st.markdown("---")
+            st.subheader("✍️ Cargar Bono o Multa Manual (Gerencia)")
             with st.form("form_bonos"):
                 c_b1, c_b2, c_b3, c_b4 = st.columns([2,1,1,2])
                 ap_emp = c_b1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -1806,25 +1878,6 @@ elif pestaña == "💼 Panel de Gerencia":
                         supabase.table("tareas_log").update({"Estado": "Rechazada"}).eq("id", int(row['id'])).execute()
                         st.rerun()
                         
-            puntos_pendientes = [p for p in lista_puntos if p.get("Estado") == "Pendiente"]
-            if puntos_pendientes:
-                st.write("**Evaluaciones Pendientes (De Supervisores):**")
-                for idx, p in enumerate(lista_puntos):
-                    if p.get("Estado") == "Pendiente":
-                        c_pp1, c_pp2, c_pp3 = st.columns([4, 1, 1])
-                        c_pp1.markdown(f"**{p['Autor']}** sugiere **{p['Puntos']} pts** a **{p['Empleado']}** (Motivo: {p['Motivo']})")
-                        if c_pp2.button("✅ Aprobar", key=f"apr_p_{idx}"):
-                            lista_puntos[idx]["Estado"] = "Aprobada"; save_json("ajustes_puntos", lista_puntos); st.rerun()
-                        if c_pp3.button("❌ Rechazar", key=f"rec_p_{idx}"):
-                            lista_puntos[idx]["Estado"] = "Rechazada"; save_json("ajustes_puntos", lista_puntos); st.rerun()
-                            
-            st.subheader("📬 Buzón de Quejas y Reportes")
-            for idx, r in enumerate(reportes_log):
-                if r.get("Estado") == "Pendiente de lectura":
-                    st.markdown(f"<div class='report-box'><b>📬 NUEVO REPORTE</b> | Fecha: {r['Fecha']} {r['Hora']}<br><b>Emisor:</b> {r['Emisor']} | <b>Tipo:</b> {r['Tipo']}<br><b>Detalle:</b> <i>'{r['Detalle']}'</i></div>", unsafe_allow_html=True)
-                    if st.button("Marcar como Visto", key=f"visto_rep_{idx}"):
-                        reportes_log[idx]["Estado"] = "Visto"; save_json("reportes", reportes_log); st.rerun()
-
         with tab_perfil:
             st.markdown('<div class="main-title" style="font-size: 2rem;">👤 Dossier Individual 360°</div>', unsafe_allow_html=True)
             col_pf1, col_pf2 = st.columns([1,3])
