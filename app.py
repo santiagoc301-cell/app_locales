@@ -361,7 +361,7 @@ lista_roles_disponibles = [r["rol"] for r in roles_data] if roles_data else ["Ve
 emp_data = load_table_list("empleados")
 lista_empleados = [r["nombre"] for r in emp_data] if emp_data else []
 roles_empleados = {r["nombre"]: r["rol"] for r in emp_data} if emp_data else {}
-dispositivos_vinculados = {r["nombre"]: r["device_id"] for r in emp_data if r.get("device_id")} if emp_data else {}
+dispositivos_vinculados = {r["nombre"]: r["dispositivo_id"] for r in emp_data if r.get("dispositivo_id")} if emp_data else {}
 
 tr_data = load_table_list("tareas_roles")
 tareas_roles = {}
@@ -1201,9 +1201,9 @@ if pestaña == "📱 Portal del Empleado":
                     else:
                         try:
                             if not match:
-                                supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_elegido_auto, "device_id": device_id}).execute()
+                                supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_elegido_auto, "dispositivo_id": device_id}).execute()
                             else:
-                                supabase.table("empleados").update({"rol": rol_elegido_auto, "device_id": device_id}).eq("nombre", match).execute()
+                                supabase.table("empleados").update({"rol": rol_elegido_auto, "dispositivo_id": device_id}).eq("nombre", match).execute()
                             recargar_app()
                         except Exception as e:
                             show_db_error(e, "vinculando dispositivo")
@@ -1217,7 +1217,7 @@ if pestaña == "📱 Portal del Empleado":
                         st.error("❌ Este celular ya está vinculado a otra persona. No se permite prestar el celular a otro compañero.")
                     else:
                         try:
-                            supabase.table("empleados").update({"device_id": device_id}).eq("nombre", emp_vincular).execute()
+                            supabase.table("empleados").update({"dispositivo_id": device_id}).eq("nombre", emp_vincular).execute()
                             recargar_app()
                         except Exception as e:
                             show_db_error(e, "vinculando cuenta existente")
@@ -2423,7 +2423,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             st.error("🚨 Ese empleado ya existe. No se permiten nombres repetidos.")
                         else:
                             try:
-                                supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_asignar, "device_id": ""}).execute()
+                                supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_asignar, "dispositivo_id": ""}).execute()
                                 st.success(f"✅ Empleado '{n_emp}' agregado correctamente.")
                                 recargar_app()
                             except Exception as e: show_db_error(e, "agregando empleado")
@@ -2488,7 +2488,7 @@ elif pestaña == "💼 Panel de Gerencia":
                         
                     if c_mod2.button("🔓 Liberar Celular") and emp_mod in dispositivos_vinculados:
                         try:
-                            supabase.table("empleados").update({"device_id": ""}).eq("nombre", emp_mod).execute()
+                            supabase.table("empleados").update({"dispositivo_id": ""}).eq("nombre", emp_mod).execute()
                             recargar_app()
                         except Exception as e: show_db_error(e, "liberando celular")
                     if c_mod3.button("🗑️ Borrar Empleado"):
@@ -2699,23 +2699,63 @@ elif pestaña == "💼 Panel de Gerencia":
         with tab_config:
             st.subheader("⚙️ Configuración General")
             with st.form("form_config"):
-                nuevo_titulo = st.text_input("Título del Portal", value=config_app.get("titulo_portal", "🏢 Portal Corporativo"))
-                nueva_pass = st.text_input("Contraseña de Gerencia", value=config_app.get("admin_password", "1234"), type="password")
-                nueva_tol = st.number_input("Tolerancia de llegada (minutos)", value=int(config_app.get("tolerancia_minutos", 10)))
-                nuevo_msg_dia = st.text_area("Mensaje del Día (Opcional)", value=config_app.get("mensaje_dia", ""))
+                st.markdown("### 📝 Ajustes Básicos")
+                c_conf1, c_conf2 = st.columns(2)
+                nuevo_titulo = c_conf1.text_input("Título del Portal", value=config_app.get("titulo_portal", "🏢 Portal Corporativo"))
+                nueva_pass = c_conf2.text_input("Contraseña de Gerencia", value=config_app.get("admin_password", "1234"), type="password")
                 
-                n_gps = st.checkbox("Verificar GPS", value=get_bool_config("verificar_gps", True))
-                n_wifi = st.checkbox("Verificar Wi-Fi", value=get_bool_config("verificar_wifi", False))
-                n_auto = st.checkbox("Permitir Auto-registro de empleados", value=get_bool_config("autoregistro", False))
+                c_conf3, c_conf4 = st.columns(2)
+                nueva_tol = c_conf3.number_input("Tolerancia de llegada (minutos)", value=int(config_app.get("tolerancia_minutos", 10)))
+                rad_metros = c_conf4.number_input("Radio GPS permitido (metros)", value=int(config_app.get("radio_metros", 150)))
+                
+                nuevo_msg_dia = st.text_area("Mensaje del Día (Opcional)", value=config_app.get("mensaje_dia", ""))
+                msg_tarde = st.text_input("Mensaje de llegada tarde", value=config_app.get("mensaje_llegada_tarde", "🚨 Llegada fuera del margen de tolerancia."))
+                
+                c_conf5, c_conf6 = st.columns(2)
+                rec_cajero = c_conf5.number_input("Recompensa auditoría cajero (pts)", value=int(config_app.get("recompensa_auditoria_cajero", 10)))
+                d_semana = c_conf6.selectbox("Día de inicio de semana", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")))
+                
+                try:
+                    f_pts_def = datetime.datetime.strptime(config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d")), "%Y-%m-%d").date()
+                except:
+                    f_pts_def = ahora.date().replace(day=1)
+                n_fecha_pts = st.date_input("Fecha de reinicio de la liga de Puntos", value=f_pts_def)
+
+                st.markdown("### 🔧 Opciones del Sistema")
+                col_op1, col_op2 = st.columns(2)
+                with col_op1:
+                    n_gps = st.checkbox("Verificar ubicación GPS", value=get_bool_config("verificar_gps", True))
+                    n_wifi = st.checkbox("Verificar Red Wi-Fi", value=get_bool_config("verificar_wifi", False))
+                    n_auto = st.checkbox("Permitir Auto-registro de empleados", value=get_bool_config("autoregistro", False))
+                    n_sal_estricta = st.checkbox("Salida Estricta (exigir GPS/Wi-Fi al salir)", value=get_bool_config("salida_estricta", False))
+                    n_sal_manual = st.checkbox("Exigir registrar la Salida Manualmente", value=get_bool_config("exigir_salida_manual", False))
+                with col_op2:
+                    n_desc_tarde = st.checkbox("Descontar horas por llegada tarde", value=get_bool_config("desc_tarde", True))
+                    n_desc_temp = st.checkbox("Descontar horas por salida temprana", value=get_bool_config("desc_temp", True))
+                    n_perdon_tol = st.checkbox("Perdonar tolerancia (no descontar si llega en los min de gracia)", value=get_bool_config("perdonar_tolerancia", True))
+                    n_mostrar_hs = st.checkbox("Mostrar horas computadas en el celular del empleado", value=get_bool_config("mostrar_horas_empleado", False))
+                    n_estricto_plan = st.checkbox("Fichaje estricto (bloquear ingreso si no tiene turno asignado)", value=get_bool_config("fichaje_estricto_plan", False))
                 
                 if st.form_submit_button("💾 Guardar Configuración"):
                     config_app["titulo_portal"] = nuevo_titulo
                     config_app["admin_password"] = nueva_pass
                     config_app["tolerancia_minutos"] = nueva_tol
                     config_app["mensaje_dia"] = nuevo_msg_dia
+                    config_app["mensaje_llegada_tarde"] = msg_tarde
+                    config_app["radio_metros"] = rad_metros
+                    config_app["recompensa_auditoria_cajero"] = rec_cajero
+                    config_app["dia_inicio_semana"] = d_semana
+                    config_app["fecha_inicio_puntos"] = n_fecha_pts.strftime("%Y-%m-%d")
                     config_app["verificar_gps"] = n_gps
                     config_app["verificar_wifi"] = n_wifi
                     config_app["autoregistro"] = n_auto
+                    config_app["salida_estricta"] = n_sal_estricta
+                    config_app["exigir_salida_manual"] = n_sal_manual
+                    config_app["desc_tarde"] = n_desc_tarde
+                    config_app["desc_temp"] = n_desc_temp
+                    config_app["perdonar_tolerancia"] = n_perdon_tol
+                    config_app["mostrar_horas_empleado"] = n_mostrar_hs
+                    config_app["fichaje_estricto_plan"] = n_estricto_plan
                     save_json("config", config_app)
                     st.success("Configuración actualizada correctamente.")
                     recargar_app()
