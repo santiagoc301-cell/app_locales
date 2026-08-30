@@ -158,6 +158,15 @@ def init_connection():
 
 supabase = init_connection()
 
+# ---> Helper para parsear errores de la API de Supabase <---
+def show_db_error(e, context="base de datos"):
+    error_details = str(e)
+    if hasattr(e, 'args') and len(e.args) > 0 and isinstance(e.args[0], dict):
+        error_details = e.args[0].get('message', str(e))
+        hint = e.args[0].get('hint', '')
+        if hint: error_details += f" | Pista: {hint}"
+    st.error(f"🚨 Error en {context}: {error_details}")
+
 @st.cache_data(ttl=60, show_spinner=False)
 def get_all_settings():
     try:
@@ -201,7 +210,7 @@ def save_json(key_name, data):
             supabase.table('app_data').insert({'id': key_name, 'data': data}).execute()
         get_all_settings.clear()
     except Exception as e:
-        st.error(f"❌ Error guardando '{key_name}': {e}")
+        show_db_error(e, f"guardando '{key_name}'")
 
 @st.cache_data(ttl=15, show_spinner=False)
 def load_df(table_name):
@@ -304,7 +313,7 @@ def insert_row(table_name, row_dict):
     try:
         supabase.table(table_name).insert(row_dict).execute()
     except Exception as e:
-        st.error(f"❌ Error guardando en la tabla '{table_name}': {e}")
+        show_db_error(e, f"guardado en la tabla '{table_name}'")
 
 # ==========================================
 # 2. CARGA DE DATOS CENTRALIZADA DESDE TABLAS SQL
@@ -1190,11 +1199,14 @@ if pestaña == "📱 Portal del Empleado":
                     elif match and match in dispositivos_vinculados:
                         st.error(f"❌ '{match}' ya tiene un celular vinculado. No puedes ingresar desde otro celular ni usar el Modo Incógnito.")
                     else:
-                        if not match:
-                            supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_elegido_auto, "device_id": device_id}).execute()
-                        else:
-                            supabase.table("empleados").update({"rol": rol_elegido_auto, "device_id": device_id}).eq("nombre", match).execute()
-                        recargar_app()
+                        try:
+                            if not match:
+                                supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_elegido_auto, "device_id": device_id}).execute()
+                            else:
+                                supabase.table("empleados").update({"rol": rol_elegido_auto, "device_id": device_id}).eq("nombre", match).execute()
+                            recargar_app()
+                        except Exception as e:
+                            show_db_error(e, "vinculando dispositivo")
             else:
                 st.info("🔒 **Auto-registro deshabilitado.** Pedile a gerencia que te dé de alta en la lista o seleccioná tu nombre si ya existís.")
                 emp_vincular = st.selectbox("Identificate:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -1204,8 +1216,11 @@ if pestaña == "📱 Portal del Empleado":
                     elif device_id in dispositivos_vinculados.values():
                         st.error("❌ Este celular ya está vinculado a otra persona. No se permite prestar el celular a otro compañero.")
                     else:
-                        supabase.table("empleados").update({"device_id": device_id}).eq("nombre", emp_vincular).execute()
-                        recargar_app()
+                        try:
+                            supabase.table("empleados").update({"device_id": device_id}).eq("nombre", emp_vincular).execute()
+                            recargar_app()
+                        except Exception as e:
+                            show_db_error(e, "vinculando cuenta existente")
 
 # ==========================================
 # 6. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
@@ -1540,27 +1555,31 @@ elif pestaña == "💼 Panel de Gerencia":
                             c_edcb1, c_edcb2 = st.columns(2)
                             if c_edcb1.button("💾 Guardar Cambios", key=f"btn_s_c_{cc_id}"):
                                 if n_emp_caja != "Seleccionar..." and n_suc_caja != "Seleccionar...":
-                                    supabase.table("cierres_caja").update({
-                                        "Fecha": n_fecha.strftime("%Y-%m-%d"), 
-                                        "Hora": cc.get("Hora", hora_hoy), 
-                                        "Cajero": n_emp_caja, 
-                                        "Sucursal": n_suc_caja, 
-                                        "Turno": cc.get("Turno", "N/A"), 
-                                        "Efectivo": n_efvo, 
-                                        "Tarjeta": n_tarj, 
-                                        "Transferencia": n_transf, 
-                                        "Total_Ventas": n_tot, 
-                                        "Nota": n_nota.strip()
-                                    }).eq("id", cc_id).execute()
-                                    st.success("✅ Cierre actualizado.")
-                                    recargar_app()
+                                    try:
+                                        supabase.table("cierres_caja").update({
+                                            "Fecha": n_fecha.strftime("%Y-%m-%d"), 
+                                            "Hora": cc.get("Hora", hora_hoy), 
+                                            "Cajero": n_emp_caja, 
+                                            "Sucursal": n_suc_caja, 
+                                            "Turno": cc.get("Turno", "N/A"), 
+                                            "Efectivo": n_efvo, 
+                                            "Tarjeta": n_tarj, 
+                                            "Transferencia": n_transf, 
+                                            "Total_Ventas": n_tot, 
+                                            "Nota": n_nota.strip()
+                                        }).eq("id", cc_id).execute()
+                                        st.success("✅ Cierre actualizado.")
+                                        recargar_app()
+                                    except Exception as e: show_db_error(e, "actualizando caja")
                                 else:
                                     st.warning("⚠️ Faltan seleccionar Empleado o Sucursal.")
                                     
                             if c_edcb2.button("🗑️ Eliminar Cierre", key=f"btn_d_c_{cc_id}"):
-                                supabase.table("cierres_caja").delete().eq("id", cc_id).execute()
-                                st.success("🗑️ Cierre eliminado.")
-                                recargar_app()
+                                try:
+                                    supabase.table("cierres_caja").delete().eq("id", cc_id).execute()
+                                    st.success("🗑️ Cierre eliminado.")
+                                    recargar_app()
+                                except Exception as e: show_db_error(e, "eliminando caja")
                 else:
                     st.info("No hay cierres registrados todavía.")
                     
@@ -1695,15 +1714,19 @@ elif pestaña == "💼 Panel de Gerencia":
                                 n_fin_str = "2099-12-31" if n_actual else n_fin.strftime("%Y-%m-%d")
                                 c_b1, c_b2 = st.columns(2)
                                 if c_b1.button("💾 Guardar Cambios", key=f"save_s_{s_id}"):
-                                    supabase.table("sueldos_historico").update({
-                                        'Valor_Hora': n_val,
-                                        'Fecha_Desde': n_ini.strftime("%Y-%m-%d"),
-                                        'Fecha_Hasta': n_fin_str
-                                    }).eq("id", s_id).execute()
-                                    recargar_app()
+                                    try:
+                                        supabase.table("sueldos_historico").update({
+                                            'Valor_Hora': n_val,
+                                            'Fecha_Desde': n_ini.strftime("%Y-%m-%d"),
+                                            'Fecha_Hasta': n_fin_str
+                                        }).eq("id", s_id).execute()
+                                        recargar_app()
+                                    except Exception as e: show_db_error(e, "actualizando tarifa")
                                 if c_b2.button("🗑️ Eliminar Tarifa", key=f"del_s_{s_id}"):
-                                    supabase.table("sueldos_historico").delete().eq("id", s_id).execute()
-                                    recargar_app()
+                                    try:
+                                        supabase.table("sueldos_historico").delete().eq("id", s_id).execute()
+                                        recargar_app()
+                                    except Exception as e: show_db_error(e, "eliminando tarifa")
                     else:
                         st.info("No se encontraron tarifas en ese rango de fechas.")
                 else: 
@@ -1831,21 +1854,25 @@ elif pestaña == "💼 Panel de Gerencia":
                                     
                                     c_btn1, c_btn2 = st.columns(2)
                                     if c_btn1.button("💾 Guardar Cambios", key=f"btn_upd_{row['id']}"):
-                                        supabase.table("asistencia").update({
-                                            "Fecha": nueva_fecha.strftime("%Y-%m-%d"),
-                                            "Hora": nueva_hora.strftime("%I:%M:%S %p"),
-                                            "Tipo": nuevo_tipo,
-                                            "Sucursal": nueva_sucursal,
-                                            "Turno": nuevo_turno,
-                                            "Estado": nuevo_estado,
-                                            "Nota": nueva_nota
-                                        }).eq("id", int(row['id'])).execute()
-                                        st.success("¡Fichaje actualizado correctamente!")
-                                        recargar_app()
+                                        try:
+                                            supabase.table("asistencia").update({
+                                                "Fecha": nueva_fecha.strftime("%Y-%m-%d"),
+                                                "Hora": nueva_hora.strftime("%I:%M:%S %p"),
+                                                "Tipo": nuevo_tipo,
+                                                "Sucursal": nueva_sucursal,
+                                                "Turno": nuevo_turno,
+                                                "Estado": nuevo_estado,
+                                                "Nota": nueva_nota
+                                            }).eq("id", int(row['id'])).execute()
+                                            st.success("¡Fichaje actualizado correctamente!")
+                                            recargar_app()
+                                        except Exception as e: show_db_error(e, "actualizando fichaje")
                                     if c_btn2.button("🗑️ Eliminar Fichaje", key=f"btn_del_{row['id']}"):
-                                        supabase.table("asistencia").delete().eq("id", int(row['id'])).execute()
-                                        st.success("Fichaje eliminado.")
-                                        recargar_app()
+                                        try:
+                                            supabase.table("asistencia").delete().eq("id", int(row['id'])).execute()
+                                            st.success("Fichaje eliminado.")
+                                            recargar_app()
+                                        except Exception as e: show_db_error(e, "eliminando fichaje")
                     else:
                         st.info("No hay fichajes registrados para este día y este empleado.")
                         
@@ -1901,21 +1928,23 @@ elif pestaña == "💼 Panel de Gerencia":
                     st.markdown("<br>", unsafe_allow_html=True)
                     
             if st.button("💾 Guardar Planificación Semanal", use_container_width=True):
-                inserts = []
-                for f_str in str_fechas:
-                    supabase.table("planificacion_turnos").delete().eq("fecha", f_str).execute()
-                    for loc in lista_locales.keys():
-                        for turno in lista_turnos.keys():
-                            df_e = nuevos_datos_plan[(loc, turno)]
-                            day_col = cols_fechas[str_fechas.index(f_str)]
-                            emps = df_e[day_col].dropna().tolist()
-                            emps = list(dict.fromkeys([e for e in emps if e != "Nadie" and str(e).strip() != ""]))
-                            for e in emps:
-                                inserts.append({"fecha": f_str, "sucursal": loc, "turno": turno, "empleado": e})
-                if inserts:
-                    supabase.table("planificacion_turnos").insert(inserts).execute()
-                st.success("✅ ¡Planificación semanal guardada con éxito!")
-                recargar_app()
+                try:
+                    inserts = []
+                    for f_str in str_fechas:
+                        supabase.table("planificacion_turnos").delete().eq("fecha", f_str).execute()
+                        for loc in lista_locales.keys():
+                            for turno in lista_turnos.keys():
+                                df_e = nuevos_datos_plan[(loc, turno)]
+                                day_col = cols_fechas[str_fechas.index(f_str)]
+                                emps = df_e[day_col].dropna().tolist()
+                                emps = list(dict.fromkeys([e for e in emps if e != "Nadie" and str(e).strip() != ""]))
+                                for e in emps:
+                                    inserts.append({"fecha": f_str, "sucursal": loc, "turno": turno, "empleado": e})
+                    if inserts:
+                        supabase.table("planificacion_turnos").insert(inserts).execute()
+                    st.success("✅ ¡Planificación semanal guardada con éxito!")
+                    recargar_app()
+                except Exception as e: show_db_error(e, "guardando planificación")
                 
             st.markdown("---")
             st.subheader("⚖️ Comparativa: Planificado vs. Real")
@@ -2058,36 +2087,40 @@ elif pestaña == "💼 Panel de Gerencia":
                         
                         c1, c2, c3 = st.columns([1,1,2])
                         if c1.button("✅ Aprobar e imputar", key=f"apr_caj_{pt_id}"):
-                            supabase.table("ajustes_puntos").insert({
-                                "Fecha": pt["Fecha"], 
-                                "Empleado": pt["Compañero"], 
-                                "Puntos": pt["Puntos_Sugeridos"], 
-                                "Motivo": f"[{pt['Emisor']}] {pt['Motivo']}", 
-                                "Autor": "Gerencia", 
-                                "Estado": "Aprobada"
-                            }).execute()
-                            
-                            rol_emisor = roles_empleados.get(pt["Emisor"], "")
-                            if recompensa_cajero > 0 and rol_emisor == "Cajero":
+                            try:
                                 supabase.table("ajustes_puntos").insert({
-                                    "Fecha": fecha_hoy, 
-                                    "Empleado": pt["Emisor"], 
-                                    "Puntos": recompensa_cajero, 
-                                    "Motivo": "Recompensa por reporte de auditoría de personal aprobado.", 
+                                    "Fecha": pt["Fecha"], 
+                                    "Empleado": pt["Compañero"], 
+                                    "Puntos": pt["Puntos_Sugeridos"], 
+                                    "Motivo": f"[{pt['Emisor']}] {pt['Motivo']}", 
                                     "Autor": "Gerencia", 
                                     "Estado": "Aprobada"
                                 }).execute()
-                            elif recompensa_cajero > 0 and rol_emisor != "Cajero":
-                                st.warning(f"La sugerencia fue aprobada, pero la recompensa de {recompensa_cajero} pts no se aplicó porque el empleado {pt['Emisor']} no tiene el rol exclusivo de 'Cajero' (es {rol_emisor}).")
-                            
-                            supabase.table("puntos_cajero_pendientes").update({"Estado": "Aprobado"}).eq("id", pt_id).execute()
-                            st.success("Bono/Multa aplicado al compañero exitosamente.")
-                            recargar_app()
+                                
+                                rol_emisor = roles_empleados.get(pt["Emisor"], "")
+                                if recompensa_cajero > 0 and rol_emisor == "Cajero":
+                                    supabase.table("ajustes_puntos").insert({
+                                        "Fecha": fecha_hoy, 
+                                        "Empleado": pt["Emisor"], 
+                                        "Puntos": recompensa_cajero, 
+                                        "Motivo": "Recompensa por reporte de auditoría de personal aprobado.", 
+                                        "Autor": "Gerencia", 
+                                        "Estado": "Aprobada"
+                                    }).execute()
+                                elif recompensa_cajero > 0 and rol_emisor != "Cajero":
+                                    st.warning(f"La sugerencia fue aprobada, pero la recompensa de {recompensa_cajero} pts no se aplicó porque el empleado {pt['Emisor']} no tiene el rol exclusivo de 'Cajero' (es {rol_emisor}).")
+                                
+                                supabase.table("puntos_cajero_pendientes").update({"Estado": "Aprobado"}).eq("id", pt_id).execute()
+                                st.success("Bono/Multa aplicado al compañero exitosamente.")
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "aprobando sugerencia")
                             
                         if c2.button("❌ Denegar y descartar", key=f"den_caj_{pt_id}"):
-                            supabase.table("puntos_cajero_pendientes").update({"Estado": "Rechazado"}).eq("id", pt_id).execute()
-                            st.info("Sugerencia de puntos rechazada y descartada.")
-                            recargar_app()
+                            try:
+                                supabase.table("puntos_cajero_pendientes").update({"Estado": "Rechazado"}).eq("id", pt_id).execute()
+                                st.info("Sugerencia de puntos rechazada y descartada.")
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "denegando sugerencia")
             else:
                 st.info("No hay sugerencias de puntos pendientes de auditoría.")
             
@@ -2115,14 +2148,18 @@ elif pestaña == "💼 Panel de Gerencia":
                     st.markdown(f"<div class='task-pend'><b>{sp['Empleado']}</b> solicitó salir a las <b>{sp['Hora']}</b> (Auditor: {sp['Autor']})<br>Motivo: <i>{sp['Nota']}</i></div>", unsafe_allow_html=True)
                     c1, c2 = st.columns(2)
                     if c1.button("✅ Aprobar Salida", key=f"apr_sal_{sp_id}"):
-                        insert_row("asistencia", {"Fecha": sp["Fecha"], "Hora": sp["Hora"], "Empleado": sp["Empleado"], "Sucursal": sp["Sucursal"], "Turno": sp["Turno"], "Tipo": "Salida", "Estado": "Retiro Temprano", "Nota": sp["Nota"]})
-                        supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
-                        st.success("Salida aprobada y registrada en la asistencia.")
-                        recargar_app()
+                        try:
+                            insert_row("asistencia", {"Fecha": sp["Fecha"], "Hora": sp["Hora"], "Empleado": sp["Empleado"], "Sucursal": sp["Sucursal"], "Turno": sp["Turno"], "Tipo": "Salida", "Estado": "Retiro Temprano", "Nota": sp["Nota"]})
+                            supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
+                            st.success("Salida aprobada y registrada en la asistencia.")
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "aprobando salida")
                     if c2.button("❌ Denegar", key=f"den_sal_{sp_id}"):
-                        supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
-                        st.success("Solicitud denegada y eliminada.")
-                        recargar_app()
+                        try:
+                            supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
+                            st.success("Solicitud denegada y eliminada.")
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "denegando salida")
             else:
                 st.info("No hay solicitudes de retiro temprano pendientes.")
                 
@@ -2138,66 +2175,70 @@ elif pestaña == "💼 Panel de Gerencia":
                     pts_penalidad = config_app.get("reglas_puntos", {}).get("Olvido Fichaje", -10)
                     
                     if c1.button(f"✅ Aprobar e Imputar ({pts_penalidad} pts)", key=f"apr_olv_{cp_id}"):
-                        df_asist_olv = load_df("asistencia")
-                        ya_existe = False
-                        id_modificar = None
-                        
-                        if not df_asist_olv.empty:
-                            filtro = df_asist_olv[(df_asist_olv["Empleado"] == cp["Empleado"]) & (df_asist_olv["Fecha"] == cp["Fecha"]) & (df_asist_olv["Tipo"] == "Entrada") & (df_asist_olv["Turno"] == cp["Turno"])]
-                            if not filtro.empty:
-                                id_modificar = filtro.iloc[-1]["id"]
-                                ya_existe = True
-                        
-                        estado_final = "A tiempo"
                         try:
-                            t_ing_obj = datetime.datetime.strptime(lista_turnos[cp["Turno"]]["ingreso"], "%I:%M %p").time()
-                            dt_ing_ofi = datetime.datetime.combine(datetime.datetime.strptime(cp["Fecha"], "%Y-%m-%d").date(), t_ing_obj)
-                            dt_fichaje_real = datetime.datetime.combine(datetime.datetime.strptime(cp["Fecha"], "%Y-%m-%d").date(), datetime.datetime.strptime(cp["Hora_Real"], "%I:%M:%S %p").time())
+                            df_asist_olv = load_df("asistencia")
+                            ya_existe = False
+                            id_modificar = None
                             
-                            tolerancia = int(config_app.get("tolerancia_minutos", 10))
-                            if dt_fichaje_real > (dt_ing_ofi + datetime.timedelta(minutes=tolerancia)):
-                                estado_final = "Tarde"
-                        except: pass
-                        
-                        nota_final = f"[Corregido por Gerencia] {cp['Motivo']}"
-                        
-                        if ya_existe:
-                            supabase.table("asistencia").update({
-                                "Hora": cp["Hora_Real"],
-                                "Estado": estado_final,
-                                "Nota": nota_final
-                            }).eq("id", int(id_modificar)).execute()
-                        else:
-                            insert_row("asistencia", {
-                                "Fecha": cp["Fecha"],
-                                "Hora": cp["Hora_Real"],
+                            if not df_asist_olv.empty:
+                                filtro = df_asist_olv[(df_asist_olv["Empleado"] == cp["Empleado"]) & (df_asist_olv["Fecha"] == cp["Fecha"]) & (df_asist_olv["Tipo"] == "Entrada") & (df_asist_olv["Turno"] == cp["Turno"])]
+                                if not filtro.empty:
+                                    id_modificar = filtro.iloc[-1]["id"]
+                                    ya_existe = True
+                            
+                            estado_final = "A tiempo"
+                            try:
+                                t_ing_obj = datetime.datetime.strptime(lista_turnos[cp["Turno"]]["ingreso"], "%I:%M %p").time()
+                                dt_ing_ofi = datetime.datetime.combine(datetime.datetime.strptime(cp["Fecha"], "%Y-%m-%d").date(), t_ing_obj)
+                                dt_fichaje_real = datetime.datetime.combine(datetime.datetime.strptime(cp["Fecha"], "%Y-%m-%d").date(), datetime.datetime.strptime(cp["Hora_Real"], "%I:%M:%S %p").time())
+                                
+                                tolerancia = int(config_app.get("tolerancia_minutos", 10))
+                                if dt_fichaje_real > (dt_ing_ofi + datetime.timedelta(minutes=tolerancia)):
+                                    estado_final = "Tarde"
+                            except: pass
+                            
+                            nota_final = f"[Corregido por Gerencia] {cp['Motivo']}"
+                            
+                            if ya_existe:
+                                supabase.table("asistencia").update({
+                                    "Hora": cp["Hora_Real"],
+                                    "Estado": estado_final,
+                                    "Nota": nota_final
+                                }).eq("id", int(id_modificar)).execute()
+                            else:
+                                insert_row("asistencia", {
+                                    "Fecha": cp["Fecha"],
+                                    "Hora": cp["Hora_Real"],
+                                    "Empleado": cp["Empleado"],
+                                    "Sucursal": cp["Sucursal"],
+                                    "Turno": cp["Turno"],
+                                    "Tipo": "Entrada",
+                                    "Estado": estado_final,
+                                    "Distancia_m": 0.0,
+                                    "Nota": nota_final
+                                })
+                            
+                            insert_row("ajustes_puntos", {
+                                "Fecha": str(fecha_hoy),
                                 "Empleado": cp["Empleado"],
-                                "Sucursal": cp["Sucursal"],
-                                "Turno": cp["Turno"],
-                                "Tipo": "Entrada",
-                                "Estado": estado_final,
-                                "Distancia_m": 0.0,
-                                "Nota": nota_final
+                                "Puntos": pts_penalidad,
+                                "Motivo": "Penalidad automática por olvidar registrar ingreso a tiempo",
+                                "Autor": "Gerencia (Auto)",
+                                "Estado": "Aprobada"
                             })
-                        
-                        insert_row("ajustes_puntos", {
-                            "Fecha": str(fecha_hoy),
-                            "Empleado": cp["Empleado"],
-                            "Puntos": pts_penalidad,
-                            "Motivo": "Penalidad automática por olvidar registrar ingreso a tiempo",
-                            "Autor": "Gerencia (Auto)",
-                            "Estado": "Aprobada"
-                        })
-                        
-                        supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
-                        
-                        st.success(f"✅ Ingreso corregido correctamente. Se aplicó la penalidad de {pts_penalidad} pts a {cp['Empleado']}.")
-                        recargar_app()
+                            
+                            supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
+                            
+                            st.success(f"✅ Ingreso corregido correctamente. Se aplicó la penalidad de {pts_penalidad} pts a {cp['Empleado']}.")
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "corrigiendo ingreso")
                         
                     if c2.button("❌ Denegar", key=f"den_olv_{cp_id}"):
-                        supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
-                        st.info("❌ Solicitud de corrección rechazada.")
-                        recargar_app()
+                        try:
+                            supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
+                            st.info("❌ Solicitud de corrección rechazada.")
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "denegando corrección")
             else:
                 st.info("No hay solicitudes de corrección de ingreso (olvidos) pendientes.")
 
@@ -2210,11 +2251,15 @@ elif pestaña == "💼 Panel de Gerencia":
                     c_p1, c_p2, c_p3 = st.columns([4, 1, 1])
                     c_p1.markdown(f"**{row['Empleado']}** reportó: '{row['Tarea']}' (+{row['Puntos']} pts)")
                     if c_p2.button("✅ Aprobar", key=f"apr_t_{row['id']}"):
-                        supabase.table("tareas_log").update({"Estado": "Aprobada"}).eq("id", int(row['id'])).execute()
-                        recargar_app()
+                        try:
+                            supabase.table("tareas_log").update({"Estado": "Aprobada"}).eq("id", int(row['id'])).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "aprobando tarea")
                     if c_p3.button("❌ Rechazar", key=f"rec_t_{row['id']}"):
-                        supabase.table("tareas_log").update({"Estado": "Rechazada"}).eq("id", int(row['id'])).execute()
-                        recargar_app()
+                        try:
+                            supabase.table("tareas_log").update({"Estado": "Rechazada"}).eq("id", int(row['id'])).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "rechazando tarea")
                         
             puntos_pendientes = [p for p in lista_puntos if p.get("Estado") == "Pendiente"]
             if puntos_pendientes:
@@ -2225,9 +2270,15 @@ elif pestaña == "💼 Panel de Gerencia":
                         c_pp1, c_pp2, c_pp3 = st.columns([4, 1, 1])
                         c_pp1.markdown(f"**{p['Autor']}** sugiere **{p['Puntos']} pts** a **{p['Empleado']}** (Motivo: {p['Motivo']})")
                         if c_pp2.button("✅ Aprobar", key=f"apr_p_{p_id}"):
-                            supabase.table("ajustes_puntos").update({"Estado": "Aprobada"}).eq("id", p_id).execute(); recargar_app()
+                            try:
+                                supabase.table("ajustes_puntos").update({"Estado": "Aprobada"}).eq("id", p_id).execute()
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "aprobando puntos")
                         if c_pp3.button("❌ Rechazar", key=f"rec_p_{p_id}"):
-                            supabase.table("ajustes_puntos").update({"Estado": "Rechazada"}).eq("id", p_id).execute(); recargar_app()
+                            try:
+                                supabase.table("ajustes_puntos").update({"Estado": "Rechazada"}).eq("id", p_id).execute()
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "rechazando puntos")
                             
             st.subheader("📬 Buzón de Quejas y Reportes")
             for r in reportes_log:
@@ -2235,7 +2286,10 @@ elif pestaña == "💼 Panel de Gerencia":
                     r_id = r.get("id")
                     st.markdown(f"<div class='report-box'><b>📬 NUEVO REPORTE</b> | Fecha: {r['Fecha']} {r['Hora']}<br><b>Emisor:</b> {r['Emisor']} | <b>Tipo:</b> {r['Tipo']}<br><b>Detalle:</b> <i>'{r['Detalle']}'</i></div>", unsafe_allow_html=True)
                     if st.button("Marcar como Visto", key=f"visto_rep_{r_id}"):
-                        supabase.table("reportes").update({"Estado": "Visto"}).eq("id", r_id).execute(); recargar_app()
+                        try:
+                            supabase.table("reportes").update({"Estado": "Visto"}).eq("id", r_id).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "marcando reporte")
 
         with tab_perfil:
             st.markdown('<div class="main-title" style="font-size: 2rem;">👤 Dossier Individual 360°</div>', unsafe_allow_html=True)
@@ -2368,9 +2422,11 @@ elif pestaña == "💼 Panel de Gerencia":
                         if any(e.lower() == n_emp.lower() for e in lista_empleados):
                             st.error("🚨 Ese empleado ya existe. No se permiten nombres repetidos.")
                         else:
-                            supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_asignar, "device_id": ""}).execute()
-                            st.success(f"✅ Empleado '{n_emp}' agregado correctamente.")
-                            recargar_app()
+                            try:
+                                supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_asignar, "device_id": ""}).execute()
+                                st.success(f"✅ Empleado '{n_emp}' agregado correctamente.")
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "agregando empleado")
                         
                 if lista_empleados:
                     st.markdown("---")
@@ -2386,54 +2442,62 @@ elif pestaña == "💼 Panel de Gerencia":
                             if any(e.lower() == nn.lower() for e in lista_empleados):
                                 st.error("🚨 Ese nombre ya está en uso por otro empleado.")
                             else:
-                                supabase.table("empleados").update({"nombre": nn, "rol": nuevo_rol}).eq("nombre", emp_mod).execute()
-                                
-                                try: supabase.table("ajustes_puntos").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("ajustes_puntos").update({"Autor": nn}).eq("Autor", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("salidas_pendientes").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("salidas_pendientes").update({"Autor": nn}).eq("Autor", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("correcciones_pendientes").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("reportes").update({"Emisor": nn}).eq("Emisor", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("reportes").update({"Implicado": nn}).eq("Implicado", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("alertas_ingreso").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("mensajes").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("sueldos_historico").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("cierres_caja").update({"Cajero": nn}).eq("Cajero", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("planificacion_turnos").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("asistencia").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("tareas_log").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
-                                except: pass
-                                try: supabase.table("tareas_individuales").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                except: pass
-                                
-                                st.success(f"Nombre actualizado a {nn} en toda la base de datos.")
-                                recargar_app()
+                                try:
+                                    supabase.table("empleados").update({"nombre": nn, "rol": nuevo_rol}).eq("nombre", emp_mod).execute()
+                                    
+                                    try: supabase.table("ajustes_puntos").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("ajustes_puntos").update({"Autor": nn}).eq("Autor", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("salidas_pendientes").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("salidas_pendientes").update({"Autor": nn}).eq("Autor", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("correcciones_pendientes").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("reportes").update({"Emisor": nn}).eq("Emisor", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("reportes").update({"Implicado": nn}).eq("Implicado", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("alertas_ingreso").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("mensajes").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("sueldos_historico").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("cierres_caja").update({"Cajero": nn}).eq("Cajero", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("planificacion_turnos").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("asistencia").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("tareas_log").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    except: pass
+                                    try: supabase.table("tareas_individuales").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                    except: pass
+                                    
+                                    st.success(f"Nombre actualizado a {nn} en toda la base de datos.")
+                                    recargar_app()
+                                except Exception as e: show_db_error(e, "actualizando empleado")
                         else:
-                            supabase.table("empleados").update({"rol": nuevo_rol}).eq("nombre", emp_mod).execute()
-                            st.success("Rol actualizado.")
-                            recargar_app()
+                            try:
+                                supabase.table("empleados").update({"rol": nuevo_rol}).eq("nombre", emp_mod).execute()
+                                st.success("Rol actualizado.")
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "actualizando rol")
                         
                     if c_mod2.button("🔓 Liberar Celular") and emp_mod in dispositivos_vinculados:
-                        supabase.table("empleados").update({"device_id": ""}).eq("nombre", emp_mod).execute()
-                        recargar_app()
+                        try:
+                            supabase.table("empleados").update({"device_id": ""}).eq("nombre", emp_mod).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "liberando celular")
                     if c_mod3.button("🗑️ Borrar Empleado"):
-                        supabase.table("empleados").delete().eq("nombre", emp_mod).execute()
-                        try: supabase.table("tareas_individuales").delete().eq("empleado", emp_mod).execute()
-                        except: pass
-                        recargar_app()
+                        try:
+                            supabase.table("empleados").delete().eq("nombre", emp_mod).execute()
+                            try: supabase.table("tareas_individuales").delete().eq("empleado", emp_mod).execute()
+                            except: pass
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "borrando empleado")
                         
             with col_s2:
                 st.subheader("📋 Asignar Tareas Extra")
@@ -2442,11 +2506,13 @@ elif pestaña == "💼 Panel de Gerencia":
                 n_tarea, p_tarea = st.text_input("Nombre Tarea:"), st.number_input("Puntos:", value=5, min_value=1)
                 
                 if st.button("➕ Asignar Tarea") and n_tarea:
-                    if tipo_asig == "Rol General":
-                        supabase.table("tareas_roles").insert({"rol": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
-                    else:
-                        supabase.table("tareas_individuales").insert({"empleado": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
-                    recargar_app()
+                    try:
+                        if tipo_asig == "Rol General":
+                            supabase.table("tareas_roles").insert({"rol": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
+                        else:
+                            supabase.table("tareas_individuales").insert({"empleado": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "asignando tarea")
                     
                 ver_t_tipo = st.radio("Ver tareas de:", ["Roles", "Personales"])
                 diccionario_ver = tareas_roles if ver_t_tipo == "Roles" else tareas_individuales
@@ -2458,8 +2524,10 @@ elif pestaña == "💼 Panel de Gerencia":
                                 c_t1, c_t2 = st.columns([3,1])
                                 c_t1.write(f"- {t.get('tarea')} (+{t.get('puntos')})")
                                 if c_t2.button("🗑️", key=f"del_t_{t_id}"):
-                                    supabase.table("tareas_roles" if ver_t_tipo == "Roles" else "tareas_individuales").delete().eq("id", t_id).execute()
-                                    recargar_app()
+                                    try:
+                                        supabase.table("tareas_roles" if ver_t_tipo == "Roles" else "tareas_individuales").delete().eq("id", t_id).execute()
+                                        recargar_app()
+                                    except Exception as e: show_db_error(e, "eliminando tarea")
 
         with tab_tiendas:
             col_l1, col_l2 = st.columns(2)
@@ -2484,8 +2552,10 @@ elif pestaña == "💼 Panel de Gerencia":
                     lon_loc = st.number_input("Lon:", format="%.6f")
                     ip_loc = st.text_input("IP Wi-Fi:")
                     if st.button("➕ Crear Tienda") and n_loc:
-                        supabase.table("locales").insert({"nombre": n_loc, "lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}).execute()
-                        recargar_app()
+                        try:
+                            supabase.table("locales").insert({"nombre": n_loc, "lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "creando tienda")
                         
                 st.markdown("---")
                 st.markdown("**✏️ Editar Tienda Existente**")
@@ -2500,26 +2570,33 @@ elif pestaña == "💼 Panel de Gerencia":
                         nuevo_nombre = n_loc_mod.strip()
                         if nuevo_nombre and nuevo_nombre != loc_mod:
                             if nuevo_nombre not in lista_locales:
-                                supabase.table("locales").update({"nombre": nuevo_nombre, "lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
-                                try: supabase.table("planificacion_turnos").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
-                                except: pass
-                                try: supabase.table("asistencia").update({"Sucursal": nuevo_nombre}).eq("Sucursal", loc_mod).execute()
-                                except: pass
-                                try: supabase.table("cierres_caja").update({"Sucursal": nuevo_nombre}).eq("Sucursal", loc_mod).execute()
-                                except: pass
-                                st.success(f"✅ Tienda actualizada a {nuevo_nombre}.")
-                                recargar_app()
+                                try:
+                                    supabase.table("locales").update({"nombre": nuevo_nombre, "lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
+                                    try: supabase.table("planificacion_turnos").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
+                                    except: pass
+                                    try: supabase.table("asistencia").update({"Sucursal": nuevo_nombre}).eq("Sucursal", loc_mod).execute()
+                                    except: pass
+                                    try: supabase.table("cierres_caja").update({"Sucursal": nuevo_nombre}).eq("Sucursal", loc_mod).execute()
+                                    except: pass
+                                    st.success(f"✅ Tienda actualizada a {nuevo_nombre}.")
+                                    recargar_app()
+                                except Exception as e: show_db_error(e, "actualizando tienda")
                             else:
                                 st.warning("⚠️ Ese nombre de tienda ya existe.")
                         else:
-                            supabase.table("locales").update({"lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
-                            st.success("✅ Datos de la tienda actualizados.")
-                            recargar_app()
+                            try:
+                                supabase.table("locales").update({"lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
+                                st.success("✅ Datos de la tienda actualizados.")
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "actualizando tienda")
 
                 st.markdown("---")
                 borrar_loc = st.selectbox("Eliminar Tienda:", ["Seleccionar..."] + list(lista_locales.keys()))
                 if st.button("🗑️ Eliminar Tienda") and borrar_loc != "Seleccionar...":
-                    supabase.table("locales").delete().eq("nombre", borrar_loc).execute(); recargar_app()
+                    try:
+                        supabase.table("locales").delete().eq("nombre", borrar_loc).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "eliminando tienda")
                     
             with col_l2:
                 st.subheader("⏰ Turnos / Horarios")
@@ -2530,8 +2607,10 @@ elif pestaña == "💼 Panel de Gerencia":
                     c_h1, c_h2 = st.columns(2)
                     h_ingreso, h_salida = c_h1.time_input("Ingreso:"), c_h2.time_input("Salida:")
                     if st.button("➕ Crear Horario") and n_turno:
-                        supabase.table("turnos").insert({"nombre": n_turno, "ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}).execute()
-                        recargar_app()
+                        try:
+                            supabase.table("turnos").insert({"nombre": n_turno, "ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "creando horario")
                         
                 st.markdown("---")
                 st.markdown("**✏️ Editar Horario Existente**")
@@ -2552,22 +2631,29 @@ elif pestaña == "💼 Panel de Gerencia":
                         nuevo_nombre_t = n_turno_mod.strip()
                         if nuevo_nombre_t and nuevo_nombre_t != turno_mod:
                             if nuevo_nombre_t not in lista_turnos:
-                                supabase.table("turnos").update({"nombre": nuevo_nombre_t, "ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
-                                try: supabase.table("planificacion_turnos").update({"turno": nuevo_nombre_t}).eq("turno", turno_mod).execute()
-                                except: pass
-                                st.success("✅ Turno actualizado.")
-                                recargar_app()
+                                try:
+                                    supabase.table("turnos").update({"nombre": nuevo_nombre_t, "ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
+                                    try: supabase.table("planificacion_turnos").update({"turno": nuevo_nombre_t}).eq("turno", turno_mod).execute()
+                                    except: pass
+                                    st.success("✅ Turno actualizado.")
+                                    recargar_app()
+                                except Exception as e: show_db_error(e, "actualizando horario")
                             else:
                                 st.warning("⚠️ Ese nombre de turno ya existe.")
                         else:
-                            supabase.table("turnos").update({"ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
-                            st.success("✅ Horario actualizado.")
-                            recargar_app()
+                            try:
+                                supabase.table("turnos").update({"ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
+                                st.success("✅ Horario actualizado.")
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "actualizando horario")
 
                 st.markdown("---")
                 borrar_turno = st.selectbox("Eliminar Turno:", ["Seleccionar..."] + list(lista_turnos.keys()))
                 if st.button("🗑️ Eliminar Turno") and borrar_turno != "Seleccionar...":
-                    supabase.table("turnos").delete().eq("nombre", borrar_turno).execute(); recargar_app()
+                    try:
+                        supabase.table("turnos").delete().eq("nombre", borrar_turno).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "eliminando turno")
 
         with tab_comunicados:
             col_m1, col_m2 = st.columns(2)
@@ -2577,14 +2663,18 @@ elif pestaña == "💼 Panel de Gerencia":
                     dest_ing = st.selectbox("Destinatario:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados))
                     txt_alerta = st.text_area("Mensaje:")
                     if st.form_submit_button("Crear Alerta") and txt_alerta:
-                        supabase.table("alertas_ingreso").insert({"destinatario": dest_ing, "texto": txt_alerta}).execute()
-                        recargar_app()
+                        try:
+                            supabase.table("alertas_ingreso").insert({"destinatario": dest_ing, "texto": txt_alerta}).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "creando alerta")
                 for a in alertas_ingreso:
                     a_id = a.get("id")
                     with st.expander(f"A {a.get('destinatario', a.get('Destinatario'))}: {a.get('texto', a.get('Texto'))[:20]}..."):
                         if st.button("🗑️ Eliminar", key=f"del_al_{a_id}"):
-                            supabase.table("alertas_ingreso").delete().eq("id", a_id).execute()
-                            recargar_app()
+                            try:
+                                supabase.table("alertas_ingreso").delete().eq("id", a_id).execute()
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "eliminando alerta")
                             
             with col_m2:
                 st.subheader("📢 Anuncio Fijo")
@@ -2592,15 +2682,19 @@ elif pestaña == "💼 Panel de Gerencia":
                     dest_fijo = st.selectbox("Destinatario:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="fijo")
                     txt_fijo = st.text_area("Mensaje:")
                     if st.form_submit_button("Publicar") and txt_fijo:
-                        supabase.table("mensajes").insert({"destinatario": dest_fijo, "texto": txt_fijo}).execute()
-                        recargar_app()
+                        try:
+                            supabase.table("mensajes").insert({"destinatario": dest_fijo, "texto": txt_fijo}).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "creando anuncio")
                 for m in lista_mensajes:
                     m_id = m.get("id")
                     with st.expander(f"A {m.get('destinatario', 'Todos')}: {m.get('texto', '')[:20]}..."):
                         st.write(m.get('texto', ''))
                         if st.button("🗑️ Eliminar", key=f"del_msg_{m_id}"):
-                            supabase.table("mensajes").delete().eq("id", m_id).execute()
-                            recargar_app()
+                            try:
+                                supabase.table("mensajes").delete().eq("id", m_id).execute()
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "eliminando anuncio")
 
         with tab_config:
             st.subheader("⚙️ Configuración General")
