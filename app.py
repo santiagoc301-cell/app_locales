@@ -2596,4 +2596,41 @@ elif pestaña == "💼 Panel de Gerencia":
                         recargar_app()
                 for m in lista_mensajes:
                     m_id = m.get("id")
-I'm having a hard time fulfilling your request. Can I help you with something else instead?
+                    with st.expander(f"A {m.get('destinatario', 'Todos')}: {m.get('texto', '')[:20]}..."):
+                        st.write(m.get('texto', ''))
+                        if st.button("🗑️ Eliminar", key=f"del_msg_{m_id}"):
+                            supabase.table("mensajes").delete().eq("id", m_id).execute()
+                            recargar_app()
+
+        with tab_config:
+            st.subheader("⚙️ Configuración General")
+            with st.form("form_config"):
+                nuevo_titulo = st.text_input("Título del Portal", value=config_app.get("titulo_portal", "🏢 Portal Corporativo"))
+                nueva_pass = st.text_input("Contraseña de Gerencia", value=config_app.get("admin_password", "1234"), type="password")
+                nueva_tol = st.number_input("Tolerancia de llegada (minutos)", value=int(config_app.get("tolerancia_minutos", 10)))
+                nuevo_msg_dia = st.text_area("Mensaje del Día (Opcional)", value=config_app.get("mensaje_dia", ""))
+                
+                n_gps = st.checkbox("Verificar GPS", value=get_bool_config("verificar_gps", True))
+                n_wifi = st.checkbox("Verificar Wi-Fi", value=get_bool_config("verificar_wifi", False))
+                n_auto = st.checkbox("Permitir Auto-registro de empleados", value=get_bool_config("autoregistro", False))
+                
+                if st.form_submit_button("💾 Guardar Configuración"):
+                    config_app["titulo_portal"] = nuevo_titulo
+                    config_app["admin_password"] = nueva_pass
+                    config_app["tolerancia_minutos"] = nueva_tol
+                    config_app["mensaje_dia"] = nuevo_msg_dia
+                    config_app["verificar_gps"] = n_gps
+                    config_app["verificar_wifi"] = n_wifi
+                    config_app["autoregistro"] = n_auto
+                    save_json("config", config_app)
+                    st.success("Configuración actualizada correctamente.")
+                    recargar_app()
+
+        with tab_espia:
+            st.subheader("🕵️ Modo Espía (Incógnito)")
+            st.write("Ingresá a la app simulando ser un empleado para ver exactamente cómo se visualiza su portal y validar sus configuraciones.")
+            emp_espia = st.selectbox("Seleccionar empleado a simular:", ["Seleccionar..."] + sorted(lista_empleados))
+            if st.button("🕶️ Iniciar Modo Incógnito") and emp_espia != "Seleccionar...":
+                st.session_state['incognito'] = True
+                st.session_state['incognito_user'] = emp_espia
+                recargar_app()
