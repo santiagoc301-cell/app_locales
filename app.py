@@ -137,6 +137,13 @@ div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 900; color: #
 """, unsafe_allow_html=True)
 
 # ==========================================
+# ⚡ FUNCIÓN MAESTRA DE RECARGA Y LIMPIEZA
+# ==========================================
+def recargar_app():
+    st.cache_data.clear()
+    st.rerun()
+
+# ==========================================
 # ☁️ 1. CONEXIÓN A SUPABASE (LA NUBE)
 # ==========================================
 @st.cache_resource
@@ -151,7 +158,7 @@ def init_connection():
 
 supabase = init_connection()
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def get_all_settings():
     try:
         res = supabase.table('app_data').select('id, data').execute()
@@ -196,6 +203,7 @@ def save_json(key_name, data):
     except Exception as e:
         st.error(f"❌ Error guardando '{key_name}': {e}")
 
+@st.cache_data(ttl=15, show_spinner=False)
 def load_df(table_name):
     try:
         res = supabase.table(table_name).select('*').execute()
@@ -203,6 +211,7 @@ def load_df(table_name):
     except Exception as e:
         return pd.DataFrame()
 
+@st.cache_data(ttl=15, show_spinner=False)
 def load_table_list(table_name):
     try:
         res = supabase.table(table_name).select('*').execute()
@@ -466,14 +475,14 @@ if pestaña == "📱 Portal del Empleado":
         if st.button("❌ Salir del Modo Incógnito", key="btn_exit_inc_emp"):
             st.session_state['incognito'] = False
             st.session_state['incognito_user'] = None
-            st.rerun()
+            recargar_app()
     else:
         if 'device_id' not in st.session_state:
             js_get_device = "(function() { let id = localStorage.getItem('tienda_app_device_id'); if (!id) { id = 'dev_' + Math.random().toString(36).substring(2, 15); localStorage.setItem('tienda_app_device_id', id); } return id; })();"
             did = streamlit_js_eval(js_expressions=js_get_device, want_output=True, key="get_dev_id")
             if did:
                 st.session_state['device_id'] = did
-                st.rerun()
+                recargar_app()
         device_id = st.session_state.get('device_id')
 
     if config_app.get("mensaje_dia", "").strip() != "":
@@ -629,7 +638,7 @@ if pestaña == "📱 Portal del Empleado":
                                     if a['destinatario'] in ['Todos', empleado_en_celu, rol_empleado]:
                                         msg_final += f"\n\n📢 {a['texto']}"
                                 st.session_state['fichaje_exitoso'] = msg_final
-                                st.rerun()
+                                recargar_app()
                     else:
                         if get_bool_config("verificar_gps", True) and (not ubicacion or 'coords' not in ubicacion):
                             st.info("⏳ Detectando ubicación satelital... Por favor, permití el acceso al GPS en tu celular.")
@@ -689,7 +698,7 @@ if pestaña == "📱 Portal del Empleado":
                                 insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_detectado), "Turno": str(turno_seleccionado), "Tipo": "Entrada", "Estado": str(estado_llegada), "Distancia_m": round(float(distancia_real), 1), "Nota": "Ingreso por cambio de local."})
                                 
                                 st.session_state['fichaje_exitoso'] = f"¡Saliste de {local_actual} e ingresaste a {local_detectado} a las {hora_hoy}!"
-                                st.rerun()
+                                recargar_app()
                     else:
                         st.markdown("### 🏃‍♂️ Finalizar Turno")
                         st.success(f"🏢 Actualmente trabajando en **{local_actual}** (Horario: {turno_actual}).")
@@ -742,7 +751,7 @@ if pestaña == "📱 Portal del Empleado":
                                 if st.button("🔴 REGISTRAR SALIDA", use_container_width=True, type="primary"):
                                     insert_row("asistencia", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Sucursal": str(local_actual), "Turno": str(turno_actual), "Tipo": "Salida", "Estado": "Salida", "Distancia_m": round(float(distancia_salida), 1), "Nota": str(nota_empleado)})
                                     st.session_state['fichaje_exitoso'] = f"¡Salida registrada a las {hora_hoy}! Buen descanso."
-                                    st.rerun()
+                                    recargar_app()
                             else:
                                 st.error("🚨 El sistema exige que finalices tu turno físicamente dentro de la sucursal.")
 
@@ -790,7 +799,7 @@ if pestaña == "📱 Portal del Empleado":
                                     "Motivo": motivo_olv.strip()
                                 })
                                 st.success("✅ ¡Solicitud enviada a Gerencia! Se te notificará cuando sea auditada.")
-                                st.rerun()
+                                recargar_app()
 
             # 3. AVISOS Y MENSAJES
             st.markdown("---")
@@ -996,7 +1005,7 @@ if pestaña == "📱 Portal del Empleado":
                                                 "Nota": str(nota_final), "Autor": str(empleado_en_celu)
                                             })
                                             st.success(f"✅ Solicitud de salida de {s_emp_salida} enviada a Gerencia para revisión.")
-                                            st.rerun()
+                                            recargar_app()
                         else:
                             st.info("ℹ️ No hay otros compañeros trabajando en esta sucursal en este momento.")
                     else:
@@ -1065,7 +1074,7 @@ if pestaña == "📱 Portal del Empleado":
                             c_t1.write(f"📌 {t_nombre} (+{t_puntos} pts)")
                             if c_t2.button("✔️ Listo", key=f"btn_t_{t_nombre}"):
                                 insert_row("tareas_log", {"Fecha": str(fecha_hoy), "Hora": str(hora_hoy), "Empleado": str(empleado_en_celu), "Tarea": str(t_nombre), "Puntos": str(t_puntos), "Estado": "Pendiente"})
-                                st.rerun()
+                                recargar_app()
                                 
             # 9. HISTORIAL RECIENTE
             with st.expander("🕒 Mi historial reciente"):
@@ -1104,7 +1113,7 @@ if pestaña == "📱 Portal del Empleado":
                             supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_elegido_auto, "device_id": device_id}).execute()
                         else:
                             supabase.table("empleados").update({"rol": rol_elegido_auto, "device_id": device_id}).eq("nombre", match).execute()
-                        st.rerun()
+                        recargar_app()
             else:
                 st.info("🔒 **Auto-registro deshabilitado.** Pedile a gerencia que te dé de alta en la lista o seleccioná tu nombre si ya existís.")
                 emp_vincular = st.selectbox("Identificate:", ["Seleccionar..."] + sorted(lista_empleados))
@@ -1115,7 +1124,7 @@ if pestaña == "📱 Portal del Empleado":
                         st.error("❌ Este celular ya está vinculado a otra persona. No se permite prestar el celular a otro compañero.")
                     else:
                         supabase.table("empleados").update({"device_id": device_id}).eq("nombre", emp_vincular).execute()
-                        st.rerun()
+                        recargar_app()
 
 # ==========================================
 # 6. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
@@ -1138,7 +1147,7 @@ elif pestaña == "💼 Panel de Gerencia":
         if st.button("❌ Salir del Modo Incógnito", key="btn_exit_inc_ger"):
             st.session_state['incognito'] = False
             st.session_state['incognito_user'] = None
-            st.rerun()
+            recargar_app()
         acceso_concedido = True
 
     if acceso_concedido:
@@ -1407,7 +1416,7 @@ elif pestaña == "💼 Panel de Gerencia":
                         else:
                             insert_row("cierres_caja", {"Fecha": caj_fecha.strftime("%Y-%m-%d"), "Hora": hora_hoy, "Cajero": caj_emp, "Sucursal": caj_suc, "Turno": "N/A", "Efectivo": val_efectivo, "Tarjeta": val_tarjeta, "Transferencia": val_transf, "Total_Ventas": val_total, "Nota": nota_caja.strip()})
                             st.success("✅ ¡Cierre de caja guardado correctamente!")
-                            st.rerun()
+                            recargar_app()
 
             with st.expander("✏️ Modificar o Eliminar Cierres Existentes", expanded=False):
                 if cierres_caja:
@@ -1455,14 +1464,14 @@ elif pestaña == "💼 Panel de Gerencia":
                                         "Nota": n_nota.strip()
                                     }).eq("id", cc_id).execute()
                                     st.success("✅ Cierre actualizado.")
-                                    st.rerun()
+                                    recargar_app()
                                 else:
                                     st.warning("⚠️ Faltan seleccionar Empleado o Sucursal.")
                                     
                             if c_edcb2.button("🗑️ Eliminar Cierre", key=f"btn_d_c_{cc_id}"):
                                 supabase.table("cierres_caja").delete().eq("id", cc_id).execute()
                                 st.success("🗑️ Cierre eliminado.")
-                                st.rerun()
+                                recargar_app()
                 else:
                     st.info("No hay cierres registrados todavía.")
                     
@@ -1550,7 +1559,7 @@ elif pestaña == "💼 Panel de Gerencia":
                         else:
                             insert_row("sueldos_historico", {"Empleado": emp_s, "Fecha_Desde": f_ini.strftime("%Y-%m-%d"), "Fecha_Hasta": f_fin.strftime("%Y-%m-%d"), "Valor_Hora": val_s})
                             st.success(f"✅ ¡Tarifa de ${val_s}/h guardada para {emp_s}!")
-                            st.rerun()
+                            recargar_app()
             with c_su2:
                 st.subheader("📜 Historial y Edición de Tarifas")
                 if sueldos_historico:
@@ -1597,10 +1606,10 @@ elif pestaña == "💼 Panel de Gerencia":
                                         'Fecha_Desde': n_ini.strftime("%Y-%m-%d"),
                                         'Fecha_Hasta': n_fin_str
                                     }).eq("id", s_id).execute()
-                                    st.rerun()
+                                    recargar_app()
                                 if c_b2.button("🗑️ Eliminar Tarifa", key=f"del_s_{s_id}"):
                                     supabase.table("sueldos_historico").delete().eq("id", s_id).execute()
-                                    st.rerun()
+                                    recargar_app()
                     else:
                         st.info("No se encontraron tarifas en ese rango de fechas.")
                 else: 
@@ -1675,7 +1684,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             "Nota": f"[Carga Manual] {add_nota}".strip()
                         })
                         st.success(f"✅ Fichaje manual agregado correctamente. (Estado: {estado_final})")
-                        st.rerun()
+                        recargar_app()
             st.markdown("---")
             
             st.markdown("### ✏️ Modificar Fichajes Existentes")
@@ -1738,11 +1747,11 @@ elif pestaña == "💼 Panel de Gerencia":
                                             "Nota": nueva_nota
                                         }).eq("id", int(row['id'])).execute()
                                         st.success("¡Fichaje actualizado correctamente!")
-                                        st.rerun()
+                                        recargar_app()
                                     if c_btn2.button("🗑️ Eliminar Fichaje", key=f"btn_del_{row['id']}"):
                                         supabase.table("asistencia").delete().eq("id", int(row['id'])).execute()
                                         st.success("Fichaje eliminado.")
-                                        st.rerun()
+                                        recargar_app()
                     else:
                         st.info("No hay fichajes registrados para este día y este empleado.")
                         
@@ -1812,7 +1821,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 if inserts:
                     supabase.table("planificacion_turnos").insert(inserts).execute()
                 st.success("✅ ¡Planificación semanal guardada con éxito!")
-                st.rerun()
+                recargar_app()
                 
             st.markdown("---")
             st.subheader("⚖️ Comparativa: Planificado vs. Real")
@@ -1979,12 +1988,12 @@ elif pestaña == "💼 Panel de Gerencia":
                             
                             supabase.table("puntos_cajero_pendientes").update({"Estado": "Aprobado"}).eq("id", pt_id).execute()
                             st.success("Bono/Multa aplicado al compañero exitosamente.")
-                            st.rerun()
+                            recargar_app()
                             
                         if c2.button("❌ Denegar y descartar", key=f"den_caj_{pt_id}"):
                             supabase.table("puntos_cajero_pendientes").update({"Estado": "Rechazado"}).eq("id", pt_id).execute()
                             st.info("Sugerencia de puntos rechazada y descartada.")
-                            st.rerun()
+                            recargar_app()
             else:
                 st.info("No hay sugerencias de puntos pendientes de auditoría.")
             
@@ -2002,7 +2011,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     else:
                         insert_row("ajustes_puntos", {"Fecha": ap_fecha.strftime("%Y-%m-%d"), "Empleado": ap_emp, "Puntos": ap_puntos, "Motivo": ap_motivo.strip(), "Autor": "Gerencia", "Estado": "Aprobada"})
                         st.success("✅ Bono/Multa aplicado y guardado en la nube.")
-                        st.rerun()
+                        recargar_app()
 
         with tab_tareas:
             st.subheader("🚪 Solicitudes de Retiro Temprano")
@@ -2015,14 +2024,15 @@ elif pestaña == "💼 Panel de Gerencia":
                         insert_row("asistencia", {"Fecha": sp["Fecha"], "Hora": sp["Hora"], "Empleado": sp["Empleado"], "Sucursal": sp["Sucursal"], "Turno": sp["Turno"], "Tipo": "Salida", "Estado": "Retiro Temprano", "Nota": sp["Nota"]})
                         supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
                         st.success("Salida aprobada y registrada en la asistencia.")
-                        st.rerun()
+                        recargar_app()
                     if c2.button("❌ Denegar", key=f"den_sal_{sp_id}"):
                         supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
                         st.success("Solicitud denegada y eliminada.")
-                        st.rerun()
+                        recargar_app()
             else:
                 st.info("No hay solicitudes de retiro temprano pendientes.")
                 
+            # --- NUEVO: AUDITORÍA DE CORRECCIÓN DE FICHAJES (OLVIDOS) ---
             st.markdown("---")
             st.subheader("⏰ Solicitudes de Corrección de Ingreso (Olvidos)")
             if correcciones_pendientes:
@@ -2088,12 +2098,12 @@ elif pestaña == "💼 Panel de Gerencia":
                         supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
                         
                         st.success(f"✅ Ingreso corregido correctamente. Se aplicó la penalidad de {pts_penalidad} pts a {cp['Empleado']}.")
-                        st.rerun()
+                        recargar_app()
                         
                     if c2.button("❌ Denegar", key=f"den_olv_{cp_id}"):
                         supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
                         st.info("❌ Solicitud de corrección rechazada.")
-                        st.rerun()
+                        recargar_app()
             else:
                 st.info("No hay solicitudes de corrección de ingreso (olvidos) pendientes.")
 
@@ -2107,10 +2117,10 @@ elif pestaña == "💼 Panel de Gerencia":
                     c_p1.markdown(f"**{row['Empleado']}** reportó: '{row['Tarea']}' (+{row['Puntos']} pts)")
                     if c_p2.button("✅ Aprobar", key=f"apr_t_{row['id']}"):
                         supabase.table("tareas_log").update({"Estado": "Aprobada"}).eq("id", int(row['id'])).execute()
-                        st.rerun()
+                        recargar_app()
                     if c_p3.button("❌ Rechazar", key=f"rec_t_{row['id']}"):
                         supabase.table("tareas_log").update({"Estado": "Rechazada"}).eq("id", int(row['id'])).execute()
-                        st.rerun()
+                        recargar_app()
                         
             puntos_pendientes = [p for p in lista_puntos if p.get("Estado") == "Pendiente"]
             if puntos_pendientes:
@@ -2121,9 +2131,9 @@ elif pestaña == "💼 Panel de Gerencia":
                         c_pp1, c_pp2, c_pp3 = st.columns([4, 1, 1])
                         c_pp1.markdown(f"**{p['Autor']}** sugiere **{p['Puntos']} pts** a **{p['Empleado']}** (Motivo: {p['Motivo']})")
                         if c_pp2.button("✅ Aprobar", key=f"apr_p_{p_id}"):
-                            supabase.table("ajustes_puntos").update({"Estado": "Aprobada"}).eq("id", p_id).execute(); st.rerun()
+                            supabase.table("ajustes_puntos").update({"Estado": "Aprobada"}).eq("id", p_id).execute(); recargar_app()
                         if c_pp3.button("❌ Rechazar", key=f"rec_p_{p_id}"):
-                            supabase.table("ajustes_puntos").update({"Estado": "Rechazada"}).eq("id", p_id).execute(); st.rerun()
+                            supabase.table("ajustes_puntos").update({"Estado": "Rechazada"}).eq("id", p_id).execute(); recargar_app()
                             
             st.subheader("📬 Buzón de Quejas y Reportes")
             for r in reportes_log:
@@ -2131,7 +2141,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     r_id = r.get("id")
                     st.markdown(f"<div class='report-box'><b>📬 NUEVO REPORTE</b> | Fecha: {r['Fecha']} {r['Hora']}<br><b>Emisor:</b> {r['Emisor']} | <b>Tipo:</b> {r['Tipo']}<br><b>Detalle:</b> <i>'{r['Detalle']}'</i></div>", unsafe_allow_html=True)
                     if st.button("Marcar como Visto", key=f"visto_rep_{r_id}"):
-                        supabase.table("reportes").update({"Estado": "Visto"}).eq("id", r_id).execute(); st.rerun()
+                        supabase.table("reportes").update({"Estado": "Visto"}).eq("id", r_id).execute(); recargar_app()
 
         with tab_perfil:
             st.markdown('<div class="main-title" style="font-size: 2rem;">👤 Dossier Individual 360°</div>', unsafe_allow_html=True)
@@ -2266,7 +2276,7 @@ elif pestaña == "💼 Panel de Gerencia":
                         else:
                             supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_asignar, "device_id": ""}).execute()
                             st.success(f"✅ Empleado '{n_emp}' agregado correctamente.")
-                            st.rerun()
+                            recargar_app()
                         
                 if lista_empleados:
                     st.markdown("---")
@@ -2316,20 +2326,20 @@ elif pestaña == "💼 Panel de Gerencia":
                                 except: pass
                                 
                                 st.success(f"Nombre actualizado a {nn} en toda la base de datos.")
-                                st.rerun()
+                                recargar_app()
                         else:
                             supabase.table("empleados").update({"rol": nuevo_rol}).eq("nombre", emp_mod).execute()
                             st.success("Rol actualizado.")
-                            st.rerun()
+                            recargar_app()
                         
                     if c_mod2.button("🔓 Liberar Celular") and emp_mod in dispositivos_vinculados:
                         supabase.table("empleados").update({"device_id": ""}).eq("nombre", emp_mod).execute()
-                        st.rerun()
+                        recargar_app()
                     if c_mod3.button("🗑️ Borrar Empleado"):
                         supabase.table("empleados").delete().eq("nombre", emp_mod).execute()
                         try: supabase.table("tareas_individuales").delete().eq("empleado", emp_mod).execute()
                         except: pass
-                        st.rerun()
+                        recargar_app()
                         
             with col_s2:
                 st.subheader("📋 Asignar Tareas Extra")
@@ -2342,7 +2352,7 @@ elif pestaña == "💼 Panel de Gerencia":
                         supabase.table("tareas_roles").insert({"rol": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
                     else:
                         supabase.table("tareas_individuales").insert({"empleado": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
-                    st.rerun()
+                    recargar_app()
                     
                 ver_t_tipo = st.radio("Ver tareas de:", ["Roles", "Personales"])
                 diccionario_ver = tareas_roles if ver_t_tipo == "Roles" else tareas_individuales
@@ -2355,7 +2365,7 @@ elif pestaña == "💼 Panel de Gerencia":
                                 c_t1.write(f"- {t.get('tarea')} (+{t.get('puntos')})")
                                 if c_t2.button("🗑️", key=f"del_t_{t_id}"):
                                     supabase.table("tareas_roles" if ver_t_tipo == "Roles" else "tareas_individuales").delete().eq("id", t_id).execute()
-                                    st.rerun()
+                                    recargar_app()
 
         with tab_tiendas:
             col_l1, col_l2 = st.columns(2)
@@ -2381,7 +2391,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     ip_loc = st.text_input("IP Wi-Fi:")
                     if st.button("➕ Crear Tienda") and n_loc:
                         supabase.table("locales").insert({"nombre": n_loc, "lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}).execute()
-                        st.rerun()
+                        recargar_app()
                         
                 st.markdown("---")
                 st.markdown("**✏️ Editar Tienda Existente**")
@@ -2404,18 +2414,18 @@ elif pestaña == "💼 Panel de Gerencia":
                                 try: supabase.table("cierres_caja").update({"Sucursal": nuevo_nombre}).eq("Sucursal", loc_mod).execute()
                                 except: pass
                                 st.success(f"✅ Tienda actualizada a {nuevo_nombre}.")
-                                st.rerun()
+                                recargar_app()
                             else:
                                 st.warning("⚠️ Ese nombre de tienda ya existe.")
                         else:
                             supabase.table("locales").update({"lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
                             st.success("✅ Datos de la tienda actualizados.")
-                            st.rerun()
+                            recargar_app()
 
                 st.markdown("---")
                 borrar_loc = st.selectbox("Eliminar Tienda:", ["Seleccionar..."] + list(lista_locales.keys()))
                 if st.button("🗑️ Eliminar Tienda") and borrar_loc != "Seleccionar...":
-                    supabase.table("locales").delete().eq("nombre", borrar_loc).execute(); st.rerun()
+                    supabase.table("locales").delete().eq("nombre", borrar_loc).execute(); recargar_app()
                     
             with col_l2:
                 st.subheader("⏰ Turnos / Horarios")
@@ -2427,7 +2437,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     h_ingreso, h_salida = c_h1.time_input("Ingreso:"), c_h2.time_input("Salida:")
                     if st.button("➕ Crear Horario") and n_turno:
                         supabase.table("turnos").insert({"nombre": n_turno, "ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}).execute()
-                        st.rerun()
+                        recargar_app()
                         
                 st.markdown("---")
                 st.markdown("**✏️ Editar Horario Existente**")
@@ -2452,18 +2462,18 @@ elif pestaña == "💼 Panel de Gerencia":
                                 try: supabase.table("planificacion_turnos").update({"turno": nuevo_nombre_t}).eq("turno", turno_mod).execute()
                                 except: pass
                                 st.success("✅ Turno actualizado.")
-                                st.rerun()
+                                recargar_app()
                             else:
                                 st.warning("⚠️ Ese nombre de turno ya existe.")
                         else:
                             supabase.table("turnos").update({"ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
                             st.success("✅ Horario actualizado.")
-                            st.rerun()
+                            recargar_app()
 
                 st.markdown("---")
                 borrar_turno = st.selectbox("Eliminar Turno:", ["Seleccionar..."] + list(lista_turnos.keys()))
                 if st.button("🗑️ Eliminar Turno") and borrar_turno != "Seleccionar...":
-                    supabase.table("turnos").delete().eq("nombre", borrar_turno).execute(); st.rerun()
+                    supabase.table("turnos").delete().eq("nombre", borrar_turno).execute(); recargar_app()
 
         with tab_comunicados:
             col_m1, col_m2 = st.columns(2)
@@ -2474,13 +2484,13 @@ elif pestaña == "💼 Panel de Gerencia":
                     txt_alerta = st.text_area("Mensaje:")
                     if st.form_submit_button("Crear Alerta") and txt_alerta:
                         supabase.table("alertas_ingreso").insert({"destinatario": dest_ing, "texto": txt_alerta}).execute()
-                        st.rerun()
+                        recargar_app()
                 for a in alertas_ingreso:
                     a_id = a.get("id")
                     with st.expander(f"A {a['destinatario']}: {a['texto'][:20]}..."):
                         if st.button("🗑️ Eliminar", key=f"del_al_{a_id}"):
                             supabase.table("alertas_ingreso").delete().eq("id", a_id).execute()
-                            st.rerun()
+                            recargar_app()
                             
             with col_m2:
                 st.subheader("📢 Anuncio Fijo")
@@ -2489,13 +2499,13 @@ elif pestaña == "💼 Panel de Gerencia":
                     txt_fijo = st.text_area("Mensaje:")
                     if st.form_submit_button("Publicar") and txt_fijo:
                         supabase.table("mensajes").insert({"destinatario": dest_fijo, "texto": txt_fijo}).execute()
-                        st.rerun()
+                        recargar_app()
                 for m in lista_mensajes:
                     m_id = m.get("id")
                     with st.expander(f"A {m['destinatario']}: {m['texto'][:20]}..."):
                         if st.button("🗑️ Eliminar", key=f"del_m_{m_id}"):
                             supabase.table("mensajes").delete().eq("id", m_id).execute()
-                            st.rerun()
+                            recargar_app()
 
         with tab_config:
             col_aj1, col_aj2 = st.columns(2)
@@ -2504,11 +2514,11 @@ elif pestaña == "💼 Panel de Gerencia":
                 nuevo_rol_cat = st.text_input("Crear Nuevo Rol:")
                 if st.button("➕ Agregar Rol") and nuevo_rol_cat and nuevo_rol_cat not in lista_roles_disponibles:
                     supabase.table("roles_disponibles").insert({"rol": nuevo_rol_cat}).execute()
-                    st.rerun()
+                    recargar_app()
                 borrar_rol_cat = st.selectbox("Eliminar Rol:", ["Seleccionar..."] + lista_roles_disponibles)
                 if st.button("🗑️ Eliminar Rol") and borrar_rol_cat != "Seleccionar...":
                     supabase.table("roles_disponibles").delete().eq("rol", borrar_rol_cat).execute()
-                    st.rerun()
+                    recargar_app()
                     
                 st.subheader("⚖️ Reglas de Asistencia y Premios")
                 with st.form("form_reglas"):
@@ -2526,7 +2536,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     if st.form_submit_button("💾 Guardar Reglas"):
                         config_app["reglas_puntos"] = {"base": r_base, "A tiempo": r_ok, "Tarde": r_tar, "Ausente": r_aus, "Falta Justificada": r_fj, "Olvido Fichaje": r_olv}
                         config_app["recompensa_auditoria_cajero"] = r_cajero
-                        save_json("config", config_app); st.rerun()
+                        save_json("config", config_app); recargar_app()
                         
                 st.subheader("🏆 Muro de la Fama (Ligas y Rankings)")
                 st.write("Creá múltiples vistas para que los empleados compitan. Ej: 'Plancheros' compiten entre ellos, o un 'Global' para todos.")
@@ -2541,7 +2551,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             rankings_actuales.pop(idx)
                             config_app["rankings_muro"] = rankings_actuales
                             save_json("config", config_app)
-                            st.rerun()
+                            recargar_app()
                             
                 with st.form("form_nuevo_ranking"):
                     st.markdown("**➕ Crear Nueva Vista / Liga**")
@@ -2556,7 +2566,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             config_app["rankings_muro"] = rankings_actuales
                             save_json("config", config_app)
                             st.success("Vista agregada correctamente.")
-                            st.rerun()
+                            recargar_app()
                         else:
                             st.warning("Completá todos los campos para crear la vista.")
                             
@@ -2585,7 +2595,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     
                     if st.form_submit_button("💾 Guardar Ajustes"):
                         config_app.update({"titulo_portal": v_titulo_portal, "autoregistro": v_autoregistro, "verificar_gps": v_gps, "verificar_wifi": v_wifi, "radio_metros": radio_m, "tolerancia_minutos": nueva_tolerancia, "exigir_salida_manual": v_exigir_salida_manual, "desc_tarde": v_desc_tarde, "perdonar_tolerancia": v_perdonar_tolerancia, "desc_temp": v_desc_temp, "mostrar_horas_empleado": v_mostrar_horas_empleado, "dia_inicio_semana": v_dia_inicio_semana, "fichaje_estricto_plan": v_fichaje_estricto_plan})
-                        save_json("config", config_app); st.rerun()
+                        save_json("config", config_app); recargar_app()
                         
                 st.write("🔑 **Cambiar Clave de Gerencia**")
                 nc = st.text_input("Nueva clave:", type="password")
@@ -2600,7 +2610,7 @@ elif pestaña == "💼 Panel de Gerencia":
                     config_app["fecha_inicio_puntos"] = nueva_fecha_puntos.strftime("%Y-%m-%d")
                     save_json("config", config_app)
                     st.success(f"✅ ¡Puntos reseteados! El contador arrancará desde el {nueva_fecha_puntos.strftime('%d/%m/%Y')}.")
-                    st.rerun()
+                    recargar_app()
                     
                 st.markdown("---")
                 st.subheader("🧹 Reseteo Quirúrgico en Nube")
@@ -2633,14 +2643,14 @@ elif pestaña == "💼 Panel de Gerencia":
                         query_b.execute()
                         
                     st.success(f"¡Datos de '{emp_borrado}' borrados de la nube exitosamente!")
-                    st.rerun()
+                    recargar_app()
 
         with tab_espia:
             if lista_intentos:
                 st.dataframe(pd.DataFrame(lista_intentos).sort_values(by=["Fecha", "Hora"], ascending=[False, False]), use_container_width=True, hide_index=True)
                 if st.button("🗑️ Limpiar registro"): 
                     supabase.table("intentos_seguridad").delete().neq("id", 0).execute()
-                    st.rerun()
+                    recargar_app()
             else: st.info("Sin intentos de acceso.")
 
 # ==========================================
@@ -2673,7 +2683,7 @@ elif pestaña == nombre_tab_dueno:
                     owner_config.update({"estado_licencia": estado_actual, "plan_pago": plan_actual, "fecha_vencimiento": str(fecha_venc), "mensaje_bloqueo": msg_bloqueo, "mostrar_membresia": v_mostrar_membresia, "dias_aviso": dias_aviso, "mensaje_aviso": msg_aviso})
                     save_json("owner_config", owner_config)
                     st.success("¡Licencia y avisos actualizados! El sistema obedecerá automáticamente.")
-                    st.rerun()
+                    recargar_app()
                     
         with tab_equipos:
             st.subheader("🔌 Desconectar Dispositivos Remotamente")
@@ -2685,11 +2695,11 @@ elif pestaña == nombre_tab_dueno:
                 if c_eq1.button("🔌 Desconectar a este empleado") and emp_desvincular != "Seleccionar...":
                     supabase.table("empleados").update({"device_id": ""}).eq("nombre", emp_desvincular).execute()
                     st.success(f"✅ Sesión cerrada para {emp_desvincular}.")
-                    st.rerun()
+                    recargar_app()
                 if c_eq2.button("🚫 CERRAR TODAS LAS SESIONES"):
                     supabase.table("empleados").update({"device_id": ""}).neq("nombre", "").execute()
                     st.success("✅ ¡Todos los empleados han sido desconectados!")
-                    st.rerun()
+                    recargar_app()
             else: st.info("No hay ningún empleado logueado en este momento.")
             
         with tab_empresa:
@@ -2708,7 +2718,7 @@ elif pestaña == nombre_tab_dueno:
                     owner_config.update({"empresa_nombre": nombre_empresa, "quienes_somos": historia, "contactos": datos_contacto, "nombre_tab_dueno": nuevo_nombre_tab_dueno.strip()})
                     save_json("owner_config", owner_config)
                     st.success("¡Información actualizada con éxito!")
-                    st.rerun()
+                    recargar_app()
                     
         with tab_reset:
             st.subheader("☢️ Instalación 0KM para Nuevo Cliente")
@@ -2729,7 +2739,7 @@ elif pestaña == nombre_tab_dueno:
                     except: pass
                     
                 st.success("¡SISTEMA BORRADO! La aplicación está lista para un nuevo cliente.")
-                st.rerun()
+                recargar_app()
 
         with tab_incognito:
             st.subheader("🕵️ Modo Espía / Incógnito")
