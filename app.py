@@ -218,7 +218,6 @@ def load_df(table_name):
         res = supabase.table(table_name).select('*').execute()
         if res.data:
             df = pd.DataFrame(res.data)
-            # Traductor automático de minúsculas de SQL a las Mayúsculas que espera Python
             if table_name == "asistencia":
                 df = df.rename(columns={"empleado": "Empleado", "fecha": "Fecha", "hora": "Hora", "sucursal": "Sucursal", "turno": "Turno", "tipo": "Tipo", "estado": "Estado", "distancia_m": "Distancia_m", "nota": "Nota"})
             elif table_name == "tareas_log":
@@ -238,7 +237,6 @@ def load_table_list(table_name):
         mapped_data = []
         for row in res.data:
             r = row.copy()
-            # Helper para evitar el KeyError
             def map_key(target_key, possible_lower):
                 if possible_lower in r and possible_lower != target_key:
                     r[target_key] = r.pop(possible_lower)
@@ -332,7 +330,7 @@ config_defecto = {
     "desc_tarde": True, "desc_temp": True, "perdonar_tolerancia": True,
     "mostrar_horas_empleado": False, "dia_inicio_semana": "Lunes", "fichaje_estricto_plan": False,
     "recompensa_auditoria_cajero": 10,
-    "rankings_muro": [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"]}],
+    "rankings_muro": [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"], "mostrar_puntos": True}],
     "reglas_puntos": {"base": 100, "A tiempo": 0, "Tarde": -5, "Ausente": -15, "Falta Justificada": 0, "Olvido Fichaje": -10}
 }
 config_app = load_json("config", config_defecto)
@@ -877,7 +875,7 @@ if pestaña == "📱 Portal del Empleado":
                         motivo_olv = st.text_input("📝 Explicá brevemente qué pasó (Ej: 'Me olvidé de fichar por atender rápido al proveedor'):")
                         
                         if st.form_submit_button("📤 Enviar a Auditoría"):
-                            if suc_olv == "Seleccionar...":
+                            if suc_olv == "Seleccionar..." or turno_olv == "Seleccionar..." or not motivo_olv.strip():
                                 st.warning("🚨 Por favor, completá todos los campos antes de enviar.")
                             else:
                                 insert_row("correcciones_pendientes", {
@@ -901,7 +899,7 @@ if pestaña == "📱 Portal del Empleado":
                     else: st.markdown(f"<div class='report-box'>✉️ <b>Mensaje Privado:</b> {m['texto']}</div>", unsafe_allow_html=True)
 
             # 4. MURO DE LA FAMA (CUSTOM/LIGAS)
-            rankings_actuales = config_app.get("rankings_muro", [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"]}])
+            rankings_actuales = config_app.get("rankings_muro", [{"nombre": "🌍 Ranking Global", "competidores": ["Todos"], "espectadores": ["Todos"], "mostrar_puntos": True}])
             
             inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
             hoy_dt_top = ahora.date()
@@ -950,11 +948,19 @@ if pestaña == "📱 Portal del Empleado":
                         if not ranking_sp:
                             st.info("No hubo actividad registrada en esta liga la semana pasada.")
                         else:
+                            mostrar_pts_liga = rank.get("mostrar_puntos", True)
                             st.markdown(f"<h5 style='text-align: center; color: #1e3a8a;'>🥇 Top 3 - {rank['nombre']}</h5>", unsafe_allow_html=True)
                             c1, c2, c3 = st.columns(3)
-                            if len(ranking_sp) > 0: c2.markdown(f"<div style='text-align:center; padding:10px; background:#FEF08A; border-radius:10px; border:2px solid #F59E0B;'><b>🥇 1ro</b><br>{ranking_sp[0]['Empleado']}<br>{ranking_sp[0]['Puntos']} pts</div>", unsafe_allow_html=True)
-                            if len(ranking_sp) > 1: c1.markdown(f"<div style='text-align:center; padding:10px; background:#E2E8F0; border-radius:10px; border:2px solid #94A3B8; margin-top:20px;'><b>🥈 2do</b><br>{ranking_sp[1]['Empleado']}<br>{ranking_sp[1]['Puntos']} pts</div>", unsafe_allow_html=True)
-                            if len(ranking_sp) > 2: c3.markdown(f"<div style='text-align:center; padding:10px; background:#FFEDD5; border-radius:10px; border:2px solid #D97706; margin-top:40px;'><b>🥉 3ro</b><br>{ranking_sp[2]['Empleado']}<br>{ranking_sp[2]['Puntos']} pts</div>", unsafe_allow_html=True)
+                            
+                            if len(ranking_sp) > 0: 
+                                txt_p1 = f"<br>{ranking_sp[0]['Puntos']} pts" if mostrar_pts_liga else ""
+                                c2.markdown(f"<div style='text-align:center; padding:10px; background:#FEF08A; border-radius:10px; border:2px solid #F59E0B;'><b>🥇 1ro</b><br>{ranking_sp[0]['Empleado']}{txt_p1}</div>", unsafe_allow_html=True)
+                            if len(ranking_sp) > 1: 
+                                txt_p2 = f"<br>{ranking_sp[1]['Puntos']} pts" if mostrar_pts_liga else ""
+                                c1.markdown(f"<div style='text-align:center; padding:10px; background:#E2E8F0; border-radius:10px; border:2px solid #94A3B8; margin-top:20px;'><b>🥈 2do</b><br>{ranking_sp[1]['Empleado']}{txt_p2}</div>", unsafe_allow_html=True)
+                            if len(ranking_sp) > 2: 
+                                txt_p3 = f"<br>{ranking_sp[2]['Puntos']} pts" if mostrar_pts_liga else ""
+                                c3.markdown(f"<div style='text-align:center; padding:10px; background:#FFEDD5; border-radius:10px; border:2px solid #D97706; margin-top:40px;'><b>🥉 3ro</b><br>{ranking_sp[2]['Empleado']}{txt_p3}</div>", unsafe_allow_html=True)
                             st.markdown("<br>", unsafe_allow_html=True)
 
             # 5. HORAS SEMANALES
@@ -1253,6 +1259,9 @@ elif pestaña == "💼 Panel de Gerencia":
             if 0 <= dias_restantes <= owner_config.get("dias_aviso", 5) and owner_config.get("estado_licencia", "Activo") == "Activo":
                 st.markdown(f"<div class='task-pend' style='border-color: #F59E0B;'><b>⚠️ Aviso del Proveedor de Software:</b><br>{owner_config.get('mensaje_aviso', '')} (Vence en {dias_restantes} días)</div>", unsafe_allow_html=True)
         except: pass
+
+        if owner_config.get("mostrar_membresia", False):
+            st.markdown(f"<div style='background-color: #1e293b; color: white; padding: 10px 20px; border-radius: 10px; margin-bottom: 15px;'>💎 Plan Contratado Activo: <b>{owner_config.get('plan_pago', 'Mensual')}</b></div>", unsafe_allow_html=True)
         
         tab_analytics, tab_caja, tab_sueldos, tab_horarios, tab_puntos, tab_tareas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_limpieza = st.tabs([
             "📊 Analytics", "💰 Cajas", "💵 Sueldos", "📅 Horarios", "🏆 Ranking", "📋 Tareas", "👤 Perfiles", "👥 Staff", "🏢 Tiendas", "📢 Avisos", "⚙️ Ajustes", "🧹 Limpieza"
@@ -1461,6 +1470,11 @@ elif pestaña == "💼 Panel de Gerencia":
                         st.write("### 🪪 Cuadro de Liquidación")
                         st.write("Acá tenés el desglose de horas y pagos estimado para todo el equipo en un solo cuadro.")
                         
+                        # --- CÁLCULO DE TOTALES ---
+                        total_horas_num = df_horas_final["⏱️ Horas Computadas"].sum()
+                        total_pago_num = df_horas_final["💰 Pago Est."].sum()
+                        st.markdown(f"<div class='super-box' style='padding:15px; margin-bottom:20px; text-align:center;'><b>💵 Totales del Período Filtrado:</b><br><span style='font-size: 1.5rem;'>Total Horas: <b>{total_horas_num:.2f} hrs</b> &nbsp; | &nbsp; Pago Estimado: <b>${total_pago_num:,.2f}</b></span></div>", unsafe_allow_html=True)
+                        
                         df_vista = df_horas_final.copy()
                         df_vista["⏱️ Horas Computadas"] = df_vista["⏱️ Horas Computadas"].apply(lambda x: formato_horas_texto(x))
                         df_vista["💰 Pago Est."] = df_vista["💰 Pago Est."].apply(lambda x: f"${x:,.2f}")
@@ -1473,7 +1487,11 @@ elif pestaña == "💼 Panel de Gerencia":
                         
                         nombre_export_sucursal = local_descarga.replace(" ", "_")
                         
-                        c_btn1.markdown(generate_html_download(df_horas_final, f"Horas_y_Sueldos_{nombre_export_sucursal}_{fecha_in_dl}.csv", "📥 Descargar Liquidación General (Móvil/PC)"), unsafe_allow_html=True)
+                        # --- EXPORTAR CON FILA DE TOTALES ---
+                        total_row = pd.DataFrame([{"Personal": "TOTAL GENERAL", "Rol": "-", "Sucursal": "-", "⏱️ Horas Computadas": total_horas_num, "💰 Pago Est.": total_pago_num}])
+                        df_export = pd.concat([df_horas_final, total_row], ignore_index=True)
+                        
+                        c_btn1.markdown(generate_html_download(df_export, f"Horas_y_Sueldos_{nombre_export_sucursal}_{fecha_in_dl}.csv", "📥 Descargar Liquidación General (Móvil/PC)"), unsafe_allow_html=True)
                         
                         df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
                         if local_descarga != "Todas las sucursales":
@@ -2760,6 +2778,42 @@ elif pestaña == "💼 Panel de Gerencia":
                     st.success("Configuración actualizada correctamente.")
                     recargar_app()
                     
+            with st.form("form_rankings"):
+                st.markdown("### 🏆 Crear y Editar Ligas de Puntos")
+                st.write("Creá tops separados (ej: 'Top Vendedores') y elegí quién compite, quién lo ve y si se muestran los puntos exactos.")
+                rankings = config_app.get("rankings_muro", [])
+                edited_rankings = []
+                for i, r in enumerate(rankings):
+                    st.markdown(f"**Liga {i+1}: {r['nombre']}**")
+                    c1, c2 = st.columns(2)
+                    r_nom = c1.text_input("Nombre de la Liga", value=r['nombre'], key=f"rn_{i}")
+                    r_mp = c2.checkbox("Mostrar puntos a los espectadores", value=r.get("mostrar_puntos", True), key=f"rmp_{i}")
+                    
+                    c3, c4 = st.columns(2)
+                    r_comp = c3.multiselect("Participantes (Compiten):", ["Todos"] + lista_roles_disponibles + lista_empleados, default=r.get('competidores', ["Todos"]), key=f"rc_{i}")
+                    r_esp = c4.multiselect("Espectadores (Pueden verlo):", ["Todos"] + lista_roles_disponibles + lista_empleados, default=r.get('espectadores', ["Todos"]), key=f"re_{i}")
+                    
+                    borrar = st.checkbox(f"🗑️ Eliminar esta liga", key=f"rdel_{i}")
+                    if not borrar:
+                        edited_rankings.append({"nombre": r_nom, "competidores": r_comp, "espectadores": r_esp, "mostrar_puntos": r_mp})
+                    st.write("---")
+                
+                st.markdown("**➕ Agregar Nueva Liga**")
+                n_nom = st.text_input("Nombre de la nueva liga:")
+                c_n1, c_n2 = st.columns(2)
+                n_mp = c_n1.checkbox("Mostrar puntos exactos", value=True)
+                c_n3, c_n4 = st.columns(2)
+                n_comp = c_n3.multiselect("Participantes:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"])
+                n_esp = c_n4.multiselect("Espectadores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"])
+                
+                if st.form_submit_button("💾 Guardar Ligas"):
+                    if n_nom.strip():
+                        edited_rankings.append({"nombre": n_nom.strip(), "competidores": n_comp, "espectadores": n_esp, "mostrar_puntos": n_mp})
+                    config_app["rankings_muro"] = edited_rankings
+                    save_json("config", config_app)
+                    st.success("Ligas actualizadas correctamente.")
+                    recargar_app()
+                    
         with tab_limpieza:
             st.subheader("🧹 Limpieza de Datos Históricos")
             st.write("Eliminá registros antiguos para liberar espacio y agilizar la aplicación.")
@@ -2851,6 +2905,9 @@ elif pestaña == nombre_tab_dueno:
                     fv = ahora.date()
                 n_venc = st.date_input("Fecha de Vencimiento del Software", value=fv)
                 
+                n_plan = st.text_input("Plan Contratado (Ej: Básico, Premium, Ilimitado)", value=owner_config.get("plan_pago", "Mensual"))
+                n_mostrar_plan = st.checkbox("Mostrar tipo de plan en el panel de Gerencia", value=owner_config.get("mostrar_membresia", False))
+                
                 n_bloqueo = st.text_area("Mensaje de Bloqueo (Si está suspendido o vencido)", value=owner_config.get("mensaje_bloqueo", ""))
                 n_aviso = st.text_area("Mensaje de Aviso Próximo a Vencer", value=owner_config.get("mensaje_aviso", ""))
                 d_aviso = st.number_input("Días de anticipación para lanzar el aviso", value=int(owner_config.get("dias_aviso", 5)))
@@ -2863,6 +2920,8 @@ elif pestaña == nombre_tab_dueno:
                     owner_config["nombre_tab_dueno"] = n_tab
                     owner_config["estado_licencia"] = n_estado
                     owner_config["fecha_vencimiento"] = n_venc.strftime("%Y-%m-%d")
+                    owner_config["plan_pago"] = n_plan
+                    owner_config["mostrar_membresia"] = n_mostrar_plan
                     owner_config["mensaje_bloqueo"] = n_bloqueo
                     owner_config["mensaje_aviso"] = n_aviso
                     owner_config["dias_aviso"] = d_aviso
