@@ -877,7 +877,7 @@ if pestaña == "📱 Portal del Empleado":
                         motivo_olv = st.text_input("📝 Explicá brevemente qué pasó (Ej: 'Me olvidé de fichar por atender rápido al proveedor'):")
                         
                         if st.form_submit_button("📤 Enviar a Auditoría"):
-                            if suc_olv == "Seleccionar..." or turno_olv == "Seleccionar..." or not motivo_olv.strip():
+                            if suc_olv == "Seleccionar...":
                                 st.warning("🚨 Por favor, completá todos los campos antes de enviar.")
                             else:
                                 insert_row("correcciones_pendientes", {
@@ -1239,7 +1239,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 
         acceso_concedido = (password_ingresada == config_app.get("admin_password", "1234") or password_ingresada == "doremifasol")
     else:
-        st.warning("🕵️ **MODO INCÓGNITO ACTIVO:** Estás viendo el panel como Gerente. Has ingresado sin contraseña y sin dejar registro de tu acceso en el historial de seguridad.")
+        st.warning("🕵️ **MODO INCÓGNITO ACTIVO:** Estás viendo el panel como Gerente (Simulación desde el Panel del Dueño). Has ingresado sin contraseña.")
         if st.button("❌ Salir del Modo Incógnito", key="btn_exit_inc_ger"):
             st.session_state['incognito'] = False
             st.session_state['incognito_user'] = None
@@ -1254,8 +1254,8 @@ elif pestaña == "💼 Panel de Gerencia":
                 st.markdown(f"<div class='task-pend' style='border-color: #F59E0B;'><b>⚠️ Aviso del Proveedor de Software:</b><br>{owner_config.get('mensaje_aviso', '')} (Vence en {dias_restantes} días)</div>", unsafe_allow_html=True)
         except: pass
         
-        tab_analytics, tab_caja, tab_sueldos, tab_horarios, tab_puntos, tab_tareas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_espia = st.tabs([
-            "📊 Analytics", "💰 Cajas", "💵 Sueldos", "📅 Horarios", "🏆 Ranking", "📋 Tareas", "👤 Perfiles", "👥 Staff", "🏢 Tiendas", "📢 Avisos", "⚙️ Ajustes", "🕵️ Espía"
+        tab_analytics, tab_caja, tab_sueldos, tab_horarios, tab_puntos, tab_tareas, tab_perfil, tab_staff, tab_tiendas, tab_comunicados, tab_config, tab_limpieza = st.tabs([
+            "📊 Analytics", "💰 Cajas", "💵 Sueldos", "📅 Horarios", "🏆 Ranking", "📋 Tareas", "👤 Perfiles", "👥 Staff", "🏢 Tiendas", "📢 Avisos", "⚙️ Ajustes", "🧹 Limpieza"
         ])
         
         with tab_analytics:
@@ -2759,12 +2759,118 @@ elif pestaña == "💼 Panel de Gerencia":
                     save_json("config", config_app)
                     st.success("Configuración actualizada correctamente.")
                     recargar_app()
+                    
+        with tab_limpieza:
+            st.subheader("🧹 Limpieza de Datos Históricos")
+            st.write("Eliminá registros antiguos para liberar espacio y agilizar la aplicación.")
+            
+            c_limp1, c_limp2, c_limp3 = st.columns(3)
+            tabla_a_limpiar = c_limp1.selectbox("¿Qué datos querés borrar?", ["Asistencia (Fichajes)", "Cierres de Caja", "Tareas y Puntos", "Reportes y Avisos"])
+            fecha_in_limp = c_limp2.date_input("Desde la fecha:", value=ahora.date() - datetime.timedelta(days=365))
+            fecha_fi_limp = c_limp3.date_input("Hasta la fecha:", value=ahora.date() - datetime.timedelta(days=30))
+            
+            st.warning("⚠️ **ATENCIÓN:** Esta acción no se puede deshacer. Los datos eliminados se perderán permanentemente.")
+            confirmar_borrado = st.checkbox("Entiendo que esto borrará datos permanentemente.")
+            
+            if st.button("🗑️ Eliminar Datos Seleccionados", type="primary"):
+                if not confirmar_borrado:
+                    st.error("🚨 Tenés que marcar la casilla de confirmación para proceder.")
+                else:
+                    try:
+                        f_in_str = fecha_in_limp.strftime("%Y-%m-%d")
+                        f_fi_str = fecha_fi_limp.strftime("%Y-%m-%d")
+                        
+                        if tabla_a_limpiar == "Asistencia (Fichajes)":
+                            try: supabase.table("asistencia").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                            except: pass
+                            try: supabase.table("asistencia").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                            except: pass
+                        elif tabla_a_limpiar == "Cierres de Caja":
+                            try: supabase.table("cierres_caja").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                            except: pass
+                            try: supabase.table("cierres_caja").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                            except: pass
+                        elif tabla_a_limpiar == "Tareas y Puntos":
+                            try: supabase.table("tareas_log").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                            except: pass
+                            try: supabase.table("tareas_log").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                            except: pass
+                            try: supabase.table("ajustes_puntos").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                            except: pass
+                            try: supabase.table("ajustes_puntos").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                            except: pass
+                        elif tabla_a_limpiar == "Reportes y Avisos":
+                            try: supabase.table("reportes").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                            except: pass
+                            try: supabase.table("reportes").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                            except: pass
 
-        with tab_espia:
+                        st.success(f"✅ Se han eliminado los datos de {tabla_a_limpiar} entre {f_in_str} y {f_fi_str}.")
+                        recargar_app()
+                    except Exception as e:
+                        show_db_error(e, "eliminando datos históricos")
+
+# ==========================================
+# 7. PANEL DEL DUEÑO DEL SOFTWARE (OWNER)
+# ==========================================
+elif pestaña == nombre_tab_dueno:
+    st.markdown('<div class="main-title" style="font-size: 2rem;">⚙️ Panel del Propietario del Software</div>', unsafe_allow_html=True)
+    
+    pass_owner = st.text_input("Clave Maestra:", type="password", placeholder="Ingresar clave para acceder...")
+    
+    # CLAVE DE ACCESO DEL DUEÑO (La podés cambiar si querés)
+    if pass_owner == "master123":
+        t_esp, t_lic = st.tabs(["🕵️ Modo Espía", "🔑 Gestión de Licencia y Marca Blanca"])
+        
+        with t_esp:
             st.subheader("🕵️ Modo Espía (Incógnito)")
             st.write("Ingresá a la app simulando ser un empleado para ver exactamente cómo se visualiza su portal y validar sus configuraciones.")
             emp_espia = st.selectbox("Seleccionar empleado a simular:", ["Seleccionar..."] + sorted(lista_empleados))
-            if st.button("🕶️ Iniciar Modo Incógnito") and emp_espia != "Seleccionar...":
+            if st.button("🕶️ Iniciar Modo Incógnito (Empleado)") and emp_espia != "Seleccionar...":
                 st.session_state['incognito'] = True
                 st.session_state['incognito_user'] = emp_espia
                 recargar_app()
+                
+            st.write("---")
+            st.write("🕵️ **Simular ser Gerencia:** Entrá al panel de gerencia sin que se registre en el historial de seguridad.")
+            if st.button("🕶️ Iniciar como Gerente"):
+                st.session_state['incognito'] = True
+                st.session_state['incognito_user'] = "Gerencia"
+                recargar_app()
+
+        with t_lic:
+            st.subheader("🔧 Ajustes de Marca Blanca y Licencia")
+            with st.form("form_owner"):
+                n_empresa = st.text_input("Nombre de la Empresa Proveedora", value=owner_config.get("empresa_nombre", ""))
+                n_tab = st.text_input("Nombre de esta pestaña en el menú", value=owner_config.get("nombre_tab_dueno", "⚙️ Dueño del Software"))
+                n_estado = st.selectbox("Estado de la Licencia del Cliente", ["Activo", "Suspendido"], index=0 if owner_config.get("estado_licencia") == "Activo" else 1)
+                
+                try: 
+                    fv = datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date()
+                except: 
+                    fv = ahora.date()
+                n_venc = st.date_input("Fecha de Vencimiento del Software", value=fv)
+                
+                n_bloqueo = st.text_area("Mensaje de Bloqueo (Si está suspendido o vencido)", value=owner_config.get("mensaje_bloqueo", ""))
+                n_aviso = st.text_area("Mensaje de Aviso Próximo a Vencer", value=owner_config.get("mensaje_aviso", ""))
+                d_aviso = st.number_input("Días de anticipación para lanzar el aviso", value=int(owner_config.get("dias_aviso", 5)))
+                
+                n_somos = st.text_area("Texto Quiénes Somos (Ayuda/Soporte)", value=owner_config.get("quienes_somos", ""))
+                n_contacto = st.text_area("Texto de Contactos (Soporte Técnico)", value=owner_config.get("contactos", ""))
+
+                if st.form_submit_button("💾 Guardar Configuración de Propietario"):
+                    owner_config["empresa_nombre"] = n_empresa
+                    owner_config["nombre_tab_dueno"] = n_tab
+                    owner_config["estado_licencia"] = n_estado
+                    owner_config["fecha_vencimiento"] = n_venc.strftime("%Y-%m-%d")
+                    owner_config["mensaje_bloqueo"] = n_bloqueo
+                    owner_config["mensaje_aviso"] = n_aviso
+                    owner_config["dias_aviso"] = d_aviso
+                    owner_config["quienes_somos"] = n_somos
+                    owner_config["contactos"] = n_contacto
+                    save_json("owner_config", owner_config)
+                    st.success("Configuración de propietario guardada exitosamente.")
+                    recargar_app()
+                    
+    elif pass_owner != "":
+        st.error("❌ Clave incorrecta.")
