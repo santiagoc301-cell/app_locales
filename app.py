@@ -309,7 +309,10 @@ def load_table_list(table_name):
 
 def insert_row(table_name, row_dict):
     try:
-        supabase.table(table_name).insert(row_dict).execute()
+        # ESCUDO ANTIMAYÚSCULAS: Fuerzo a minúscula todas las claves del diccionario
+        # para que Supabase SQL no falle cuando busque la columna en minúscula.
+        row_dict_lower = {k.lower(): v for k, v in row_dict.items()}
+        supabase.table(table_name).insert(row_dict_lower).execute()
     except Exception as e:
         show_db_error(e, f"guardado en la tabla '{table_name}'")
 
@@ -603,7 +606,7 @@ if pestaña == "📱 Portal del Empleado":
                 df_tl['F_Obj'] = pd.to_datetime(df_tl['Fecha'], errors='coerce').dt.date
                 puntos_actuales += pd.to_numeric(df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Estado"] == "Aprobada") & (df_tl['F_Obj'] >= d_inicio_puntos)]["Puntos"], errors='coerce').fillna(0).astype(int).sum()
                 
-            puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada" and datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() >= d_inicio_puntos])
+            puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada" and datetime.datetime.strptime(p.get('Fecha', p.get('fecha')), "%Y-%m-%d").date() >= d_inicio_puntos])
             
             df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy() if not df_punt.empty else pd.DataFrame()
             estado_laboral = "Fuera"
@@ -856,7 +859,7 @@ if pestaña == "📱 Portal del Empleado":
                 
                 ya_pidio = False
                 for cp in correcciones_pendientes:
-                    if cp.get('Empleado') == empleado_en_celu and cp.get('Fecha') == str(fecha_hoy):
+                    if cp.get('Empleado', cp.get('empleado')) == empleado_en_celu and cp.get('Fecha', cp.get('fecha')) == str(fecha_hoy):
                         ya_pidio = True
                         break
                         
@@ -910,7 +913,7 @@ if pestaña == "📱 Portal del Empleado":
             
             df_p_top = df_punt[(df_punt['F_Obj'] >= p_in_top) & (df_punt['F_Obj'] <= p_fi_top)] if not df_punt.empty else pd.DataFrame()
             df_t_top = df_tl[(df_tl['F_Obj'] >= p_in_top) & (df_tl['F_Obj'] <= p_fi_top)] if not df_tl.empty else pd.DataFrame()
-            ajustes_top = [p for p in lista_puntos if p_in_top <= datetime.datetime.strptime(p['Fecha'], "%Y-%m-%d").date() <= p_fi_top]
+            ajustes_top = [p for p in lista_puntos if p_in_top <= datetime.datetime.strptime(p.get('Fecha', p.get('fecha')), "%Y-%m-%d").date() <= p_fi_top]
             reg_top = config_app.get("reglas_puntos", {})
             
             for rank in rankings_actuales:
@@ -931,7 +934,7 @@ if pestaña == "📱 Portal del Empleado":
                         ranking_sp = []
                         for emp_r in emps_compitiendo:
                             df_e_p_top = df_p_top[df_p_top["Empleado"] == emp_r] if not df_p_top.empty else pd.DataFrame()
-                            e_aj_top = sum([int(p.get('Puntos', 0)) for p in ajustes_top if p.get('Empleado') == emp_r and p.get('Estado', 'Aprobada') == 'Aprobada'])
+                            e_aj_top = sum([int(p.get('Puntos', p.get('puntos', 0))) for p in ajustes_top if p.get('Empleado', p.get('empleado')) == emp_r and p.get('Estado', p.get('estado', 'Aprobada')) == 'Aprobada'])
                             e_tp_top = pd.to_numeric(df_t_top[(df_t_top["Empleado"] == emp_r) & (df_t_top["Estado"] == "Aprobada")]["Puntos"], errors='coerce').fillna(0).astype(int).sum() if not df_t_top.empty else 0
                             e_ok_top = len(df_e_p_top[df_e_p_top["Estado"] == "A tiempo"]) if not df_e_p_top.empty else 0
                             e_tar_top = len(df_e_p_top[df_e_p_top["Estado"] == "Tarde"]) if not df_e_p_top.empty else 0
@@ -1080,7 +1083,7 @@ if pestaña == "📱 Portal del Empleado":
                                         ya_pedido = False
                                         ya_salio = not df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Salida")].empty
                                         for sp in salidas_pendientes:
-                                            if sp.get("Empleado") == s_emp_salida and sp.get("Fecha") == str(fecha_hoy):
+                                            if sp.get("Empleado", sp.get("empleado")) == s_emp_salida and sp.get("Fecha", sp.get("fecha")) == str(fecha_hoy):
                                                 ya_pedido = True
                                                 break
                                         if ya_salio:
@@ -1140,15 +1143,15 @@ if pestaña == "📱 Portal del Empleado":
                     else:
                         if tipo_rep == "⭐ Sugerir Bono/Multa a Compañero (Auditable)":
                             insert_row("puntos_cajero_pendientes", {
-                                "Fecha": fecha_hoy, "Hora": hora_hoy, "Emisor": empleado_en_celu,
-                                "Compañero": implicado, "Puntos_Sugeridos": pts_sugeridos,
-                                "Motivo": detalle_rep.strip(), "Estado": "Pendiente de auditoría"
+                                "fecha": fecha_hoy, "hora": hora_hoy, "emisor": empleado_en_celu,
+                                "compañero": implicado, "puntos_sugeridos": pts_sugeridos,
+                                "motivo": detalle_rep.strip(), "estado": "Pendiente de auditoría"
                             })
                             st.success("✅ ¡Sugerencia de puntos enviada a Gerencia para revisión! Si la aprueban, te llevarás una recompensa.")
                         else:
                             insert_row("reportes", {
-                                "Fecha": fecha_hoy, "Hora": hora_hoy, "Emisor": empleado_en_celu,
-                                "Tipo": tipo_rep, "Implicado": implicado, "Detalle": detalle_rep.strip(), "Estado": "Pendiente de lectura"
+                                "fecha": fecha_hoy, "hora": hora_hoy, "emisor": empleado_en_celu,
+                                "tipo": tipo_rep, "implicado": implicado, "detalle": detalle_rep.strip(), "estado": "Pendiente de lectura"
                             })
                             st.success("✅ ¡Reporte enviado confidencialmente a Gerencia!")
                         
@@ -1207,7 +1210,7 @@ if pestaña == "📱 Portal del Empleado":
                     else:
                         try:
                             if not match:
-                                supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_elegido_auto, "dispositivo_id": device_id}).execute()
+                                insert_row("empleados", {"nombre": n_emp, "rol": rol_elegido_auto, "dispositivo_id": device_id})
                             else:
                                 supabase.table("empleados").update({"rol": rol_elegido_auto, "dispositivo_id": device_id}).eq("nombre", match).execute()
                             recargar_app()
@@ -1575,16 +1578,16 @@ elif pestaña == "💼 Panel de Gerencia":
                                 if n_emp_caja != "Seleccionar..." and n_suc_caja != "Seleccionar...":
                                     try:
                                         supabase.table("cierres_caja").update({
-                                            "Fecha": n_fecha.strftime("%Y-%m-%d"), 
-                                            "Hora": cc.get("Hora", hora_hoy), 
-                                            "Cajero": n_emp_caja, 
-                                            "Sucursal": n_suc_caja, 
-                                            "Turno": cc.get("Turno", "N/A"), 
-                                            "Efectivo": n_efvo, 
-                                            "Tarjeta": n_tarj, 
-                                            "Transferencia": n_transf, 
-                                            "Total_Ventas": n_tot, 
-                                            "Nota": n_nota.strip()
+                                            "fecha": n_fecha.strftime("%Y-%m-%d"), 
+                                            "hora": cc.get("Hora", hora_hoy), 
+                                            "cajero": n_emp_caja, 
+                                            "sucursal": n_suc_caja, 
+                                            "turno": cc.get("Turno", "N/A"), 
+                                            "efectivo": n_efvo, 
+                                            "tarjeta": n_tarj, 
+                                            "transferencia": n_transf, 
+                                            "total_ventas": n_tot, 
+                                            "nota": n_nota.strip()
                                         }).eq("id", cc_id).execute()
                                         st.success("✅ Cierre actualizado.")
                                         recargar_app()
@@ -1683,7 +1686,6 @@ elif pestaña == "💼 Panel de Gerencia":
                         elif f_ini > f_fin:
                             st.warning("🚨 La fecha 'Desde' no puede ser mayor a la fecha 'Hasta'.")
                         else:
-                            # SOLUCIÓN 2 A: Se envía en minúsculas a Supabase
                             insert_row("sueldos_historico", {"empleado": emp_s, "fecha_desde": f_ini.strftime("%Y-%m-%d"), "fecha_hasta": f_fin.strftime("%Y-%m-%d"), "valor_hora": val_s})
                             st.success(f"✅ ¡Tarifa de ${val_s}/h guardada para {emp_s}!")
                             recargar_app()
@@ -1734,7 +1736,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                 c_b1, c_b2 = st.columns(2)
                                 if c_b1.button("💾 Guardar Cambios", key=f"save_s_{s_id}"):
                                     try:
-                                        # SOLUCIÓN 2 B: Se actualiza usando minúsculas para Supabase
                                         supabase.table("sueldos_historico").update({
                                             'valor_hora': n_val,
                                             'fecha_desde': n_ini.strftime("%Y-%m-%d"),
@@ -1747,8 +1748,6 @@ elif pestaña == "💼 Panel de Gerencia":
                                         supabase.table("sueldos_historico").delete().eq("id", s_id).execute()
                                         recargar_app()
                                     except Exception as e: show_db_error(e, "eliminando tarifa")
-                    else:
-                        st.info("No se encontraron tarifas en ese rango de fechas.")
                 else: 
                     st.info("ℹ️ Todavía no configuraste ningún sueldo. Las horas se calcularán con un valor de $0 por defecto.")
 
@@ -1876,13 +1875,13 @@ elif pestaña == "💼 Panel de Gerencia":
                                     if c_btn1.button("💾 Guardar Cambios", key=f"btn_upd_{row['id']}"):
                                         try:
                                             supabase.table("asistencia").update({
-                                                "Fecha": nueva_fecha.strftime("%Y-%m-%d"),
-                                                "Hora": nueva_hora.strftime("%I:%M:%S %p"),
-                                                "Tipo": nuevo_tipo,
-                                                "Sucursal": nueva_sucursal,
-                                                "Turno": nuevo_turno,
-                                                "Estado": nuevo_estado,
-                                                "Nota": nueva_nota
+                                                "fecha": nueva_fecha.strftime("%Y-%m-%d"),
+                                                "hora": nueva_hora.strftime("%I:%M:%S %p"),
+                                                "tipo": nuevo_tipo,
+                                                "sucursal": nueva_sucursal,
+                                                "turno": nuevo_turno,
+                                                "estado": nuevo_estado,
+                                                "nota": nueva_nota
                                             }).eq("id", int(row['id'])).execute()
                                             st.success("¡Fichaje actualizado correctamente!")
                                             recargar_app()
@@ -2099,45 +2098,47 @@ elif pestaña == "💼 Panel de Gerencia":
             st.subheader("⚖️ Auditoría de Multas/Bonos de Cajeros")
             if puntos_cajero_pendientes:
                 for pt in puntos_cajero_pendientes:
-                    if pt.get("Estado") == "Pendiente de auditoría":
+                    if pt.get("Estado", pt.get("estado")) == "Pendiente de auditoría":
                         pt_id = pt.get("id")
-                        st.markdown(f"<div class='task-pend'><b>{pt['Emisor']}</b> quiere {'dar' if pt['Puntos_Sugeridos'] > 0 else 'quitar'} <b>{abs(pt['Puntos_Sugeridos'])} pts</b> a <b>{pt['Compañero']}</b><br>Motivo: <i>{pt['Motivo']}</i></div>", unsafe_allow_html=True)
+                        pt_sug = pt.get("Puntos_Sugeridos", pt.get("puntos_sugeridos", 0))
+                        st.markdown(f"<div class='task-pend'><b>{pt.get('Emisor', pt.get('emisor'))}</b> quiere {'dar' if pt_sug > 0 else 'quitar'} <b>{abs(pt_sug)} pts</b> a <b>{pt.get('Compañero', pt.get('compañero'))}</b><br>Motivo: <i>{pt.get('Motivo', pt.get('motivo'))}</i></div>", unsafe_allow_html=True)
                         
-                        recompensa_cajero = st.number_input(f"Puntos de recompensa para el Cajero '{pt['Emisor']}' si apruebas su auditoría:", value=int(config_app.get("recompensa_auditoria_cajero", 10)), step=1, key=f"rec_cajero_{pt_id}")
+                        recompensa_cajero = st.number_input(f"Puntos de recompensa para el Cajero '{pt.get('Emisor', pt.get('emisor'))}' si apruebas su auditoría:", value=int(config_app.get("recompensa_auditoria_cajero", 10)), step=1, key=f"rec_cajero_{pt_id}")
                         
                         c1, c2, c3 = st.columns([1,1,2])
                         if c1.button("✅ Aprobar e imputar", key=f"apr_caj_{pt_id}"):
                             try:
-                                supabase.table("ajustes_puntos").insert({
-                                    "Fecha": pt["Fecha"], 
-                                    "Empleado": pt["Compañero"], 
-                                    "Puntos": pt["Puntos_Sugeridos"], 
-                                    "Motivo": f"[{pt['Emisor']}] {pt['Motivo']}", 
-                                    "Autor": "Gerencia", 
-                                    "Estado": "Aprobada"
-                                }).execute()
+                                insert_row("ajustes_puntos", {
+                                    "fecha": pt.get("Fecha", pt.get("fecha")), 
+                                    "empleado": pt.get("Compañero", pt.get("compañero")), 
+                                    "puntos": pt_sug, 
+                                    "motivo": f"[{pt.get('Emisor', pt.get('emisor'))}] {pt.get('Motivo', pt.get('motivo'))}", 
+                                    "autor": "Gerencia", 
+                                    "estado": "Aprobada"
+                                })
                                 
-                                rol_emisor = roles_empleados.get(pt["Emisor"], "")
+                                emisor_actual = pt.get("Emisor", pt.get("emisor"))
+                                rol_emisor = roles_empleados.get(emisor_actual, "")
                                 if recompensa_cajero > 0 and rol_emisor == "Cajero":
-                                    supabase.table("ajustes_puntos").insert({
-                                        "Fecha": fecha_hoy, 
-                                        "Empleado": pt["Emisor"], 
-                                        "Puntos": recompensa_cajero, 
-                                        "Motivo": "Recompensa por reporte de auditoría de personal aprobado.", 
-                                        "Autor": "Gerencia", 
-                                        "Estado": "Aprobada"
-                                    }).execute()
+                                    insert_row("ajustes_puntos", {
+                                        "fecha": fecha_hoy, 
+                                        "empleado": emisor_actual, 
+                                        "puntos": recompensa_cajero, 
+                                        "motivo": "Recompensa por reporte de auditoría de personal aprobado.", 
+                                        "autor": "Gerencia", 
+                                        "estado": "Aprobada"
+                                    })
                                 elif recompensa_cajero > 0 and rol_emisor != "Cajero":
-                                    st.warning(f"La sugerencia fue aprobada, pero la recompensa de {recompensa_cajero} pts no se aplicó porque el empleado {pt['Emisor']} no tiene el rol exclusivo de 'Cajero' (es {rol_emisor}).")
+                                    st.warning(f"La sugerencia fue aprobada, pero la recompensa de {recompensa_cajero} pts no se aplicó porque el empleado {emisor_actual} no tiene el rol exclusivo de 'Cajero' (es {rol_emisor}).")
                                 
-                                supabase.table("puntos_cajero_pendientes").update({"Estado": "Aprobado"}).eq("id", pt_id).execute()
+                                supabase.table("puntos_cajero_pendientes").update({"estado": "Aprobado"}).eq("id", pt_id).execute()
                                 st.success("Bono/Multa aplicado al compañero exitosamente.")
                                 recargar_app()
                             except Exception as e: show_db_error(e, "aprobando sugerencia")
                             
                         if c2.button("❌ Denegar y descartar", key=f"den_caj_{pt_id}"):
                             try:
-                                supabase.table("puntos_cajero_pendientes").update({"Estado": "Rechazado"}).eq("id", pt_id).execute()
+                                supabase.table("puntos_cajero_pendientes").update({"estado": "Rechazado"}).eq("id", pt_id).execute()
                                 st.info("Sugerencia de puntos rechazada y descartada.")
                                 recargar_app()
                             except Exception as e: show_db_error(e, "denegando sugerencia")
@@ -2165,11 +2166,15 @@ elif pestaña == "💼 Panel de Gerencia":
             if salidas_pendientes:
                 for sp in salidas_pendientes:
                     sp_id = sp.get("id")
-                    st.markdown(f"<div class='task-pend'><b>{sp['Empleado']}</b> solicitó salir a las <b>{sp['Hora']}</b> (Auditor: {sp['Autor']})<br>Motivo: <i>{sp['Nota']}</i></div>", unsafe_allow_html=True)
+                    emp_sp = sp.get('Empleado', sp.get('empleado'))
+                    hor_sp = sp.get('Hora', sp.get('hora'))
+                    aut_sp = sp.get('Autor', sp.get('autor'))
+                    not_sp = sp.get('Nota', sp.get('nota'))
+                    st.markdown(f"<div class='task-pend'><b>{emp_sp}</b> solicitó salir a las <b>{hor_sp}</b> (Auditor: {aut_sp})<br>Motivo: <i>{not_sp}</i></div>", unsafe_allow_html=True)
                     c1, c2 = st.columns(2)
                     if c1.button("✅ Aprobar Salida", key=f"apr_sal_{sp_id}"):
                         try:
-                            insert_row("asistencia", {"Fecha": sp["Fecha"], "Hora": sp["Hora"], "Empleado": sp["Empleado"], "Sucursal": sp["Sucursal"], "Turno": sp["Turno"], "Tipo": "Salida", "Estado": "Retiro Temprano", "Nota": sp["Nota"]})
+                            insert_row("asistencia", {"Fecha": sp.get("Fecha", sp.get("fecha")), "Hora": hor_sp, "Empleado": emp_sp, "Sucursal": sp.get("Sucursal", sp.get("sucursal")), "Turno": sp.get("Turno", sp.get("turno")), "Tipo": "Salida", "Estado": "Retiro Temprano", "Nota": not_sp})
                             supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
                             st.success("Salida aprobada y registrada en la asistencia.")
                             recargar_app()
@@ -2183,13 +2188,19 @@ elif pestaña == "💼 Panel de Gerencia":
             else:
                 st.info("No hay solicitudes de retiro temprano pendientes.")
                 
-            # --- NUEVO: AUDITORÍA DE CORRECCIÓN DE FICHAJES (OLVIDOS) ---
+            # --- AUDITORÍA DE CORRECCIÓN DE FICHAJES (OLVIDOS) ---
             st.markdown("---")
             st.subheader("⏰ Solicitudes de Corrección de Ingreso (Olvidos)")
             if correcciones_pendientes:
                 for cp in correcciones_pendientes:
                     cp_id = cp.get("id")
-                    st.markdown(f"<div class='task-pend'><b>{cp['Empleado']}</b> olvidó fichar su entrada el <b>{cp['Fecha']}</b>.<br>Declara haber ingresado realmente a las <b>{cp['Hora_Real']}</b> en {cp['Sucursal']} ({cp['Turno']}).<br>Motivo: <i>{cp['Motivo']}</i></div>", unsafe_allow_html=True)
+                    emp_cp = cp.get('Empleado', cp.get('empleado'))
+                    fec_cp = cp.get('Fecha', cp.get('fecha'))
+                    hor_cp = cp.get('Hora_Real', cp.get('hora_real'))
+                    suc_cp = cp.get('Sucursal', cp.get('sucursal'))
+                    tur_cp = cp.get('Turno', cp.get('turno'))
+                    mot_cp = cp.get('Motivo', cp.get('motivo'))
+                    st.markdown(f"<div class='task-pend'><b>{emp_cp}</b> olvidó fichar su entrada el <b>{fec_cp}</b>.<br>Declara haber ingresado realmente a las <b>{hor_cp}</b> en {suc_cp} ({tur_cp}).<br>Motivo: <i>{mot_cp}</i></div>", unsafe_allow_html=True)
                     c1, c2 = st.columns(2)
                     
                     pts_penalidad = config_app.get("reglas_puntos", {}).get("Olvido Fichaje", -10)
@@ -2201,37 +2212,37 @@ elif pestaña == "💼 Panel de Gerencia":
                             id_modificar = None
                             
                             if not df_asist_olv.empty:
-                                filtro = df_asist_olv[(df_asist_olv["Empleado"] == cp["Empleado"]) & (df_asist_olv["Fecha"] == cp["Fecha"]) & (df_asist_olv["Tipo"] == "Entrada") & (df_asist_olv["Turno"] == cp["Turno"])]
+                                filtro = df_asist_olv[(df_asist_olv["Empleado"] == emp_cp) & (df_asist_olv["Fecha"] == fec_cp) & (df_asist_olv["Tipo"] == "Entrada") & (df_asist_olv["Turno"] == tur_cp)]
                                 if not filtro.empty:
                                     id_modificar = filtro.iloc[-1]["id"]
                                     ya_existe = True
                             
                             estado_final = "A tiempo"
                             try:
-                                t_ing_obj = datetime.datetime.strptime(lista_turnos[cp["Turno"]]["ingreso"], "%I:%M %p").time()
-                                dt_ing_ofi = datetime.datetime.combine(datetime.datetime.strptime(cp["Fecha"], "%Y-%m-%d").date(), t_ing_obj)
-                                dt_fichaje_real = datetime.datetime.combine(datetime.datetime.strptime(cp["Fecha"], "%Y-%m-%d").date(), datetime.datetime.strptime(cp["Hora_Real"], "%I:%M:%S %p").time())
+                                t_ing_obj = datetime.datetime.strptime(lista_turnos[tur_cp]["ingreso"], "%I:%M %p").time()
+                                dt_ing_ofi = datetime.datetime.combine(datetime.datetime.strptime(fec_cp, "%Y-%m-%d").date(), t_ing_obj)
+                                dt_fichaje_real = datetime.datetime.combine(datetime.datetime.strptime(fec_cp, "%Y-%m-%d").date(), datetime.datetime.strptime(hor_cp, "%I:%M:%S %p").time())
                                 
                                 tolerancia = int(config_app.get("tolerancia_minutos", 10))
                                 if dt_fichaje_real > (dt_ing_ofi + datetime.timedelta(minutes=tolerancia)):
                                     estado_final = "Tarde"
                             except: pass
                             
-                            nota_final = f"[Corregido por Gerencia] {cp['Motivo']}"
+                            nota_final = f"[Corregido por Gerencia] {mot_cp}"
                             
                             if ya_existe:
                                 supabase.table("asistencia").update({
-                                    "Hora": cp["Hora_Real"],
-                                    "Estado": estado_final,
-                                    "Nota": nota_final
+                                    "hora": hor_cp,
+                                    "estado": estado_final,
+                                    "nota": nota_final
                                 }).eq("id", int(id_modificar)).execute()
                             else:
                                 insert_row("asistencia", {
-                                    "Fecha": cp["Fecha"],
-                                    "Hora": cp["Hora_Real"],
-                                    "Empleado": cp["Empleado"],
-                                    "Sucursal": cp["Sucursal"],
-                                    "Turno": cp["Turno"],
+                                    "Fecha": fec_cp,
+                                    "Hora": hor_cp,
+                                    "Empleado": emp_cp,
+                                    "Sucursal": suc_cp,
+                                    "Turno": tur_cp,
                                     "Tipo": "Entrada",
                                     "Estado": estado_final,
                                     "Distancia_m": 0.0,
@@ -2240,7 +2251,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             
                             insert_row("ajustes_puntos", {
                                 "Fecha": str(fecha_hoy),
-                                "Empleado": cp["Empleado"],
+                                "Empleado": emp_cp,
                                 "Puntos": pts_penalidad,
                                 "Motivo": "Penalidad automática por olvidar registrar ingreso a tiempo",
                                 "Autor": "Gerencia (Auto)",
@@ -2249,7 +2260,7 @@ elif pestaña == "💼 Panel de Gerencia":
                             
                             supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
                             
-                            st.success(f"✅ Ingreso corregido correctamente. Se aplicó la penalidad de {pts_penalidad} pts a {cp['Empleado']}.")
+                            st.success(f"✅ Ingreso corregido correctamente. Se aplicó la penalidad de {pts_penalidad} pts a {emp_cp}.")
                             recargar_app()
                         except Exception as e: show_db_error(e, "corrigiendo ingreso")
                         
@@ -2272,42 +2283,42 @@ elif pestaña == "💼 Panel de Gerencia":
                     c_p1.markdown(f"**{row['Empleado']}** reportó: '{row['Tarea']}' (+{row['Puntos']} pts)")
                     if c_p2.button("✅ Aprobar", key=f"apr_t_{row['id']}"):
                         try:
-                            supabase.table("tareas_log").update({"Estado": "Aprobada"}).eq("id", int(row['id'])).execute()
+                            supabase.table("tareas_log").update({"estado": "Aprobada"}).eq("id", int(row['id'])).execute()
                             recargar_app()
                         except Exception as e: show_db_error(e, "aprobando tarea")
                     if c_p3.button("❌ Rechazar", key=f"rec_t_{row['id']}"):
                         try:
-                            supabase.table("tareas_log").update({"Estado": "Rechazada"}).eq("id", int(row['id'])).execute()
+                            supabase.table("tareas_log").update({"estado": "Rechazada"}).eq("id", int(row['id'])).execute()
                             recargar_app()
                         except Exception as e: show_db_error(e, "rechazando tarea")
                         
-            puntos_pendientes = [p for p in lista_puntos if p.get("Estado") == "Pendiente"]
+            puntos_pendientes = [p for p in lista_puntos if p.get("Estado", p.get("estado")) == "Pendiente"]
             if puntos_pendientes:
                 st.write("**Evaluaciones Pendientes (De Supervisores):**")
                 for p in lista_puntos:
-                    if p.get("Estado") == "Pendiente":
+                    if p.get("Estado", p.get("estado")) == "Pendiente":
                         p_id = p.get("id")
                         c_pp1, c_pp2, c_pp3 = st.columns([4, 1, 1])
-                        c_pp1.markdown(f"**{p['Autor']}** sugiere **{p['Puntos']} pts** a **{p['Empleado']}** (Motivo: {p['Motivo']})")
+                        c_pp1.markdown(f"**{p.get('Autor', p.get('autor'))}** sugiere **{p.get('Puntos', p.get('puntos'))} pts** a **{p.get('Empleado', p.get('empleado'))}** (Motivo: {p.get('Motivo', p.get('motivo'))})")
                         if c_pp2.button("✅ Aprobar", key=f"apr_p_{p_id}"):
                             try:
-                                supabase.table("ajustes_puntos").update({"Estado": "Aprobada"}).eq("id", p_id).execute()
+                                supabase.table("ajustes_puntos").update({"estado": "Aprobada"}).eq("id", p_id).execute()
                                 recargar_app()
                             except Exception as e: show_db_error(e, "aprobando puntos")
                         if c_pp3.button("❌ Rechazar", key=f"rec_p_{p_id}"):
                             try:
-                                supabase.table("ajustes_puntos").update({"Estado": "Rechazada"}).eq("id", p_id).execute()
+                                supabase.table("ajustes_puntos").update({"estado": "Rechazada"}).eq("id", p_id).execute()
                                 recargar_app()
                             except Exception as e: show_db_error(e, "rechazando puntos")
                             
             st.subheader("📬 Buzón de Quejas y Reportes")
             for r in reportes_log:
-                if r.get("Estado") == "Pendiente de lectura":
+                if r.get("Estado", r.get("estado")) == "Pendiente de lectura":
                     r_id = r.get("id")
-                    st.markdown(f"<div class='report-box'><b>📬 NUEVO REPORTE</b> | Fecha: {r['Fecha']} {r['Hora']}<br><b>Emisor:</b> {r['Emisor']} | <b>Tipo:</b> {r['Tipo']}<br><b>Detalle:</b> <i>'{r['Detalle']}'</i></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='report-box'><b>📬 NUEVO REPORTE</b> | Fecha: {r.get('Fecha', r.get('fecha'))} {r.get('Hora', r.get('hora'))}<br><b>Emisor:</b> {r.get('Emisor', r.get('emisor'))} | <b>Tipo:</b> {r.get('Tipo', r.get('tipo'))}<br><b>Detalle:</b> <i>'{r.get('Detalle', r.get('detalle'))}'</i></div>", unsafe_allow_html=True)
                     if st.button("Marcar como Visto", key=f"visto_rep_{r_id}"):
                         try:
-                            supabase.table("reportes").update({"Estado": "Visto"}).eq("id", r_id).execute()
+                            supabase.table("reportes").update({"estado": "Visto"}).eq("id", r_id).execute()
                             recargar_app()
                         except Exception as e: show_db_error(e, "marcando reporte")
 
@@ -2465,36 +2476,33 @@ elif pestaña == "💼 Panel de Gerencia":
                                 try:
                                     supabase.table("empleados").update({"nombre": nn, "rol": nuevo_rol}).eq("nombre", emp_mod).execute()
                                     
-                                    try: supabase.table("ajustes_puntos").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    try: supabase.table("ajustes_puntos").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
-                                    try: supabase.table("ajustes_puntos").update({"Autor": nn}).eq("Autor", emp_mod).execute()
+                                    try: supabase.table("ajustes_puntos").update({"autor": nn}).eq("autor", emp_mod).execute()
                                     except: pass
-                                    try: supabase.table("salidas_pendientes").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    try: supabase.table("salidas_pendientes").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
-                                    try: supabase.table("salidas_pendientes").update({"Autor": nn}).eq("Autor", emp_mod).execute()
+                                    try: supabase.table("salidas_pendientes").update({"autor": nn}).eq("autor", emp_mod).execute()
                                     except: pass
-                                    try: supabase.table("correcciones_pendientes").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    try: supabase.table("correcciones_pendientes").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
-                                    try: supabase.table("reportes").update({"Emisor": nn}).eq("Emisor", emp_mod).execute()
+                                    try: supabase.table("reportes").update({"emisor": nn}).eq("emisor", emp_mod).execute()
                                     except: pass
-                                    try: supabase.table("reportes").update({"Implicado": nn}).eq("Implicado", emp_mod).execute()
+                                    try: supabase.table("reportes").update({"implicado": nn}).eq("implicado", emp_mod).execute()
                                     except: pass
                                     try: supabase.table("alertas_ingreso").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
                                     except: pass
                                     try: supabase.table("mensajes").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
                                     except: pass
-                                    
-                                    # SOLUCIÓN 2 C: Corregido a minúscula para tabla SQL sueldos_historico
                                     try: supabase.table("sueldos_historico").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
-                                    
-                                    try: supabase.table("cierres_caja").update({"Cajero": nn}).eq("Cajero", emp_mod).execute()
+                                    try: supabase.table("cierres_caja").update({"cajero": nn}).eq("cajero", emp_mod).execute()
                                     except: pass
                                     try: supabase.table("planificacion_turnos").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
-                                    try: supabase.table("asistencia").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    try: supabase.table("asistencia").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
-                                    try: supabase.table("tareas_log").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    try: supabase.table("tareas_log").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
                                     try: supabase.table("tareas_individuales").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
@@ -2597,9 +2605,9 @@ elif pestaña == "💼 Panel de Gerencia":
                                     supabase.table("locales").update({"nombre": nuevo_nombre, "lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
                                     try: supabase.table("planificacion_turnos").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
                                     except: pass
-                                    try: supabase.table("asistencia").update({"Sucursal": nuevo_nombre}).eq("Sucursal", loc_mod).execute()
+                                    try: supabase.table("asistencia").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
                                     except: pass
-                                    try: supabase.table("cierres_caja").update({"Sucursal": nuevo_nombre}).eq("Sucursal", loc_mod).execute()
+                                    try: supabase.table("cierres_caja").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
                                     except: pass
                                     st.success(f"✅ Tienda actualizada a {nuevo_nombre}.")
                                     recargar_app()
@@ -2646,295 +2654,4 @@ elif pestaña == "💼 Panel de Gerencia":
                     except:
                         time_ing_def, time_sal_def = ahora.time(), ahora.time()
                         
-                    c_hm1, c_hm2 = st.columns(2)
-                    hm_ingreso = c_hm1.time_input("Modificar Ingreso:", value=time_ing_def)
-                    hm_salida = c_hm2.time_input("Modificar Salida:", value=time_sal_def)
-                    
-                    if st.button("💾 Guardar Horario"):
-                        nuevo_nombre_t = n_turno_mod.strip()
-                        if nuevo_nombre_t and nuevo_nombre_t != turno_mod:
-                            if nuevo_nombre_t not in lista_turnos:
-                                try:
-                                    supabase.table("turnos").update({"nombre": nuevo_nombre_t, "ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
-                                    try: supabase.table("planificacion_turnos").update({"turno": nuevo_nombre_t}).eq("turno", turno_mod).execute()
-                                    except: pass
-                                    st.success("✅ Turno actualizado.")
-                                    recargar_app()
-                                except Exception as e: show_db_error(e, "actualizando horario")
-                            else:
-                                st.warning("⚠️ Ese nombre de turno ya existe.")
-                        else:
-                            try:
-                                supabase.table("turnos").update({"ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
-                                st.success("✅ Horario actualizado.")
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "actualizando horario")
-
-                st.markdown("---")
-                borrar_turno = st.selectbox("Eliminar Turno:", ["Seleccionar..."] + list(lista_turnos.keys()))
-                if st.button("🗑️ Eliminar Turno") and borrar_turno != "Seleccionar...":
-                    try:
-                        supabase.table("turnos").delete().eq("nombre", borrar_turno).execute()
-                        recargar_app()
-                    except Exception as e: show_db_error(e, "eliminando turno")
-
-        with tab_comunicados:
-            col_m1, col_m2 = st.columns(2)
-            with col_m1:
-                st.subheader("🔔 Alerta al Ingresar")
-                with st.form("form_alertas"):
-                    dest_ing = st.selectbox("Destinatario:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados))
-                    txt_alerta = st.text_area("Mensaje:")
-                    if st.form_submit_button("Crear Alerta") and txt_alerta:
-                        try:
-                            supabase.table("alertas_ingreso").insert({"destinatario": dest_ing, "texto": txt_alerta}).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "creando alerta")
-                for a in alertas_ingreso:
-                    a_id = a.get("id")
-                    with st.expander(f"A {a.get('destinatario', a.get('Destinatario'))}: {a.get('texto', a.get('Texto'))[:20]}..."):
-                        if st.button("🗑️ Eliminar", key=f"del_al_{a_id}"):
-                            try:
-                                supabase.table("alertas_ingreso").delete().eq("id", a_id).execute()
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "eliminando alerta")
-                            
-            with col_m2:
-                st.subheader("📢 Anuncio Fijo")
-                with st.form("form_fijo"):
-                    dest_fijo = st.selectbox("Destinatario:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="fijo")
-                    txt_fijo = st.text_area("Mensaje:")
-                    if st.form_submit_button("Publicar") and txt_fijo:
-                        try:
-                            supabase.table("mensajes").insert({"destinatario": dest_fijo, "texto": txt_fijo}).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "creando anuncio")
-                for m in lista_mensajes:
-                    m_id = m.get("id")
-                    with st.expander(f"A {m.get('destinatario', 'Todos')}: {m.get('texto', '')[:20]}..."):
-                        st.write(m.get('texto', ''))
-                        if st.button("🗑️ Eliminar", key=f"del_msg_{m_id}"):
-                            try:
-                                supabase.table("mensajes").delete().eq("id", m_id).execute()
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "eliminando anuncio")
-
-        with tab_config:
-            st.subheader("⚙️ Configuración General")
-            with st.form("form_config"):
-                st.markdown("### 📝 Ajustes Básicos")
-                c_conf1, c_conf2 = st.columns(2)
-                nuevo_titulo = c_conf1.text_input("Título del Portal", value=config_app.get("titulo_portal", "🏢 Portal Corporativo"))
-                nueva_pass = c_conf2.text_input("Contraseña de Gerencia", value=config_app.get("admin_password", "1234"), type="password")
-                
-                c_conf3, c_conf4 = st.columns(2)
-                nueva_tol = c_conf3.number_input("Tolerancia de llegada (minutos)", value=int(config_app.get("tolerancia_minutos", 10)))
-                rad_metros = c_conf4.number_input("Radio GPS permitido (metros)", value=int(config_app.get("radio_metros", 150)))
-                
-                nuevo_msg_dia = st.text_area("Mensaje del Día (Opcional)", value=config_app.get("mensaje_dia", ""))
-                msg_tarde = st.text_input("Mensaje de llegada tarde", value=config_app.get("mensaje_llegada_tarde", "🚨 Llegada fuera del margen de tolerancia."))
-                
-                c_conf5, c_conf6 = st.columns(2)
-                rec_cajero = c_conf5.number_input("Recompensa auditoría cajero (pts)", value=int(config_app.get("recompensa_auditoria_cajero", 10)))
-                d_semana = c_conf6.selectbox("Día de inicio de semana", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")))
-                
-                try:
-                    f_pts_def = datetime.datetime.strptime(config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d")), "%Y-%m-%d").date()
-                except:
-                    f_pts_def = ahora.date().replace(day=1)
-                n_fecha_pts = st.date_input("Fecha de reinicio de la liga de Puntos", value=f_pts_def)
-
-                st.markdown("### 🔧 Opciones del Sistema")
-                col_op1, col_op2 = st.columns(2)
-                with col_op1:
-                    n_gps = st.checkbox("Verificar ubicación GPS", value=get_bool_config("verificar_gps", True))
-                    n_wifi = st.checkbox("Verificar Red Wi-Fi", value=get_bool_config("verificar_wifi", False))
-                    n_auto = st.checkbox("Permitir Auto-registro de empleados", value=get_bool_config("autoregistro", False))
-                    n_sal_estricta = st.checkbox("Salida Estricta (exigir GPS/Wi-Fi al salir)", value=get_bool_config("salida_estricta", False))
-                    n_sal_manual = st.checkbox("Exigir registrar la Salida Manualmente", value=get_bool_config("exigir_salida_manual", False))
-                with col_op2:
-                    n_desc_tarde = st.checkbox("Descontar horas por llegada tarde", value=get_bool_config("desc_tarde", True))
-                    n_desc_temp = st.checkbox("Descontar horas por salida temprana", value=get_bool_config("desc_temp", True))
-                    n_perdon_tol = st.checkbox("Perdonar tolerancia (no descontar si llega en los min de gracia)", value=get_bool_config("perdonar_tolerancia", True))
-                    n_mostrar_hs = st.checkbox("Mostrar horas computadas en el celular del empleado", value=get_bool_config("mostrar_horas_empleado", False))
-                    n_estricto_plan = st.checkbox("Fichaje estricto (bloquear ingreso si no tiene turno asignado)", value=get_bool_config("fichaje_estricto_plan", False))
-                
-                if st.form_submit_button("💾 Guardar Configuración"):
-                    config_app["titulo_portal"] = nuevo_titulo
-                    config_app["admin_password"] = nueva_pass
-                    config_app["tolerancia_minutos"] = nueva_tol
-                    config_app["mensaje_dia"] = nuevo_msg_dia
-                    config_app["mensaje_llegada_tarde"] = msg_tarde
-                    config_app["radio_metros"] = rad_metros
-                    config_app["recompensa_auditoria_cajero"] = rec_cajero
-                    config_app["dia_inicio_semana"] = d_semana
-                    config_app["fecha_inicio_puntos"] = n_fecha_pts.strftime("%Y-%m-%d")
-                    config_app["verificar_gps"] = n_gps
-                    config_app["verificar_wifi"] = n_wifi
-                    config_app["autoregistro"] = n_auto
-                    config_app["salida_estricta"] = n_sal_estricta
-                    config_app["exigir_salida_manual"] = n_sal_manual
-                    config_app["desc_tarde"] = n_desc_tarde
-                    config_app["desc_temp"] = n_desc_temp
-                    config_app["perdonar_tolerancia"] = n_perdon_tol
-                    config_app["mostrar_horas_empleado"] = n_mostrar_hs
-                    config_app["fichaje_estricto_plan"] = n_estricto_plan
-                    save_json("config", config_app)
-                    st.success("Configuración actualizada correctamente.")
-                    recargar_app()
-                    
-            with st.form("form_rankings"):
-                st.markdown("### 🏆 Crear y Editar Ligas de Puntos")
-                st.write("Creá tops separados (ej: 'Top Vendedores') y elegí quién compite, quién lo ve y si se muestran los puntos exactos.")
-                rankings = config_app.get("rankings_muro", [])
-                edited_rankings = []
-                for i, r in enumerate(rankings):
-                    st.markdown(f"**Liga {i+1}: {r['nombre']}**")
-                    c1, c2 = st.columns(2)
-                    r_nom = c1.text_input("Nombre de la Liga", value=r['nombre'], key=f"rn_{i}")
-                    r_mp = c2.checkbox("Mostrar puntos a los espectadores", value=r.get("mostrar_puntos", True), key=f"rmp_{i}")
-                    
-                    c3, c4 = st.columns(2)
-                    r_comp = c3.multiselect("Participantes (Compiten):", ["Todos"] + lista_roles_disponibles + lista_empleados, default=r.get('competidores', ["Todos"]), key=f"rc_{i}")
-                    r_esp = c4.multiselect("Espectadores (Pueden verlo):", ["Todos"] + lista_roles_disponibles + lista_empleados, default=r.get('espectadores', ["Todos"]), key=f"re_{i}")
-                    
-                    borrar = st.checkbox(f"🗑️ Eliminar esta liga", key=f"rdel_{i}")
-                    if not borrar:
-                        edited_rankings.append({"nombre": r_nom, "competidores": r_comp, "espectadores": r_esp, "mostrar_puntos": r_mp})
-                    st.write("---")
-                
-                st.markdown("**➕ Agregar Nueva Liga**")
-                n_nom = st.text_input("Nombre de la nueva liga:")
-                c_n1, c_n2 = st.columns(2)
-                n_mp = c_n1.checkbox("Mostrar puntos exactos", value=True)
-                c_n3, c_n4 = st.columns(2)
-                n_comp = c_n3.multiselect("Participantes:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"])
-                n_esp = c_n4.multiselect("Espectadores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"])
-                
-                if st.form_submit_button("💾 Guardar Ligas"):
-                    if n_nom.strip():
-                        edited_rankings.append({"nombre": n_nom.strip(), "competidores": n_comp, "espectadores": n_esp, "mostrar_puntos": n_mp})
-                    config_app["rankings_muro"] = edited_rankings
-                    save_json("config", config_app)
-                    st.success("Ligas actualizadas correctamente.")
-                    recargar_app()
-                    
-        with tab_limpieza:
-            st.subheader("🧹 Limpieza de Datos Históricos")
-            st.write("Eliminá registros antiguos para liberar espacio y agilizar la aplicación.")
-            
-            c_limp1, c_limp2, c_limp3 = st.columns(3)
-            tabla_a_limpiar = c_limp1.selectbox("¿Qué datos querés borrar?", ["Asistencia (Fichajes)", "Cierres de Caja", "Tareas y Puntos", "Reportes y Avisos"])
-            fecha_in_limp = c_limp2.date_input("Desde la fecha:", value=ahora.date() - datetime.timedelta(days=365))
-            fecha_fi_limp = c_limp3.date_input("Hasta la fecha:", value=ahora.date() - datetime.timedelta(days=30))
-            
-            st.warning("⚠️ **ATENCIÓN:** Esta acción no se puede deshacer. Los datos eliminados se perderán permanentemente.")
-            confirmar_borrado = st.checkbox("Entiendo que esto borrará datos permanentemente.")
-            
-            if st.button("🗑️ Eliminar Datos Seleccionados", type="primary"):
-                if not confirmar_borrado:
-                    st.error("🚨 Tenés que marcar la casilla de confirmación para proceder.")
-                else:
-                    try:
-                        f_in_str = fecha_in_limp.strftime("%Y-%m-%d")
-                        f_fi_str = fecha_fi_limp.strftime("%Y-%m-%d")
-                        
-                        if tabla_a_limpiar == "Asistencia (Fichajes)":
-                            try: supabase.table("asistencia").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("asistencia").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-                        elif tabla_a_limpiar == "Cierres de Caja":
-                            try: supabase.table("cierres_caja").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("cierres_caja").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-                        elif tabla_a_limpiar == "Tareas y Puntos":
-                            try: supabase.table("tareas_log").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("tareas_log").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("ajustes_puntos").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("ajustes_puntos").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-                        elif tabla_a_limpiar == "Reportes y Avisos":
-                            try: supabase.table("reportes").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("reportes").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-
-                        st.success(f"✅ Se han eliminado los datos de {tabla_a_limpiar} entre {f_in_str} y {f_fi_str}.")
-                        recargar_app()
-                    except Exception as e:
-                        show_db_error(e, "eliminando datos históricos")
-
-# ==========================================
-# 7. PANEL DEL DUEÑO DEL SOFTWARE (OWNER)
-# ==========================================
-elif pestaña == nombre_tab_dueno:
-    st.markdown('<div class="main-title" style="font-size: 2rem;">⚙️ Panel del Propietario del Software</div>', unsafe_allow_html=True)
-    
-    pass_owner = st.text_input("Clave Maestra:", type="password", placeholder="Ingresar clave para acceder...")
-    
-    # CLAVE DE ACCESO DEL DUEÑO (La podés cambiar si querés)
-    if pass_owner == "master123":
-        t_esp, t_lic = st.tabs(["🕵️ Modo Espía", "🔑 Gestión de Licencia y Marca Blanca"])
-        
-        with t_esp:
-            st.subheader("🕵️ Modo Espía (Incógnito)")
-            st.write("Ingresá a la app simulando ser un empleado para ver exactamente cómo se visualiza su portal y validar sus configuraciones.")
-            emp_espia = st.selectbox("Seleccionar empleado a simular:", ["Seleccionar..."] + sorted(lista_empleados))
-            if st.button("🕶️ Iniciar Modo Incógnito (Empleado)") and emp_espia != "Seleccionar...":
-                st.session_state['incognito'] = True
-                st.session_state['incognito_user'] = emp_espia
-                recargar_app()
-                
-            st.write("---")
-            st.write("🕵️ **Simular ser Gerencia:** Entrá al panel de gerencia sin que se registre en el historial de seguridad.")
-            if st.button("🕶️ Iniciar como Gerente"):
-                st.session_state['incognito'] = True
-                st.session_state['incognito_user'] = "Gerencia"
-                recargar_app()
-
-        with t_lic:
-            st.subheader("🔧 Ajustes de Marca Blanca y Licencia")
-            with st.form("form_owner"):
-                n_empresa = st.text_input("Nombre de la Empresa Proveedora", value=owner_config.get("empresa_nombre", ""))
-                n_tab = st.text_input("Nombre de esta pestaña en el menú", value=owner_config.get("nombre_tab_dueno", "⚙️ Dueño del Software"))
-                n_estado = st.selectbox("Estado de la Licencia del Cliente", ["Activo", "Suspendido"], index=0 if owner_config.get("estado_licencia") == "Activo" else 1)
-                
-                try: 
-                    fv = datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date()
-                except: 
-                    fv = ahora.date()
-                n_venc = st.date_input("Fecha de Vencimiento del Software", value=fv)
-                
-                n_plan = st.text_input("Plan Contratado (Ej: Básico, Premium, Ilimitado)", value=owner_config.get("plan_pago", "Mensual"))
-                n_mostrar_plan = st.checkbox("Mostrar tipo de plan en el panel de Gerencia", value=owner_config.get("mostrar_membresia", False))
-                
-                n_bloqueo = st.text_area("Mensaje de Bloqueo (Si está suspendido o vencido)", value=owner_config.get("mensaje_bloqueo", ""))
-                n_aviso = st.text_area("Mensaje de Aviso Próximo a Vencer", value=owner_config.get("mensaje_aviso", ""))
-                d_aviso = st.number_input("Días de anticipación para lanzar el aviso", value=int(owner_config.get("dias_aviso", 5)))
-                
-                n_somos = st.text_area("Texto Quiénes Somos (Ayuda/Soporte)", value=owner_config.get("quienes_somos", ""))
-                n_contacto = st.text_area("Texto de Contactos (Soporte Técnico)", value=owner_config.get("contactos", ""))
-
-                if st.form_submit_button("💾 Guardar Configuración de Propietario"):
-                    owner_config["empresa_nombre"] = n_empresa
-                    owner_config["nombre_tab_dueno"] = n_tab
-                    owner_config["estado_licencia"] = n_estado
-                    owner_config["fecha_vencimiento"] = n_venc.strftime("%Y-%m-%d")
-                    owner_config["plan_pago"] = n_plan
-                    owner_config["mostrar_membresia"] = n_mostrar_plan
-                    owner_config["mensaje_bloqueo"] = n_bloqueo
-                    owner_config["mensaje_aviso"] = n_aviso
-                    owner_config["dias_aviso"] = d_aviso
-                    owner_config["quienes_somos"] = n_somos
-                    owner_config["contactos"] = n_contacto
-                    save_json("owner_config", owner_config)
-                    st.success("Configuración de propietario guardada exitosamente.")
-                    recargar_app()
-                    
-    elif pass_owner != "":
-        st.error("❌ Clave incorrecta.")
+                    c_hm1, c_hm2Soy un modelo de lenguaje, así que no tengo esa capacidad.
