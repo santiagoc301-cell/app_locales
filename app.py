@@ -468,7 +468,7 @@ elif 'device_id' in st.session_state:
             break
 
 # ==========================================
-# LÓGICA CORE DE MOTOR DE TIEMPO (FIL ডিগ্রী FILTRO DINÁMICO)
+# LÓGICA CORE DE MOTOR DE TIEMPO (FILTRO DINÁMICO)
 # ==========================================
 turnos_disponibles_ahora = []
 nombres_turnos_todos = list(lista_turnos.keys())
@@ -722,6 +722,7 @@ if pestaña == "📱 Portal del Empleado":
                                         estado_llegada = "Tarde"
                                 except: pass
                                 
+                                # Verificamos si la inserción fue exitosa
                                 exito = insert_row("asistencia", {"fecha": str(fecha_hoy), "hora": str(hora_hoy), "empleado": str(empleado_en_celu), "sucursal": str(local_detectado), "turno": str(turno_seleccionado), "tipo": "Entrada", "estado": str(estado_llegada), "distancia_m": round(float(distancia_real), 1), "nota": str(nota_empleado)})
                                 
                                 if exito:
@@ -1241,7 +1242,7 @@ if pestaña == "📱 Portal del Empleado":
                             recargar_app()
                         except Exception as e:
                             show_db_error(e, "vinculando cuenta existente")
-                            # ==========================================
+# ==========================================
 # 6. PANEL DE GERENCIA (BUSINESS INTELLIGENCE)
 # ==========================================
 elif pestaña == "💼 Panel de Gerencia":
@@ -2864,16 +2865,26 @@ elif pestaña == "💼 Panel de Gerencia":
                         if tabla_a_limpiar == "Asistencia (Fichajes)":
                             try: supabase.table("asistencia").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
                             except: pass
+                            try: supabase.table("asistencia").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                            except: pass
                         elif tabla_a_limpiar == "Cierres de Caja":
                             try: supabase.table("cierres_caja").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                            except: pass
+                            try: supabase.table("cierres_caja").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
                             except: pass
                         elif tabla_a_limpiar == "Tareas y Puntos":
                             try: supabase.table("tareas_log").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
                             except: pass
+                            try: supabase.table("tareas_log").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                            except: pass
                             try: supabase.table("ajustes_puntos").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                            except: pass
+                            try: supabase.table("ajustes_puntos").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
                             except: pass
                         elif tabla_a_limpiar == "Reportes y Avisos":
                             try: supabase.table("reportes").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                            except: pass
+                            try: supabase.table("reportes").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
                             except: pass
 
                         st.success(f"✅ Se han eliminado los datos de {tabla_a_limpiar} entre {f_in_str} y {f_fi_str}.")
