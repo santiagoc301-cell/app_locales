@@ -1683,7 +1683,8 @@ elif pestaña == "💼 Panel de Gerencia":
                         elif f_ini > f_fin:
                             st.warning("🚨 La fecha 'Desde' no puede ser mayor a la fecha 'Hasta'.")
                         else:
-                            insert_row("sueldos_historico", {"Empleado": emp_s, "Fecha_Desde": f_ini.strftime("%Y-%m-%d"), "Fecha_Hasta": f_fin.strftime("%Y-%m-%d"), "Valor_Hora": val_s})
+                            # SOLUCIÓN 2 A: Se envía en minúsculas a Supabase
+                            insert_row("sueldos_historico", {"empleado": emp_s, "fecha_desde": f_ini.strftime("%Y-%m-%d"), "fecha_hasta": f_fin.strftime("%Y-%m-%d"), "valor_hora": val_s})
                             st.success(f"✅ ¡Tarifa de ${val_s}/h guardada para {emp_s}!")
                             recargar_app()
             with c_su2:
@@ -1733,10 +1734,11 @@ elif pestaña == "💼 Panel de Gerencia":
                                 c_b1, c_b2 = st.columns(2)
                                 if c_b1.button("💾 Guardar Cambios", key=f"save_s_{s_id}"):
                                     try:
+                                        # SOLUCIÓN 2 B: Se actualiza usando minúsculas para Supabase
                                         supabase.table("sueldos_historico").update({
-                                            'Valor_Hora': n_val,
-                                            'Fecha_Desde': n_ini.strftime("%Y-%m-%d"),
-                                            'Fecha_Hasta': n_fin_str
+                                            'valor_hora': n_val,
+                                            'fecha_desde': n_ini.strftime("%Y-%m-%d"),
+                                            'fecha_hasta': n_fin_str
                                         }).eq("id", s_id).execute()
                                         recargar_app()
                                     except Exception as e: show_db_error(e, "actualizando tarifa")
@@ -2481,8 +2483,11 @@ elif pestaña == "💼 Panel de Gerencia":
                                     except: pass
                                     try: supabase.table("mensajes").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
                                     except: pass
-                                    try: supabase.table("sueldos_historico").update({"Empleado": nn}).eq("Empleado", emp_mod).execute()
+                                    
+                                    # SOLUCIÓN 2 C: Corregido a minúscula para tabla SQL sueldos_historico
+                                    try: supabase.table("sueldos_historico").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
+                                    
                                     try: supabase.table("cierres_caja").update({"Cajero": nn}).eq("Cajero", emp_mod).execute()
                                     except: pass
                                     try: supabase.table("planificacion_turnos").update({"empleado": nn}).eq("empleado", emp_mod).execute()
