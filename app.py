@@ -222,7 +222,7 @@ def load_df(table_name):
                 df = df.rename(columns={"empleado": "Empleado", "fecha": "Fecha", "hora": "Hora", "sucursal": "Sucursal", "turno": "Turno", "tipo": "Tipo", "estado": "Estado", "distancia_m": "Distancia_m", "nota": "Nota"})
             elif table_name == "tareas_log":
                 df = df.rename(columns={"fecha": "Fecha", "hora": "Hora", "empleado": "Empleado", "tarea": "Tarea", "puntos": "Puntos", "estado": "Estado"})
-            return df
+            return df.reset_index(drop=True)
         return pd.DataFrame()
     except Exception as e:
         return pd.DataFrame()
@@ -599,6 +599,8 @@ if pestaña == "📱 Portal del Empleado":
             f_inicio_str = config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d"))
             d_inicio_puntos = datetime.datetime.strptime(f_inicio_str, "%Y-%m-%d").date()
             df_punt = load_df("asistencia")
+            if not df_punt.empty:
+                df_punt = df_punt.reset_index(drop=True)
             
             if not df_punt.empty:
                 df_punt['F_Obj'] = pd.to_datetime(df_punt['Fecha'], errors='coerce').dt.date
@@ -607,6 +609,7 @@ if pestaña == "📱 Portal del Empleado":
                 
             df_tl = load_df("tareas_log")
             if not df_tl.empty:
+                df_tl = df_tl.reset_index(drop=True)
                 df_tl['F_Obj'] = pd.to_datetime(df_tl['Fecha'], errors='coerce').dt.date
                 puntos_actuales += pd.to_numeric(df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Estado"] == "Aprobada") & (df_tl['F_Obj'] >= d_inicio_puntos)]["Puntos"], errors='coerce').fillna(0).astype(int).sum()
                 
@@ -1307,6 +1310,8 @@ elif pestaña == "💼 Panel de Gerencia":
             c_alrt1.markdown(f"### 🔔 Alertas del Día ({fecha_hoy})")
             suc_alerta = c_alrt2.selectbox("🏢 Filtrar por Sucursal:", ["Todas las sucursales"] + list(lista_locales.keys()), key="filtro_alertas_dia")
             df_activos = load_df("asistencia")
+            if not df_activos.empty:
+                df_activos = df_activos.reset_index(drop=True)
             if df_activos.empty:
                 st.info("📭 Base de datos limpia.")
             else:
@@ -1866,6 +1871,7 @@ elif pestaña == "💼 Panel de Gerencia":
             if emp_mod_horario != "Seleccionar...":
                 df_asist_mod = load_df("asistencia")
                 if not df_asist_mod.empty:
+                    df_asist_mod = df_asist_mod.reset_index(drop=True)
                     df_fil = df_asist_mod[(df_asist_mod["Empleado"] == emp_mod_horario) & (df_asist_mod["Fecha"] == str(fecha_mod_horario))].reset_index(drop=True)
                     if not df_fil.empty:
                         turnos_del_dia = df_fil["Turno"].unique()
@@ -2015,6 +2021,8 @@ elif pestaña == "💼 Panel de Gerencia":
                 return None, "Libre"
                 
             df_asist_comp = load_df("asistencia")
+            if not df_asist_comp.empty:
+                df_asist_comp = df_asist_comp.reset_index(drop=True)
             comp_data = []
             
             for emp in lista_empleados:
@@ -2249,6 +2257,8 @@ elif pestaña == "💼 Panel de Gerencia":
                     if c1.button(f"✅ Aprobar e Imputar ({pts_penalidad} pts)", key=f"apr_olv_{cp_id}"):
                         try:
                             df_asist_olv = load_df("asistencia")
+                            if not df_asist_olv.empty:
+                                df_asist_olv = df_asist_olv.reset_index(drop=True)
                             ya_existe = False
                             id_modificar = None
                             
@@ -2375,6 +2385,10 @@ elif pestaña == "💼 Panel de Gerencia":
             if emp_perfil != "Seleccionar...":
                 st.write(f"**Rol:** `{roles_empleados.get(emp_perfil, 'N/A')}` | **Estado:** {'🔗 Enlazado' if emp_perfil in dispositivos_vinculados else '📱 Sin Celular'}")
                 df_act_p, df_tar_p = load_df("asistencia"), load_df("tareas_log")
+                if not df_act_p.empty:
+                    df_act_p = df_act_p.reset_index(drop=True)
+                if not df_tar_p.empty:
+                    df_tar_p = df_tar_p.reset_index(drop=True)
                 if not df_act_p.empty:
                     df_act_p['F_Obj'] = pd.to_datetime(df_act_p['Fecha'], errors='coerce').dt.date
                     df_e_p = df_act_p[(df_act_p["Empleado"] == emp_perfil) & (df_act_p['F_Obj'] >= pf_in) & (df_act_p['F_Obj'] <= pf_fi)].copy().reset_index(drop=True)
