@@ -469,7 +469,6 @@ elif 'device_id' in st.session_state:
         if dev == st.session_state['device_id']:
             empleado_en_celu = emp
             break
-
 # ==========================================
 # LÓGICA CORE DE MOTOR DE TIEMPO (FILTRO DINÁMICO)
 # ==========================================
@@ -2015,95 +2014,99 @@ elif pestaña == "💼 Panel de Gerencia":
             filtro_suc_comp = c_comp1.selectbox("🏢 Filtrar vista por Sucursal:", ["Todas las sucursales"] + list(lista_locales.keys()))
             filtro_tur_comp = c_comp2.selectbox("⏰ Filtrar vista por Turno:", ["Todos los turnos"] + list(lista_turnos.keys()))
 
-            def get_plan_emp(fecha_s, empleado_s):
+            # --- NUEVA LÓGICA: SEPARACIÓN POR TURNOS PARA EVITAR DATOS INCOMPLETOS ---
+            def get_plan_emp_turno(fecha_s, empleado_s, turno_s):
                 for l_plan, turnos_dict in planificacion_turnos.get(fecha_s, {}).items():
-                    if isinstance(turnos_dict, dict):
-                        for t_plan, emps_list in turnos_dict.items():
-                            if isinstance(emps_list, list) and empleado_s in emps_list:
-                                return l_plan, t_plan
-                return None, "Libre"
-                
+                    if isinstance(turnos_dict, dict) and turno_s in turnos_dict:
+                        emps_list = turnos_dict[turno_s]
+                        if isinstance(emps_list, list) and empleado_s in emps_list:
+                            return l_plan
+                return None
+
             df_asist_comp = load_df("asistencia")
             if not df_asist_comp.empty:
                 df_asist_comp = df_asist_comp.reset_index(drop=True)
             comp_data = []
-            
-            for emp in lista_empleados:
-                mostrar_empleado = False
-                row = {"Empleado": emp}
-                
-                # --- MEJORA: FILTRA POR TURNO PLANIFICADO O POR TURNO REAL ---
-                for f_str in str_fechas:
-                    p_loc, p_tur = get_plan_emp(f_str, emp)
-                    
-                    real_estado, real_turno, real_sucursal = "No Fichó", "", ""
-                    if not df_asist_comp.empty:
-                        f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Entrada")].reset_index(drop=True)
-                        if not f_asist.empty:
-                            real_estado = f_asist.iloc[-1]["Estado"]
-                            if isinstance(real_estado, pd.Series): real_estado = real_estado.iloc[0]
-                            real_turno = f_asist.iloc[-1]["Turno"]
-                            if isinstance(real_turno, pd.Series): real_turno = real_turno.iloc[0]
-                            real_sucursal = f_asist.iloc[-1]["Sucursal"]
-                            if isinstance(real_sucursal, pd.Series): real_sucursal = real_sucursal.iloc[0]
-                            
-                    match_plan_loc = (filtro_suc_comp == "Todas las sucursales" or p_loc == filtro_suc_comp)
-                    match_plan_tur = (filtro_tur_comp == "Todos los turnos" or p_tur == filtro_tur_comp)
-                    match_real_loc = (filtro_suc_comp == "Todas las sucursales" or real_sucursal == filtro_suc_comp)
-                    match_real_tur = (filtro_tur_comp == "Todos los turnos" or real_turno == filtro_tur_comp)
-                    
-                    if (match_plan_loc and match_plan_tur and p_tur != "Libre") or (match_real_loc and match_real_tur and real_estado != "No Fichó"):
-                        mostrar_empleado = True
-                        
-                if filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos":
-                    mostrar_empleado = True 
 
-                if not mostrar_empleado:
-                    continue 
+            # 1. Obtenemos todos los turnos posibles a evaluar (Planificados + Reales extras)
+            turnos_posibles = list(lista_turnos.keys())
+            if not df_asist_comp.empty:
+                turnos_reales = df_asist_comp["Turno"].unique().tolist()
+                for tr in turnos_reales:
+                    if tr not in turnos_posibles and str(tr) != "nan" and str(tr).strip():
+                        turnos_posibles.append(tr)
+
+            for emp in lista_empleados:
+                # 2. Evaluamos CADA turno por separado para el mismo empleado
+                for turno_eval in turnos_posibles:
+                    row = {"Empleado": emp, "Turno": turno_eval}
+                    mostrar_fila = False
                     
-                # --- MEJORA: RELACIÓN CLARA DEL CAMBIO DE HORARIO ---
-                for i, f_str in enumerate(str_fechas):
-                    p_loc, p_tur = get_plan_emp(f_str, emp)
-                    real_estado, real_turno, real_sucursal = "No Fichó", "", ""
-                    
-                    if not df_asist_comp.empty:
-                        f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Entrada")].reset_index(drop=True)
-                        if not f_asist.empty:
-                            real_estado = f_asist.iloc[-1]["Estado"]
-                            if isinstance(real_estado, pd.Series): real_estado = real_estado.iloc[0]
-                            real_turno = f_asist.iloc[-1]["Turno"]
-                            if isinstance(real_turno, pd.Series): real_turno = real_turno.iloc[0]
-                            real_sucursal = f_asist.iloc[-1]["Sucursal"]
-                            if isinstance(real_sucursal, pd.Series): real_sucursal = real_sucursal.iloc[0]
-                        else:
-                            if not df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Ausente")].empty:
-                                real_estado = "Ausente Reportado"
-                                
-                    f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
-                    if f_date > today_date:
-                        cell_val = f"⏳ {p_tur} en {p_loc}" if p_tur != "Libre" else "Libre"
-                    else:
-                        if p_tur == "Libre":
-                            cell_val = "✅ Libre" if real_estado == "No Fichó" else f"🚨 Vino en su franco a {real_sucursal} ({real_turno})"
-                        else:
-                            if real_estado == "No Fichó":
-                                cell_val = f"⏳ Pendiente" if f_date == today_date else f"❌ Faltó a {p_loc} ({p_tur})"
-                            elif real_estado == "Ausente Reportado":
-                                cell_val = f"❌ Ausente reportado en {p_loc} ({p_tur})"
+                    for i, f_str in enumerate(str_fechas):
+                        p_loc = get_plan_emp_turno(f_str, emp, turno_eval)
+                        p_tur = turno_eval if p_loc else "Libre"
+                        
+                        real_estado, real_sucursal = "No Fichó", ""
+                        
+                        if not df_asist_comp.empty:
+                            # Buscar entrada real para ESTE turno exacto
+                            f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Turno"] == turno_eval) & (df_asist_comp["Tipo"] == "Entrada")].reset_index(drop=True)
+                            if not f_asist.empty:
+                                real_estado = f_asist.iloc[-1]["Estado"]
+                                if isinstance(real_estado, pd.Series): real_estado = real_estado.iloc[0]
+                                real_sucursal = f_asist.iloc[-1]["Sucursal"]
+                                if isinstance(real_sucursal, pd.Series): real_sucursal = real_sucursal.iloc[0]
                             else:
-                                if p_loc and (real_sucursal != p_loc or real_turno != p_tur):
-                                    planificados_aca = planificacion_turnos.get(f_str, {}).get(real_sucursal, {}).get(real_turno, [])
-                                    planificados_str = ", ".join([p for p in planificados_aca if p != "Nadie"])
-                                    swap_msg = f" (Posible cambio con: {planificados_str})" if planificados_str else ""
-                                    cell_val = f"⚠️ CAMBIO: Plan ({p_loc} | {p_tur}) -> Real ({real_sucursal} | {real_turno}){swap_msg}"
+                                # Verificar ausencias reportadas para este turno
+                                f_aus = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Turno"] == turno_eval) & (df_asist_comp["Tipo"] == "Ausente")].reset_index(drop=True)
+                                if not f_aus.empty:
+                                    real_estado = "Ausente Reportado"
+                                    real_sucursal = f_aus.iloc[-1]["Sucursal"]
+                                    if isinstance(real_sucursal, pd.Series): real_sucursal = real_sucursal.iloc[0]
+
+                        # Validar Filtros de la UI
+                        match_plan_loc = (filtro_suc_comp == "Todas las sucursales" or p_loc == filtro_suc_comp)
+                        match_plan_tur = (filtro_tur_comp == "Todos los turnos" or turno_eval == filtro_tur_comp)
+                        match_real_loc = (filtro_suc_comp == "Todas las sucursales" or real_sucursal == filtro_suc_comp)
+                        match_real_tur = (filtro_tur_comp == "Todos los turnos" or turno_eval == filtro_tur_comp)
+                        
+                        cell_val = "Libre"
+
+                        # Si el empleado tuvo actividad o plan en este turno, procesamos
+                        if p_tur != "Libre" or real_estado != "No Fichó":
+                            # Si además pasa los filtros visuales, habilitamos mostrar la fila entera
+                            if (match_plan_loc and match_plan_tur and p_tur != "Libre") or (match_real_loc and match_real_tur and real_estado != "No Fichó"):
+                                mostrar_fila = True
+                                
+                            f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
+                            if f_date > today_date:
+                                cell_val = f"⏳ Plan: {p_loc}" if p_tur != "Libre" else "Libre"
+                            else:
+                                if p_tur == "Libre":
+                                    cell_val = f"🚨 Vino sin plan a {real_sucursal}"
                                 else:
-                                    if real_estado == "A tiempo": cell_val = f"✅ A tiempo en {real_sucursal}"
-                                    elif real_estado == "Tarde": cell_val = f"🚨 Tarde en {real_sucursal}"
-                                    else: cell_val = f"✅ Vino a {real_sucursal}"
-                                    
-                    row[cols_fechas[i]] = cell_val
-                comp_data.append(row)
-                
+                                    if real_estado == "No Fichó":
+                                        cell_val = f"⏳ Pendiente" if f_date == today_date else f"❌ Faltó a {p_loc}"
+                                    elif real_estado == "Ausente Reportado":
+                                        cell_val = f"❌ Ausente reportado en {p_loc}"
+                                    else:
+                                        if p_loc and real_sucursal != p_loc:
+                                            # Cambio de local en el mismo turno
+                                            planificados_aca = planificacion_turnos.get(f_str, {}).get(real_sucursal, {}).get(turno_eval, [])
+                                            planificados_str = ", ".join([p for p in planificados_aca if p != "Nadie"])
+                                            swap_msg = f" (Cambio c/ {planificados_str})" if planificados_str else ""
+                                            cell_val = f"⚠️ CAMBIO: Era {p_loc} -> Fue a {real_sucursal}{swap_msg}"
+                                        else:
+                                            if real_estado == "A tiempo": cell_val = f"✅ A tiempo en {real_sucursal}"
+                                            elif real_estado == "Tarde": cell_val = f"🚨 Tarde en {real_sucursal}"
+                                            else: cell_val = f"✅ Vino a {real_sucursal}"
+
+                        row[cols_fechas[i]] = cell_val
+
+                    # Solo agregamos la fila a la tabla si hubo algún plan o asistencia en la semana
+                    if mostrar_fila:
+                        comp_data.append(row)
+
             def color_comparativa(val):
                 if isinstance(val, str):
                     if '✅' in val: return 'background-color: #D1FAE5; color: #065F46; font-weight: 600;'
