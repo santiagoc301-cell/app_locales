@@ -84,7 +84,7 @@ button[data-testid="baseButton-primary"]:hover {
     background-color: #1a1a1a !important;
 }
 
-/* ---> INPUTS Y SELECTBOX (Ahora SÚPER legibles) <--- */
+/* ---> INPUTS Y SELECTBOX <--- */
 .stTextInput input, .stDateInput input, .stTimeInput input, .stNumberInput input, .stTextArea textarea {
     background-color: #111111 !important;
     border: 1px solid #333333 !important;
@@ -126,7 +126,7 @@ div[data-testid="stMetricValue"] { font-size: 2.2rem; font-family: 'Cinzel', ser
 .super-box { padding: 20px; border: 1px solid rgba(212, 175, 55, 0.3); background: #0a0a0a; margin-bottom: 15px; color: #D4AF37; text-align: center; font-family: 'Cinzel', serif; letter-spacing: 1px; border-radius: 4px;}
 .validation-box { padding: 15px; border-radius: 4px; border: 1px solid #333; background-color: #0a0a0a; margin-bottom: 10px; color: #A0A0A0; font-size: 0.9rem;}
 
-/* ---> CREDENCIAL EMPLEADO (BLACK CARD) <--- */
+/* ---> CREDENCIAL EMPLEADO <--- */
 .credencial { 
     background: linear-gradient(135deg, #151515 0%, #050505 100%); 
     color: #E5E4E2; 
@@ -147,10 +147,48 @@ div[data-testid="stMetricValue"] { font-size: 2.2rem; font-family: 'Cinzel', ser
 .cred-rol { font-size: 0.9rem; color: #A0A0A0; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 4px; font-weight: 400;}
 .cred-nivel { font-family: 'Manrope', sans-serif; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; color: #E5E4E2; border-top: 1px solid #333; padding-top: 15px;}
 
-/* ---> TABLAS DE DATOS <--- */
-[data-testid="stDataFrame"] { background: #0a0a0a; border: 1px solid #333; border-radius: 4px;}
+/* ---> NUEVO: MATRIZ DE DESVIACIONES Y ROSTER <--- */
+.roster-wrapper { display: flex; flex-direction: column; gap: 8px; margin-top: 20px;}
+.roster-row { display: flex; background: #050505; border: 1px solid #111; border-radius: 4px; overflow: hidden; align-items: stretch;}
+.roster-emp { width: 150px; min-width: 150px; padding: 15px 10px; background: #0A0A0A; display: flex; align-items: center; justify-content: flex-start; font-family: 'Cinzel', serif; font-size: 0.85rem; font-weight: bold; color: #D4AF37; border-right: 1px solid #222;}
+.roster-days { display: flex; flex: 1; overflow-x: auto;}
+.roster-cell { flex: 1; min-width: 130px; padding: 12px 10px; border-right: 1px solid #0f0f0f; display: flex; flex-direction: column; justify-content: center;}
+.roster-cell:last-child { border-right: none; }
 
-/* ---> BLOQUEO PANTALLA <--- */
+/* STEALTH MODE (Todo Perfecto) */
+.c-ok { background: #030303; }
+.c-ok .main-txt { color: #10B981; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 5px; opacity: 0.5;}
+
+/* HIGHLIGHTING (Anomalías) */
+.c-falta { background: rgba(239, 68, 68, 0.05); border-bottom: 2px solid #EF4444;}
+.c-falta .sub-txt { color: #737373; font-size: 0.65rem; margin-bottom: 3px; font-family: 'Manrope', sans-serif;}
+.c-falta .main-txt { color: #EF4444; font-size: 0.8rem; font-weight: bold; text-transform: uppercase;}
+
+.c-tarde { background: rgba(212, 175, 55, 0.05); border-bottom: 2px solid #D4AF37;}
+.c-tarde .sub-txt { color: #737373; font-size: 0.65rem; margin-bottom: 3px; font-family: 'Manrope', sans-serif;}
+.c-tarde .main-txt { color: #D4AF37; font-size: 0.8rem; font-weight: bold; text-transform: uppercase;}
+
+.c-cambio { background: rgba(212, 175, 55, 0.02); border-bottom: 2px dashed #D4AF37;}
+.c-cambio .sub-txt { color: #737373; font-size: 0.65rem; margin-bottom: 3px; font-family: 'Manrope', sans-serif;}
+.c-cambio .main-txt { color: #E5E4E2; font-size: 0.75rem; font-weight: bold;}
+
+.c-extra { background: rgba(139, 92, 246, 0.05); border-bottom: 2px solid #8B5CF6;}
+.c-extra .sub-txt { color: #A0A0A0; font-size: 0.65rem; margin-bottom: 3px; font-family: 'Manrope', sans-serif;}
+.c-extra .main-txt { color: #8B5CF6; font-size: 0.75rem; font-weight: bold;}
+
+.c-pend { background: #0A0A0A;}
+.c-pend .main-txt { color: #444; font-size: 0.7rem; font-weight: 500;}
+
+.c-libre { background: #050505;}
+.c-libre .main-txt { color: #222; font-size: 0.7rem; font-style: italic;}
+
+/* NUEVO: Escáner Modal de Conflictos */
+.conflict-box { background: rgba(239, 68, 68, 0.05); border: 1px solid #EF4444; border-radius: 4px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #EF4444;}
+.conflict-title { color: #EF4444; font-family: 'Cinzel', serif; font-size: 1.1rem; font-weight: bold; margin-bottom: 10px; letter-spacing: 1px;}
+.conflict-item { color: #E5E4E2; font-size: 0.9rem; margin-bottom: 5px; font-family: 'Manrope', sans-serif; display: flex; align-items: center; gap: 8px;}
+
+/* ---> TABLAS DE DATOS Y BLOQUEO <--- */
+[data-testid="stDataFrame"] { background: #0a0a0a; border: 1px solid #333; border-radius: 4px;}
 .bloqueo-pantalla { padding: 60px 40px; background: #050505; border: 1px solid #EF4444; text-align: center; margin-top: 50px; border-radius: 4px;}
 .bloqueo-titulo { font-family: 'Cinzel', serif; font-size: 3rem; color: #EF4444; letter-spacing: 5px; margin-bottom: 20px; text-transform: uppercase;}
 </style>
@@ -178,7 +216,6 @@ def init_connection():
 
 supabase = init_connection()
 
-# ---> Helper para parsear errores de la API de Supabase <---
 def show_db_error(e, context="base de datos"):
     error_details = str(e)
     if hasattr(e, 'args') and len(e.args) > 0 and isinstance(e.args[0], dict):
@@ -232,7 +269,6 @@ def save_json(key_name, data):
     except Exception as e:
         show_db_error(e, f"guardando '{key_name}'")
 
-# ---> CORRECCIÓN: EVITA DUPLICACIÓN DE COLUMNAS <---
 @st.cache_data(ttl=15, show_spinner=False)
 def load_df(table_name):
     try:
@@ -332,7 +368,6 @@ def load_table_list(table_name):
 
 def insert_row(table_name, row_dict):
     try:
-        # ESCUDO ANTIMAYÚSCULAS: Fuerzo a minúscula todas las claves
         row_dict_lower = {k.lower(): v for k, v in row_dict.items()}
         supabase.table(table_name).insert(row_dict_lower).execute()
         return True
@@ -471,8 +506,7 @@ def formato_horas_texto(h_decimal):
 def generate_html_download(df, filename, label):
     csv_b64 = base64.b64encode(df.to_csv(index=False).encode('utf-8')).decode()
     return f'<a href="data:file/csv;base64,{csv_b64}" download="{filename}" style="display: block; width: 100%; text-align: center; padding: 0.8rem 1rem; background-color: transparent; color: #D4AF37; border: 1px solid #D4AF37; border-radius: 0; text-decoration: none; font-family: \'Cinzel\', serif; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; margin-top: 15px; transition: all 0.3s ease;">{label}</a>'
-
-# ==========================================
+    # ==========================================
 # 3. IDENTIFICACIÓN Y MODO INCÓGNITO (ESPÍA)
 # ==========================================
 empleado_en_celu = None
@@ -1789,8 +1823,7 @@ elif pestaña == "Panel de Gerencia":
                                     except Exception as e: show_db_error(e, "eliminando tarifa")
                 else: 
                     st.info("Sin sueldos configurados. Valor defecto: $0.")
-
-        with tab_horarios:
+with tab_horarios:
             st.markdown('<div class="main-title" style="font-size: 2rem;">PLANIFICACIÓN Y HORARIOS</div>', unsafe_allow_html=True)
             
             st.markdown("### AGREGAR FICHAJE MANUAL")
@@ -1983,135 +2016,174 @@ elif pestaña == "Panel de Gerencia":
                         df_editado_t = st.data_editor(df_plan_t, column_config=config_cols_t, hide_index=True, use_container_width=True, key=f"ed_{loc}_{turno}", num_rows="dynamic")
                         nuevos_datos_plan[(loc, turno)] = df_editado_t
                         st.markdown("<br>", unsafe_allow_html=True)
-                    
+            
             if st.button("GUARDAR PLANIFICACIÓN", use_container_width=True, key="btn_save_rost"):
-                try:
-                    inserts = []
-                    for f_str in str_fechas:
-                        supabase.table("planificacion_turnos").delete().eq("fecha", f_str).execute()
+                # --- NUEVO: SISTEMA DE VALIDACIÓN ANTI-DUPLICADOS (ESCÁNER DE CONFLICTOS) ---
+                errores_duplicados = []
+                for f_str in str_fechas:
+                    for turno in lista_turnos.keys():
+                        control_empleados = {}
                         for loc in lista_locales.keys():
-                            for turno in lista_turnos.keys():
-                                df_e = nuevos_datos_plan[(loc, turno)]
-                                day_col = cols_fechas[str_fechas.index(f_str)]
-                                emps = df_e[day_col].dropna().tolist()
-                                emps = list(dict.fromkeys([e for e in emps if e != "Nadie" and str(e).strip() != ""]))
-                                for e in emps:
-                                    inserts.append({"fecha": f_str, "sucursal": loc, "turno": turno, "empleado": e})
-                    if inserts:
-                        supabase.table("planificacion_turnos").insert(inserts).execute()
-                    st.success("Planificación semanal guardada.")
-                    recargar_app()
-                except Exception as e: show_db_error(e, "guardando planificación")
+                            df_e = nuevos_datos_plan[(loc, turno)]
+                            day_col = cols_fechas[str_fechas.index(f_str)]
+                            emps = df_e[day_col].dropna().tolist()
+                            emps = [e for e in emps if e != "Nadie" and str(e).strip() != ""]
+                            
+                            for e in emps:
+                                if e in control_empleados:
+                                    errores_duplicados.append(f"⚠️ <b>{e}</b> fue asignado a <b>{control_empleados[e]}</b> y a <b>{loc}</b> simultáneamente. (Día: {day_col}, Turno: {turno}).")
+                                else:
+                                    control_empleados[e] = loc
+
+                if errores_duplicados:
+                    st.markdown("""
+                    <div class='conflict-box'>
+                        <div class='conflict-title'>🛑 CONFLICTO DETECTADO</div>
+                        """ + "".join([f"<div class='conflict-item'>{err}</div>" for err in errores_duplicados]) + """
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    try:
+                        inserts = []
+                        for f_str in str_fechas:
+                            supabase.table("planificacion_turnos").delete().eq("fecha", f_str).execute()
+                            for loc in lista_locales.keys():
+                                for turno in lista_turnos.keys():
+                                    df_e = nuevos_datos_plan[(loc, turno)]
+                                    day_col = cols_fechas[str_fechas.index(f_str)]
+                                    emps = df_e[day_col].dropna().tolist()
+                                    emps = list(dict.fromkeys([e for e in emps if e != "Nadie" and str(e).strip() != ""]))
+                                    for e in emps:
+                                        inserts.append({"fecha": f_str, "sucursal": loc, "turno": turno, "empleado": e})
+                        if inserts:
+                            supabase.table("planificacion_turnos").insert(inserts).execute()
+                        st.success("Planificación semanal validada y guardada con éxito.")
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "guardando planificación")
                 
             st.markdown("---")
-            st.subheader("COMPARATIVA: PLANIFICADO VS. REAL")
+            st.subheader("MATRIZ DE DESVIACIONES (PLAN VS. REAL)")
             
             c_comp1, c_comp2 = st.columns(2)
             filtro_suc_comp = c_comp1.selectbox("FILTRAR POR SUCURSAL:", ["Todas las sucursales"] + list(lista_locales.keys()), key="filtro_suc_comp")
             filtro_tur_comp = c_comp2.selectbox("FILTRAR POR TURNO:", ["Todos los turnos"] + list(lista_turnos.keys()), key="filtro_tur_comp")
 
-            def get_plan_emp_turno(fecha_s, empleado_s, turno_s):
-                for l_plan, turnos_dict in planificacion_turnos.get(fecha_s, {}).items():
-                    if isinstance(turnos_dict, dict) and turno_s in turnos_dict:
-                        emps_list = turnos_dict[turno_s]
-                        if isinstance(emps_list, list) and empleado_s in emps_list:
-                            return l_plan
-                return None
-
             df_asist_comp = load_df("asistencia")
             if not df_asist_comp.empty:
                 df_asist_comp = df_asist_comp.reset_index(drop=True)
-            comp_data = []
 
-            turnos_posibles = list(lista_turnos.keys())
-            if not df_asist_comp.empty:
-                turnos_reales = df_asist_comp["Turno"].unique().tolist()
-                for tr in turnos_reales:
-                    if tr not in turnos_posibles and str(tr) != "nan" and str(tr).strip() and tr != "Manual":
-                        turnos_posibles.append(tr)
+            html_content = "<div class='roster-wrapper'>"
+            hay_datos_para_mostrar = False
 
-            for emp in lista_empleados:
-                for turno_eval in turnos_posibles:
-                    row = {"Empleado": emp, "Turno": turno_eval}
-                    mostrar_fila = False
+            # Recorrer cada empleado para armar su línea de tiempo matricial
+            for emp in sorted(lista_empleados):
+                dias_html = ""
+                emp_tiene_turnos_visibles = False
+                
+                for j, f_str in enumerate(str_fechas):
+                    f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
+                    es_futuro = f_date > today_date
+                    es_hoy = f_date == today_date
                     
-                    for i, f_str in enumerate(str_fechas):
-                        p_loc = get_plan_emp_turno(f_str, emp, turno_eval)
-                        p_tur = turno_eval if p_loc else "Libre"
-                        
-                        real_estado, real_sucursal = "No Fichó", ""
-                        
-                        if not df_asist_comp.empty:
-                            f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Turno"] == turno_eval) & (df_asist_comp["Tipo"] == "Entrada")].reset_index(drop=True)
-                            if not f_asist.empty:
-                                real_estado = f_asist.iloc[-1]["Estado"]
-                                if isinstance(real_estado, pd.Series): real_estado = real_estado.iloc[0]
-                                real_sucursal = f_asist.iloc[-1]["Sucursal"]
-                                if isinstance(real_sucursal, pd.Series): real_sucursal = real_sucursal.iloc[0]
-                            else:
-                                f_aus = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Turno"] == turno_eval) & (df_asist_comp["Tipo"] == "Ausente")].reset_index(drop=True)
-                                if not f_aus.empty:
-                                    real_estado = "Ausente Reportado"
-                                    real_sucursal = f_aus.iloc[-1]["Sucursal"]
-                                    if isinstance(real_sucursal, pd.Series): real_sucursal = real_sucursal.iloc[0]
+                    # 1. Buscar planificados
+                    planificados = []
+                    for loc, turnos_dict in planificacion_turnos.get(f_str, {}).items():
+                        for t_name, emps in turnos_dict.items():
+                            if emp in emps:
+                                planificados.append({"turno": t_name, "sucursal": loc})
+                    
+                    # 2. Buscar reales
+                    reales_hoy = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str)] if not df_asist_comp.empty else pd.DataFrame()
+                    reales_entradas = reales_hoy[reales_hoy["Tipo"] == "Entrada"] if not reales_hoy.empty else pd.DataFrame()
+                    reales_ausencias = reales_hoy[reales_hoy["Tipo"] == "Ausente"] if not reales_hoy.empty else pd.DataFrame()
 
-                        match_plan_loc = (filtro_suc_comp == "Todas las sucursales" or p_loc == filtro_suc_comp)
-                        match_plan_tur = (filtro_tur_comp == "Todos los turnos" or turno_eval == filtro_tur_comp)
-                        match_real_loc = (filtro_suc_comp == "Todas las sucursales" or real_sucursal == filtro_suc_comp)
-                        match_real_tur = (filtro_tur_comp == "Todos los turnos" or turno_eval == filtro_tur_comp)
-                        
-                        cell_val = "Libre"
+                    celdas_html = ""
+                    turnos_procesados = set()
 
-                        if p_tur != "Libre" or real_estado != "No Fichó":
-                            if (match_plan_loc and match_plan_tur and p_tur != "Libre") or (match_real_loc and match_real_tur and real_estado != "No Fichó"):
-                                mostrar_fila = True
+                    # -- A. PROCESAR LO PLANIFICADO --
+                    for plan in planificados:
+                        p_tur = plan["turno"]
+                        p_loc = plan["sucursal"]
+                        turnos_procesados.add(p_tur)
+                        
+                        if filtro_suc_comp != "Todas las sucursales" and p_loc != filtro_suc_comp: continue
+                        if filtro_tur_comp != "Todos los turnos" and p_tur != filtro_tur_comp: continue
+                        
+                        emp_tiene_turnos_visibles = True
+                        
+                        if es_futuro:
+                            celdas_html += f"<div class='roster-cell c-pend'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>PENDIENTE</div></div>"
+                        else:
+                            asist = reales_entradas[reales_entradas["Turno"] == p_tur] if not reales_entradas.empty else pd.DataFrame()
+                            ausencia = reales_ausencias[reales_ausencias["Turno"] == p_tur] if not reales_ausencias.empty else pd.DataFrame()
+                            
+                            if not asist.empty:
+                                estado_real = asist.iloc[-1]["Estado"]
+                                suc_real = asist.iloc[-1]["Sucursal"]
+                                if isinstance(estado_real, pd.Series): estado_real = estado_real.iloc[0]
+                                if isinstance(suc_real, pd.Series): suc_real = suc_real.iloc[0]
                                 
-                            f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
-                            if f_date > today_date:
-                                cell_val = f"PLAN: {p_loc}" if p_tur != "Libre" else "Libre"
-                            else:
-                                if p_tur == "Libre":
-                                    cell_val = f"EXTRA EN {real_sucursal}"
+                                if suc_real != p_loc:
+                                    celdas_html += f"<div class='roster-cell c-cambio'><div class='sub-txt'>Plan: {p_loc} ({p_tur})</div><div class='main-txt'>🔄 Fichó en: {suc_real}</div></div>"
                                 else:
-                                    if real_estado == "No Fichó":
-                                        cell_val = f"PENDIENTE" if f_date == today_date else f"FALTA EN {p_loc}"
-                                    elif real_estado == "Ausente Reportado":
-                                        cell_val = f"AUSENTE REP. EN {p_loc}"
+                                    # VISUAL MUTING: "Apagamos" las celdas perfectas para evitar carga visual
+                                    if estado_real == "A tiempo":
+                                        celdas_html += f"<div class='roster-cell c-ok'><div class='main-txt'>✓ Cumplido</div></div>"
+                                    elif estado_real == "Tarde":
+                                        celdas_html += f"<div class='roster-cell c-tarde'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>⚠️ TARDE</div></div>"
                                     else:
-                                        if p_loc and real_sucursal != p_loc:
-                                            planificados_aca = planificacion_turnos.get(f_str, {}).get(real_sucursal, {}).get(turno_eval, [])
-                                            planificados_str = ", ".join([p for p in planificados_aca if p != "Nadie"])
-                                            swap_msg = f" (C/ {planificados_str})" if planificados_str else ""
-                                            cell_val = f"CAMBIO: {p_loc} -> {real_sucursal}{swap_msg}"
-                                        else:
-                                            if real_estado == "A tiempo": cell_val = f"OK EN {real_sucursal}"
-                                            elif real_estado == "Tarde": cell_val = f"TARDE EN {real_sucursal}"
-                                            else: cell_val = f"OK EN {real_sucursal}"
+                                        celdas_html += f"<div class='roster-cell c-ok'><div class='main-txt'>✓ Cumplido</div></div>"
+                            elif not ausencia.empty:
+                                celdas_html += f"<div class='roster-cell c-falta'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>❌ AUSENTE REP.</div></div>"
+                            else:
+                                if es_hoy:
+                                    celdas_html += f"<div class='roster-cell c-pend'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>EN ESPERA</div></div>"
+                                else:
+                                    celdas_html += f"<div class='roster-cell c-falta'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>❌ NO FICHÓ</div></div>"
 
-                        row[cols_fechas[i]] = cell_val
+                    # -- B. PROCESAR EXTRAS (Fue, pero no estaba planificado) --
+                    if not es_futuro and not reales_entradas.empty:
+                        for idx, row in reales_entradas.iterrows():
+                            r_tur = row["Turno"]
+                            if isinstance(r_tur, pd.Series): r_tur = r_tur.iloc[0]
+                            if r_tur not in turnos_procesados and r_tur != "Manual" and str(r_tur) != "nan":
+                                r_suc = row["Sucursal"]
+                                if isinstance(r_suc, pd.Series): r_suc = r_suc.iloc[0]
+                                
+                                if filtro_suc_comp != "Todas las sucursales" and r_suc != filtro_suc_comp: continue
+                                if filtro_tur_comp != "Todos los turnos" and r_tur != filtro_tur_comp: continue
+                                
+                                emp_tiene_turnos_visibles = True
+                                celdas_html += f"<div class='roster-cell c-extra'><div class='sub-txt'>🔵 TURNO EXTRA</div><div class='main-txt'>En: {r_suc} - {r_tur}</div></div>"
 
-                    if mostrar_fila:
-                        comp_data.append(row)
+                    # -- C. SI NO HUBO NADA --
+                    if not celdas_html:
+                        if filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos":
+                            celdas_html = "<div class='roster-cell c-libre'><div class='main-txt'>Libre</div></div>"
+                        else:
+                            celdas_html = "<div class='roster-cell c-libre'><div class='main-txt'>-</div></div>"
 
-            def color_comparativa(val):
-                if isinstance(val, str):
-                    if 'OK EN' in val: return 'background-color: #061710; color: #10B981; font-weight: 600;'
-                    if 'FALTA' in val or 'AUSENTE' in val: return 'background-color: #1a0b0b; color: #EF4444; font-weight: 600;'
-                    if 'TARDE' in val or 'EXTRA' in val: return 'background-color: #171105; color: #D4AF37; font-weight: 600;'
-                    if 'CAMBIO' in val: return 'background-color: #1a0b0b; color: #D4AF37; font-weight: 800; border: 1px solid #D4AF37;' 
-                    if 'PENDIENTE' in val or 'PLAN:' in val: return 'background-color: #050505; color: #A0A0A0; font-weight: 600;'
-                return ''
-                
-            df_comp = pd.DataFrame(comp_data)
-            if not df_comp.empty:
-                try: styled_comp = df_comp.style.map(color_comparativa)
-                except: styled_comp = df_comp.style.applymap(color_comparativa)
-                st.dataframe(styled_comp, hide_index=True, use_container_width=True)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown(generate_html_download(df_comp, f"Comparativa_Horarios_{start_date_plan}.csv", "DESCARGAR PLANILLA DE CONTROL"), unsafe_allow_html=True)
+                    dias_html += f"<div style='display:flex; flex-direction:column; flex:1; border-right: 1px solid #1A1A1A;'><div style='font-size:0.7rem; color:#737373; text-align:center; padding:5px 0; border-bottom:1px solid #1A1A1A; font-weight: 600; letter-spacing: 1px;'>{cols_fechas[j]}</div><div style='display:flex; flex-direction:column; height:100%;'>{celdas_html}</div></div>"
+
+                if emp_tiene_turnos_visibles or (filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos"):
+                    hay_datos_para_mostrar = True
+                    html_content += f"""
+                    <div class='roster-row'>
+                        <div class='roster-emp'>{emp}</div>
+                        <div class='roster-days'>{dias_html}</div>
+                    </div>
+                    """
+                    
+            html_content += "</div>"
+
+            if hay_datos_para_mostrar:
+                st.markdown(html_content, unsafe_allow_html=True)
             else:
-                st.info("Sin registros coincidentes.")
+                st.info("No hay planificaciones que coincidan con los filtros seleccionados.")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            df_export_roster = pd.DataFrame([{"Info": "Para ver la data cruda, descárguela desde la sección Analytics."}])
+            st.markdown(generate_html_download(df_export_roster, f"Comparativa_Horarios_Resumen.csv", "DESCARGAR DATA PLANA (CSV)"), unsafe_allow_html=True)
 
         with tab_puntos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">RANKING CORPORATIVO</div>', unsafe_allow_html=True)
