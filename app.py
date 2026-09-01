@@ -506,7 +506,7 @@ def formato_horas_texto(h_decimal):
 def generate_html_download(df, filename, label):
     csv_b64 = base64.b64encode(df.to_csv(index=False).encode('utf-8')).decode()
     return f'<a href="data:file/csv;base64,{csv_b64}" download="{filename}" style="display: block; width: 100%; text-align: center; padding: 0.8rem 1rem; background-color: transparent; color: #D4AF37; border: 1px solid #D4AF37; border-radius: 0; text-decoration: none; font-family: \'Cinzel\', serif; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; margin-top: 15px; transition: all 0.3s ease;">{label}</a>'
-    # ==========================================
+# ==========================================
 # 3. IDENTIFICACIÓN Y MODO INCÓGNITO (ESPÍA)
 # ==========================================
 empleado_en_celu = None
