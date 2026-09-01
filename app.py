@@ -602,7 +602,7 @@ if pestaña == "📱 Portal del Empleado":
             
             if not df_punt.empty:
                 df_punt['F_Obj'] = pd.to_datetime(df_punt['Fecha'], errors='coerce').dt.date
-                df_e = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt['F_Obj'] >= d_inicio_puntos)]
+                df_e = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt['F_Obj'] >= d_inicio_puntos)].reset_index(drop=True)
                 puntos_actuales += (len(df_e[df_e["Estado"] == "Tarde"]) * config_app["reglas_puntos"]["Tarde"]) + (len(df_e[df_e["Tipo"] == "Ausente"]) * config_app["reglas_puntos"]["Ausente"])
                 
             df_tl = load_df("tareas_log")
@@ -612,7 +612,7 @@ if pestaña == "📱 Portal del Empleado":
                 
             puntos_actuales += sum([int(p.get('Puntos', 0)) for p in lista_puntos if p.get('Empleado') == empleado_en_celu and p.get('Estado') == "Aprobada" and datetime.datetime.strptime(p.get('Fecha', p.get('fecha')), "%Y-%m-%d").date() >= d_inicio_puntos])
             
-            df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy() if not df_punt.empty else pd.DataFrame()
+            df_hoy = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["Fecha"] == fecha_hoy)].copy().reset_index(drop=True) if not df_punt.empty else pd.DataFrame()
             estado_laboral = "Fuera"
             datos_turno_activo = {}
             
@@ -947,7 +947,7 @@ if pestaña == "📱 Portal del Empleado":
                                 
                         ranking_sp = []
                         for emp_r in emps_compitiendo:
-                            df_e_p_top = df_p_top[df_p_top["Empleado"] == emp_r] if not df_p_top.empty else pd.DataFrame()
+                            df_e_p_top = df_p_top[df_p_top["Empleado"] == emp_r].reset_index(drop=True) if not df_p_top.empty else pd.DataFrame()
                             e_aj_top = sum([int(p.get('Puntos', p.get('puntos', 0))) for p in ajustes_top if p.get('Empleado', p.get('empleado')) == emp_r and p.get('Estado', p.get('estado', 'Aprobada')) == 'Aprobada'])
                             e_tp_top = pd.to_numeric(df_t_top[(df_t_top["Empleado"] == emp_r) & (df_t_top["Estado"] == "Aprobada")]["Puntos"], errors='coerce').fillna(0).astype(int).sum() if not df_t_top.empty else 0
                             e_ok_top = len(df_e_p_top[df_e_p_top["Estado"] == "A tiempo"]) if not df_e_p_top.empty else 0
@@ -988,7 +988,7 @@ if pestaña == "📱 Portal del Empleado":
                 fecha_inicio_sem = hoy_dt - datetime.timedelta(days=dias_desde_inicio)
                 fecha_fin_sem = fecha_inicio_sem + datetime.timedelta(days=6)
                 
-                df_horas_emp = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt['F_Obj'] >= fecha_inicio_sem) & (df_punt['F_Obj'] <= fecha_fin_sem)].copy()
+                df_horas_emp = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt['F_Obj'] >= fecha_inicio_sem) & (df_punt['F_Obj'] <= fecha_fin_sem)].copy().reset_index(drop=True)
                 horas_semanales_acumuladas = 0.0
                 
                 if not df_horas_emp.empty:
@@ -1068,7 +1068,7 @@ if pestaña == "📱 Portal del Empleado":
                         suc_cajero = datos_turno_activo.get("Sucursal")
                         st.write(f"📍 Estás auditando la sucursal: **{suc_cajero}**")
                         auditables = []
-                        df_hoy_todos = df_punt[df_punt["Fecha"] == fecha_hoy] if not df_punt.empty else pd.DataFrame()
+                        df_hoy_todos = df_punt[df_punt["Fecha"] == fecha_hoy].reset_index(drop=True) if not df_punt.empty else pd.DataFrame()
                         
                         if not df_hoy_todos.empty:
                             if 'id' in df_hoy_todos.columns:
@@ -1188,7 +1188,7 @@ if pestaña == "📱 Portal del Empleado":
             tareas_totales = tareas_roles.get(rol_empleado, []) + tareas_individuales.get(empleado_en_celu, [])
             if tareas_totales:
                 with st.expander("📝 Mis Tareas del Día", expanded=True):
-                    tareas_hoy_df = df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Fecha"] == fecha_hoy)] if not df_tl.empty else pd.DataFrame()
+                    tareas_hoy_df = df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Fecha"] == fecha_hoy)].reset_index(drop=True) if not df_tl.empty else pd.DataFrame()
                     for t in tareas_totales:
                         t_nombre, t_puntos = t.get('tarea'), t.get('puntos')
                         t_reg = tareas_hoy_df[tareas_hoy_df["Tarea"] == t_nombre].reset_index(drop=True) if not tareas_hoy_df.empty else pd.DataFrame()
@@ -1210,7 +1210,7 @@ if pestaña == "📱 Portal del Empleado":
             # 9. HISTORIAL RECIENTE
             with st.expander("🕒 Mi historial reciente"):
                 if not df_punt.empty:
-                    df_emp = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["F_Obj"] >= (ahora.date() - datetime.timedelta(days=7)))].copy()
+                    df_emp = df_punt[(df_punt["Empleado"] == empleado_en_celu) & (df_punt["F_Obj"] >= (ahora.date() - datetime.timedelta(days=7)))].copy().reset_index(drop=True)
                     if not df_emp.empty:
                         if 'id' in df_emp.columns:
                             df_emp['id_num'] = pd.to_numeric(df_emp['id'], errors='coerce')
@@ -1310,12 +1310,12 @@ elif pestaña == "💼 Panel de Gerencia":
             if df_activos.empty:
                 st.info("📭 Base de datos limpia.")
             else:
-                df_activos = df_activos[df_activos["Empleado"].isin(lista_empleados)].copy()
+                df_activos = df_activos[df_activos["Empleado"].isin(lista_empleados)].copy().reset_index(drop=True)
                 df_activos['Fecha_Obj'] = pd.to_datetime(df_activos['Fecha'], errors='coerce')
-                df_hoy_alertas = df_activos[df_activos["Fecha"] == fecha_hoy].copy()
+                df_hoy_alertas = df_activos[df_activos["Fecha"] == fecha_hoy].copy().reset_index(drop=True)
                 
                 if suc_alerta != "Todas las sucursales":
-                    df_hoy_filtrado = df_hoy_alertas[df_hoy_alertas["Sucursal"] == suc_alerta]
+                    df_hoy_filtrado = df_hoy_alertas[df_hoy_alertas["Sucursal"] == suc_alerta].reset_index(drop=True)
                 else:
                     df_hoy_filtrado = df_hoy_alertas
                     
@@ -1357,7 +1357,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 rango_stats = c_fil2_2.date_input("📅 Fechas del Dashboard:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_a == "Personalizado" else None
                 s_in, s_fi = get_fechas_filtro(filtro_a, rango_stats)
                 
-                df_per = df_activos[(df_activos['Fecha_Obj'].dt.date >= s_in) & (df_activos['Fecha_Obj'].dt.date <= s_fi)]
+                df_per = df_activos[(df_activos['Fecha_Obj'].dt.date >= s_in) & (df_activos['Fecha_Obj'].dt.date <= s_fi)].reset_index(drop=True)
                 if not df_per.empty:
                     atiempo = len(df_per[(df_per["Tipo"] == "Entrada") & (df_per["Estado"] == "A tiempo")])
                     tardes = len(df_per[(df_per["Tipo"] == "Entrada") & (df_per["Estado"] == "Tarde")])
@@ -1390,7 +1390,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 fecha_fi_dl = c_dl3.date_input("📅 Hasta el día:", value=ahora.date(), key="dl_fi")
                 
                 df_dl = df_activos.copy()
-                df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)]
+                df_dl = df_dl[(df_dl['Fecha_Obj'].dt.date >= fecha_in_dl) & (df_dl['Fecha_Obj'].dt.date <= fecha_fi_dl)].reset_index(drop=True)
                 
                 if local_descarga != "Todas las sucursales":
                     st.info(f"📍 **Modo filtrado activo:** Mostrando y exportando únicamente los datos registrados en la sucursal **{local_descarga}**.")
@@ -1402,7 +1402,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 
                 if not df_dl.empty:
                     for emp in df_dl["Empleado"].unique():
-                        df_e = df_dl[df_dl["Empleado"] == emp]
+                        df_e = df_dl[df_dl["Empleado"] == emp].reset_index(drop=True)
                         entrada_actual = None
                         
                         def procesar_tramo_estricto(entrada_row, salida_row):
@@ -1529,7 +1529,7 @@ elif pestaña == "💼 Panel de Gerencia":
                         
                         df_asist_dl = df_dl[["Fecha", "Hora", "Empleado", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]]
                         if local_descarga != "Todas las sucursales":
-                            df_asist_dl = df_asist_dl[df_asist_dl["Sucursal"] == local_descarga]
+                            df_asist_dl = df_asist_dl[df_asist_dl["Sucursal"] == local_descarga].reset_index(drop=True)
                         
                         c_btn2.markdown(generate_html_download(df_asist_dl, f"Fichajes_{nombre_export_sucursal}_{fecha_in_dl}.csv", "📥 Descargar Fichajes Crudos (Móvil/PC)"), unsafe_allow_html=True)
                 else:
@@ -1866,12 +1866,12 @@ elif pestaña == "💼 Panel de Gerencia":
             if emp_mod_horario != "Seleccionar...":
                 df_asist_mod = load_df("asistencia")
                 if not df_asist_mod.empty:
-                    df_fil = df_asist_mod[(df_asist_mod["Empleado"] == emp_mod_horario) & (df_asist_mod["Fecha"] == str(fecha_mod_horario))]
+                    df_fil = df_asist_mod[(df_asist_mod["Empleado"] == emp_mod_horario) & (df_asist_mod["Fecha"] == str(fecha_mod_horario))].reset_index(drop=True)
                     if not df_fil.empty:
                         turnos_del_dia = df_fil["Turno"].unique()
                         for turno_str in turnos_del_dia:
                             st.markdown(f"#### ⏰ {turno_str}")
-                            df_t = df_fil[df_fil["Turno"] == turno_str]
+                            df_t = df_fil[df_fil["Turno"] == turno_str].reset_index(drop=True)
                             
                             for idx, row in df_t.iterrows():
                                 with st.expander(f"📍 {row['Tipo']} - {row['Sucursal']} (Hora: {row['Hora']})", expanded=False):
@@ -2377,7 +2377,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 df_act_p, df_tar_p = load_df("asistencia"), load_df("tareas_log")
                 if not df_act_p.empty:
                     df_act_p['F_Obj'] = pd.to_datetime(df_act_p['Fecha'], errors='coerce').dt.date
-                    df_e_p = df_act_p[(df_act_p["Empleado"] == emp_perfil) & (df_act_p['F_Obj'] >= pf_in) & (df_act_p['F_Obj'] <= pf_fi)].copy()
+                    df_e_p = df_act_p[(df_act_p["Empleado"] == emp_perfil) & (df_act_p['F_Obj'] >= pf_in) & (df_act_p['F_Obj'] <= pf_fi)].copy().reset_index(drop=True)
                     e_atiempo = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "A tiempo")])
                     e_tardes = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "Tarde")])
                     e_ausencias = len(df_e_p[df_e_p["Tipo"] == "Ausente"])
