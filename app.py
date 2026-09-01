@@ -1276,7 +1276,7 @@ elif pestaña == "Panel de Gerencia":
     es_incognito_gerencia = (es_incognito and usuario_incognito == "Gerencia")
 
     if not es_incognito_gerencia:
-        password_ingresada = st.text_input("CLAVE DE ACCESO GERENCIAL:", type="password")
+        password_ingresada = st.text_input("CLAVE DE ACCESO GERENCIAL:", type="password", key="login_gerencia")
         
         if password_ingresada and password_ingresada != "doremifasol":
             if 'last_pw_attempt' not in st.session_state or st.session_state['last_pw_attempt'] != password_ingresada:
@@ -1363,7 +1363,7 @@ elif pestaña == "Panel de Gerencia":
                 st.write("---")
                 c_fil1_2, c_fil2_2 = st.columns([1,3])
                 filtro_a = c_fil1_2.selectbox("KPI DASHBOARD:", ["Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_a")
-                rango_stats = c_fil2_2.date_input("FECHAS DEL DASHBOARD:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_a == "Personalizado" else None
+                rango_stats = c_fil2_2.date_input("FECHAS DEL DASHBOARD:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date()), key="rango_stats") if filtro_a == "Personalizado" else None
                 s_in, s_fi = get_fechas_filtro(filtro_a, rango_stats)
                 
                 df_per = df_activos[(df_activos['Fecha_Obj'].dt.date >= s_in) & (df_activos['Fecha_Obj'].dt.date <= s_fi)].reset_index(drop=True)
@@ -1385,7 +1385,7 @@ elif pestaña == "Panel de Gerencia":
                 dias_desde_inicio_def = (ahora.date().weekday() - inicio_semana_int) % 7
                 fecha_inicio_semana_def = ahora.date() - datetime.timedelta(days=dias_desde_inicio_def)
                 
-                tipo_vista_rrhh = st.radio("FILTRO DE SUCURSAL:", ["Ver todas las sucursales juntas", "Ver una sucursal en particular"], horizontal=True)
+                tipo_vista_rrhh = st.radio("FILTRO DE SUCURSAL:", ["Ver todas las sucursales juntas", "Ver una sucursal en particular"], horizontal=True, key="filtro_rrhh_loc")
 
                 c_dl1, c_dl2, c_dl3 = st.columns(3)
                 if tipo_vista_rrhh == "Ver una sucursal en particular":
@@ -1550,20 +1550,20 @@ elif pestaña == "Panel de Gerencia":
             with st.expander("CARGAR CIERRE DE CAJA", expanded=True):
                 with st.form("form_cierre_caja"):
                     c_caj1, c_caj2 = st.columns(2)
-                    caj_emp = c_caj1.selectbox("Responsable de Caja:", ["Seleccionar..."] + sorted(empleados_cajeros))
-                    caj_suc = c_caj2.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()))
+                    caj_emp = c_caj1.selectbox("Responsable de Caja:", ["Seleccionar..."] + sorted(empleados_cajeros), key="caja_emp")
+                    caj_suc = c_caj2.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()), key="caja_suc")
                     
                     c_caj3, c_caj4 = st.columns(2)
-                    val_efectivo = c_caj3.number_input("Efectivo ($):", min_value=0.0, step=1000.0)
-                    val_tarjeta = c_caj4.number_input("Tarjeta ($):", min_value=0.0, step=1000.0)
+                    val_efectivo = c_caj3.number_input("Efectivo ($):", min_value=0.0, step=1000.0, key="caja_efv")
+                    val_tarjeta = c_caj4.number_input("Tarjeta ($):", min_value=0.0, step=1000.0, key="caja_tar")
                     
                     c_caj5, c_caj6 = st.columns(2)
-                    val_transf = c_caj5.number_input("Transferencia ($):", min_value=0.0, step=1000.0)
-                    val_total = c_caj6.number_input("Total Declarado ($):", min_value=0.0, step=1000.0)
+                    val_transf = c_caj5.number_input("Transferencia ($):", min_value=0.0, step=1000.0, key="caja_tra")
+                    val_total = c_caj6.number_input("Total Declarado ($):", min_value=0.0, step=1000.0, key="caja_tot")
                     
                     c_caj7, c_caj8 = st.columns(2)
-                    caj_fecha = c_caj7.date_input("Fecha:", value=ahora.date())
-                    nota_caja = c_caj8.text_input("Novedades / Notas:")
+                    caj_fecha = c_caj7.date_input("Fecha:", value=ahora.date(), key="caja_fec")
+                    nota_caja = c_caj8.text_input("Novedades / Notas:", key="caja_not")
                     
                     if st.form_submit_button("GUARDAR CIERRE"):
                         if caj_emp == "Seleccionar..." or caj_suc == "Seleccionar...":
@@ -1643,7 +1643,7 @@ elif pestaña == "Panel de Gerencia":
             st.subheader("ESTADÍSTICAS DE RECAUDACIÓN")
             c_fc1, c_fc2 = st.columns([1,3])
             filtro_caja = c_fc1.selectbox("FILTRAR POR:", ["Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_caja")
-            rango_caja = c_fc2.date_input("RANGO DE FECHAS:", value=(ahora.date() - datetime.timedelta(days=30), ahora.date())) if filtro_caja == "Personalizado" else None
+            rango_caja = c_fc2.date_input("RANGO DE FECHAS:", value=(ahora.date() - datetime.timedelta(days=30), ahora.date()), key="rango_caja") if filtro_caja == "Personalizado" else None
             c_in, c_fi = get_fechas_filtro(filtro_caja, rango_caja)
             
             if cierres_caja:
@@ -1707,11 +1707,11 @@ elif pestaña == "Panel de Gerencia":
             with c_su1:
                 with st.form("form_nuevo_sueldo"):
                     st.subheader("ASIGNAR NUEVA TARIFA")
-                    emp_s = st.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados))
-                    val_s = st.number_input("Valor por Hora ($):", min_value=0.0, step=100.0)
-                    f_ini = st.date_input("Vigente Desde:", value=ahora.date())
-                    es_actual = st.checkbox("Tarifa actual (Sin fecha de cierre)", value=True)
-                    f_fin = datetime.date(2099, 12, 31) if es_actual else st.date_input("Vigente Hasta:", value=ahora.date())
+                    emp_s = st.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados), key="sue_emp")
+                    val_s = st.number_input("Valor por Hora ($):", min_value=0.0, step=100.0, key="sue_val")
+                    f_ini = st.date_input("Vigente Desde:", value=ahora.date(), key="sue_ini")
+                    es_actual = st.checkbox("Tarifa actual (Sin fecha de cierre)", value=True, key="sue_act")
+                    f_fin = datetime.date(2099, 12, 31) if es_actual else st.date_input("Vigente Hasta:", value=ahora.date(), key="sue_fin")
                     
                     if st.form_submit_button("GUARDAR TARIFA"):
                         if emp_s == "Seleccionar...":
@@ -1729,8 +1729,8 @@ elif pestaña == "Panel de Gerencia":
                 st.subheader("HISTORIAL DE TARIFAS")
                 if sueldos_historico:
                     c_fsu1, c_fsu2 = st.columns(2)
-                    f_s_in = c_fsu1.date_input("Filtrar vista desde:", value=ahora.date() - datetime.timedelta(days=30))
-                    f_s_fi = c_fsu2.date_input("Filtrar vista hasta:", value=ahora.date() + datetime.timedelta(days=365))
+                    f_s_in = c_fsu1.date_input("Filtrar vista desde:", value=ahora.date() - datetime.timedelta(days=30), key="f_s_in")
+                    f_s_fi = c_fsu2.date_input("Filtrar vista hasta:", value=ahora.date() + datetime.timedelta(days=365), key="f_s_fi")
                     
                     sueldos_filtrados = []
                     for s in sueldos_historico:
@@ -1793,18 +1793,18 @@ elif pestaña == "Panel de Gerencia":
             st.markdown("### AGREGAR FICHAJE MANUAL")
             with st.form("form_add_fichaje"):
                 c_add1, c_add2, c_add3 = st.columns(3)
-                add_emp = c_add1.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados))
-                add_fecha = c_add2.date_input("Fecha:", value=ahora.date())
-                add_hora = c_add3.time_input("Hora:", value=ahora.time())
+                add_emp = c_add1.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados), key="add_emp")
+                add_fecha = c_add2.date_input("Fecha:", value=ahora.date(), key="add_fec")
+                add_hora = c_add3.time_input("Hora:", value=ahora.time(), key="add_hor")
 
                 c_add4, c_add5, c_add6 = st.columns(3)
-                add_suc = c_add4.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()))
-                add_turno = c_add5.selectbox("Turno:", ["Seleccionar..."] + list(lista_turnos.keys()) + ["Manual"])
-                add_tipo = c_add6.selectbox("Tipo:", ["Entrada", "Salida"])
+                add_suc = c_add4.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()), key="add_suc")
+                add_turno = c_add5.selectbox("Turno:", ["Seleccionar..."] + list(lista_turnos.keys()) + ["Manual"], key="add_tur")
+                add_tipo = c_add6.selectbox("Tipo:", ["Entrada", "Salida"], key="add_tip")
 
                 c_add7, c_add8 = st.columns([1, 2])
-                add_estado = c_add7.selectbox("Estado:", ["Automático (Calculado)"] + ESTADOS_POSIBLES)
-                add_nota = c_add8.text_input("Nota / Motivo:")
+                add_estado = c_add7.selectbox("Estado:", ["Automático (Calculado)"] + ESTADOS_POSIBLES, key="add_est")
+                add_nota = c_add8.text_input("Nota / Motivo:", key="add_not")
 
                 if st.form_submit_button("GUARDAR FICHAJE"):
                     if "Seleccionar..." in [add_emp, add_suc, add_turno]:
@@ -1939,13 +1939,13 @@ elif pestaña == "Panel de Gerencia":
             dia_inicio_actual = today_date - datetime.timedelta(days=(today_date.weekday() - inicio_semana_int) % 7)
             
             c_plan1, c_plan2 = st.columns([1,3])
-            semana_sel = c_plan1.selectbox("SELECCIONAR SEMANA:", ["Esta Semana", "Semana Próxima", "Semana Anterior", "Elegir Fecha"])
+            semana_sel = c_plan1.selectbox("SELECCIONAR SEMANA:", ["Esta Semana", "Semana Próxima", "Semana Anterior", "Elegir Fecha"], key="sel_sem_rost")
             
             if semana_sel == "Esta Semana": start_date_plan = dia_inicio_actual
             elif semana_sel == "Semana Próxima": start_date_plan = dia_inicio_actual + datetime.timedelta(days=7)
             elif semana_sel == "Semana Anterior": start_date_plan = dia_inicio_actual - datetime.timedelta(days=7)
             else:
-                start_date_plan = c_plan2.date_input("Elegir Inicio de semana:", value=dia_inicio_actual)
+                start_date_plan = c_plan2.date_input("Elegir Inicio de semana:", value=dia_inicio_actual, key="fec_sem_rost")
                 
             if (start_date_plan.weekday() - inicio_semana_int) % 7 != 0: 
                 start_date_plan = start_date_plan - datetime.timedelta(days=(start_date_plan.weekday() - inicio_semana_int) % 7)
@@ -1981,7 +1981,7 @@ elif pestaña == "Panel de Gerencia":
                         nuevos_datos_plan[(loc, turno)] = df_editado_t
                         st.markdown("<br>", unsafe_allow_html=True)
                     
-            if st.button("GUARDAR PLANIFICACIÓN", use_container_width=True):
+            if st.button("GUARDAR PLANIFICACIÓN", use_container_width=True, key="btn_save_rost"):
                 try:
                     inserts = []
                     for f_str in str_fechas:
@@ -2004,8 +2004,8 @@ elif pestaña == "Panel de Gerencia":
             st.subheader("COMPARATIVA: PLANIFICADO VS. REAL")
             
             c_comp1, c_comp2 = st.columns(2)
-            filtro_suc_comp = c_comp1.selectbox("FILTRAR POR SUCURSAL:", ["Todas las sucursales"] + list(lista_locales.keys()))
-            filtro_tur_comp = c_comp2.selectbox("FILTRAR POR TURNO:", ["Todos los turnos"] + list(lista_turnos.keys()))
+            filtro_suc_comp = c_comp1.selectbox("FILTRAR POR SUCURSAL:", ["Todas las sucursales"] + list(lista_locales.keys()), key="filtro_suc_comp")
+            filtro_tur_comp = c_comp2.selectbox("FILTRAR POR TURNO:", ["Todos los turnos"] + list(lista_turnos.keys()), key="filtro_tur_comp")
 
             def get_plan_emp_turno(fecha_s, empleado_s, turno_s):
                 for l_plan, turnos_dict in planificacion_turnos.get(fecha_s, {}).items():
@@ -2114,7 +2114,7 @@ elif pestaña == "Panel de Gerencia":
             st.markdown('<div class="main-title" style="font-size: 2rem;">RANKING CORPORATIVO</div>', unsafe_allow_html=True)
             c_fil1, c_fil2 = st.columns([1,3])
             filtro_p = c_fil1.selectbox("FILTRAR RANKING:", ["Período Activo (Desde Reseteo)", "Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_p_gr")
-            rango_punt = c_fil2.date_input("FECHAS:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date())) if filtro_p == "Personalizado" else None
+            rango_punt = c_fil2.date_input("FECHAS:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date()), key="rango_p_gr") if filtro_p == "Personalizado" else None
             
             if filtro_p == "Período Activo (Desde Reseteo)":
                 f_ini_pts = config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d"))
@@ -2198,10 +2198,10 @@ elif pestaña == "Panel de Gerencia":
             st.subheader("APLICAR BONO O MULTA")
             with st.form("form_bonos"):
                 c_b1, c_b2, c_b3, c_b4 = st.columns([2,1,1,2])
-                ap_emp = c_b1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados))
-                ap_fecha = c_b2.date_input("Fecha:", ahora.date())
-                ap_puntos = c_b3.number_input("Puntos (+/-):", value=0, step=1)
-                ap_motivo = c_b4.text_input("Motivo:")
+                ap_emp = c_b1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados), key="ab_emp")
+                ap_fecha = c_b2.date_input("Fecha:", ahora.date(), key="ab_fec")
+                ap_puntos = c_b3.number_input("Puntos (+/-):", value=0, step=1, key="ab_pts")
+                ap_motivo = c_b4.text_input("Motivo:", key="ab_mot")
                 if st.form_submit_button("APLICAR AJUSTE"):
                     if ap_emp == "Seleccionar...":
                         st.warning("Datos incompletos.")
@@ -2373,7 +2373,7 @@ elif pestaña == "Panel de Gerencia":
         with tab_perfil:
             st.markdown('<div class="main-title" style="font-size: 2rem;">DOSSIER INDIVIDUAL 360°</div>', unsafe_allow_html=True)
             col_pf1, col_pf2 = st.columns([1,3])
-            emp_perfil = col_pf1.selectbox("SELECCIONAR EMPLEADO:", ["Seleccionar..."] + sorted(lista_empleados))
+            emp_perfil = col_pf1.selectbox("SELECCIONAR EMPLEADO:", ["Seleccionar..."] + sorted(lista_empleados), key="sel_perf_emp")
             filtro_pf = col_pf2.selectbox("PERÍODO A EVALUAR:", ["Este Mes", "Mes Anterior", "Esta Semana", "Todo el Historial"], key="filtro_perf")
             pf_in, pf_fi = get_fechas_filtro(filtro_pf)
             
@@ -2498,8 +2498,8 @@ elif pestaña == "Panel de Gerencia":
                 st.markdown("---")
                 st.subheader("ALTA DE PERSONAL")
                 with st.form("form_alta_emp"):
-                    nuevo_emp = st.text_input("Nombre Operario:")
-                    rol_asignar = st.selectbox("Designación:", lista_roles_disponibles)
+                    nuevo_emp = st.text_input("Nombre Operario:", key="alta_n_emp")
+                    rol_asignar = st.selectbox("Designación:", lista_roles_disponibles, key="alta_r_emp")
                     if st.form_submit_button("REGISTRAR") and nuevo_emp:
                         n_emp = nuevo_emp.strip()
                         if any(e.lower() == n_emp.lower() for e in lista_empleados):
@@ -2514,12 +2514,12 @@ elif pestaña == "Panel de Gerencia":
                 if lista_empleados:
                     st.markdown("---")
                     st.markdown("**EDICIÓN DE PERSONAL**")
-                    emp_mod = st.selectbox("Seleccionar:", sorted(lista_empleados))
-                    nuevo_nombre_mod = st.text_input("Corregir Nombre:", value=emp_mod)
-                    nuevo_rol = st.selectbox("Modificar Rol:", lista_roles_disponibles, index=lista_roles_disponibles.index(roles_empleados.get(emp_mod, lista_roles_disponibles[0])) if roles_empleados.get(emp_mod) in lista_roles_disponibles else 0)
+                    emp_mod = st.selectbox("Seleccionar:", sorted(lista_empleados), key="mod_sel_emp")
+                    nuevo_nombre_mod = st.text_input("Corregir Nombre:", value=emp_mod, key="mod_nom_emp")
+                    nuevo_rol = st.selectbox("Modificar Rol:", lista_roles_disponibles, index=lista_roles_disponibles.index(roles_empleados.get(emp_mod, lista_roles_disponibles[0])) if roles_empleados.get(emp_mod) in lista_roles_disponibles else 0, key="mod_rol_emp")
                     c_mod1, c_mod2, c_mod3 = st.columns(3)
                     
-                    if c_mod1.button("GUARDAR"):
+                    if c_mod1.button("GUARDAR", key="btn_save_emp"):
                         nn = nuevo_nombre_mod.strip()
                         if nn and nn != emp_mod:
                             if any(e.lower() == nn.lower() for e in lista_empleados):
@@ -2565,12 +2565,12 @@ elif pestaña == "Panel de Gerencia":
                                 recargar_app()
                             except Exception as e: show_db_error(e, "actualizando rol")
                         
-                    if c_mod2.button("LIBERAR TERMINAL") and emp_mod in dispositivos_vinculados:
+                    if c_mod2.button("LIBERAR TERMINAL", key="btn_lib_term") and emp_mod in dispositivos_vinculados:
                         try:
                             supabase.table("empleados").update({"dispositivo_id": ""}).eq("nombre", emp_mod).execute()
                             recargar_app()
                         except Exception as e: show_db_error(e, "liberando celular")
-                    if c_mod3.button("BORRAR PERFIL"):
+                    if c_mod3.button("BORRAR PERFIL", key="btn_del_emp"):
                         try:
                             supabase.table("empleados").delete().eq("nombre", emp_mod).execute()
                             try: supabase.table("tareas_individuales").delete().eq("empleado", emp_mod).execute()
@@ -2580,11 +2580,11 @@ elif pestaña == "Panel de Gerencia":
                         
             with col_s2:
                 st.subheader("ASIGNACIÓN OPERATIVA")
-                tipo_asig = st.radio("Destino:", ["Rol General", "Personal"])
-                obj_tarea = st.selectbox("Elegir:", lista_roles_disponibles if tipo_asig == "Rol General" else sorted(lista_empleados))
-                n_tarea, p_tarea = st.text_input("Operación:"), st.number_input("Puntos:", value=5, min_value=1)
+                tipo_asig = st.radio("Destino:", ["Rol General", "Personal"], key="radio_tipo_asig")
+                obj_tarea = st.selectbox("Elegir:", lista_roles_disponibles if tipo_asig == "Rol General" else sorted(lista_empleados), key="sel_obj_tarea")
+                n_tarea, p_tarea = st.text_input("Operación:", key="input_n_tarea"), st.number_input("Puntos:", value=5, min_value=1, key="input_p_tarea")
                 
-                if st.button("ASIGNAR") and n_tarea:
+                if st.button("ASIGNAR", key="btn_asignar_t") and n_tarea:
                     try:
                         if tipo_asig == "Rol General":
                             supabase.table("tareas_roles").insert({"rol": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
@@ -2593,7 +2593,7 @@ elif pestaña == "Panel de Gerencia":
                         recargar_app()
                     except Exception as e: show_db_error(e, "asignando tarea")
                     
-                ver_t_tipo = st.radio("Ver operativas de:", ["Roles", "Personales"])
+                ver_t_tipo = st.radio("Ver operativas de:", ["Roles", "Personales"], key="radio_ver_t")
                 diccionario_ver = tareas_roles if ver_t_tipo == "Roles" else tareas_individuales
                 for clave, tareas in diccionario_ver.items():
                     if tareas:
@@ -2602,7 +2602,7 @@ elif pestaña == "Panel de Gerencia":
                                 t_id = t.get("id")
                                 c_t1, c_t2 = st.columns([3,1])
                                 c_t1.write(f"- {t.get('tarea')} (+{t.get('puntos')})")
-                                if c_t2.button("ELIMINAR", key=f"del_t_{t_id}"):
+                                if c_t2.button("ELIMINAR", key=f"del_t_mod_{t_id}"):
                                     try:
                                         supabase.table("tareas_roles" if ver_t_tipo == "Roles" else "tareas_individuales").delete().eq("id", t_id).execute()
                                         recargar_app()
@@ -2617,7 +2617,7 @@ elif pestaña == "Panel de Gerencia":
                 st.markdown("---")
                 ip_gerencia = st.session_state.get('client_ip')
                 if not ip_gerencia:
-                    ip_eval = streamlit_js_eval(js_expressions="fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')", want_output=True, key="ip_manager")
+                    ip_eval = streamlit_js_eval(js_expressions="fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')", want_output=True, key="ip_manager_tiendas")
                     if ip_eval:
                         st.session_state['client_ip'] = ip_eval
                         ip_gerencia = ip_eval
@@ -2626,11 +2626,11 @@ elif pestaña == "Panel de Gerencia":
                 else: st.info("Sondeando IP local...")
                 
                 with st.expander("ALTA DE LOCACIÓN", expanded=False):
-                    n_loc = st.text_input("Designación:")
-                    lat_loc = st.number_input("Latitud:", format="%.6f")
-                    lon_loc = st.number_input("Longitud:", format="%.6f")
-                    ip_loc = st.text_input("IP (Red Oficial):")
-                    if st.button("REGISTRAR LOCACIÓN") and n_loc:
+                    n_loc = st.text_input("Designación:", key="input_alta_loc")
+                    lat_loc = st.number_input("Latitud:", format="%.6f", key="input_lat_loc")
+                    lon_loc = st.number_input("Longitud:", format="%.6f", key="input_lon_loc")
+                    ip_loc = st.text_input("IP (Red Oficial):", key="input_ip_loc")
+                    if st.button("REGISTRAR LOCACIÓN", key="btn_reg_loc") and n_loc:
                         try:
                             supabase.table("locales").insert({"nombre": n_loc, "lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}).execute()
                             recargar_app()
@@ -2638,14 +2638,14 @@ elif pestaña == "Panel de Gerencia":
                         
                 st.markdown("---")
                 st.markdown("**EDICIÓN DE LOCACIÓN**")
-                loc_mod = st.selectbox("Seleccionar:", ["Seleccionar..."] + list(lista_locales.keys()))
+                loc_mod = st.selectbox("Seleccionar:", ["Seleccionar..."] + list(lista_locales.keys()), key="sel_mod_loc")
                 if loc_mod != "Seleccionar...":
-                    n_loc_mod = st.text_input("Modificar Designación:", value=loc_mod)
-                    lat_mod = st.number_input("Modificar Lat:", value=float(lista_locales[loc_mod].get("lat", 0.0)), format="%.6f")
-                    lon_mod = st.number_input("Modificar Lon:", value=float(lista_locales[loc_mod].get("lon", 0.0)), format="%.6f")
-                    ip_mod = st.text_input("Modificar IP:", value=lista_locales[loc_mod].get("ip", ""))
+                    n_loc_mod = st.text_input("Modificar Designación:", value=loc_mod, key="mod_n_loc")
+                    lat_mod = st.number_input("Modificar Lat:", value=float(lista_locales[loc_mod].get("lat", 0.0)), format="%.6f", key="mod_lat_loc")
+                    lon_mod = st.number_input("Modificar Lon:", value=float(lista_locales[loc_mod].get("lon", 0.0)), format="%.6f", key="mod_lon_loc")
+                    ip_mod = st.text_input("Modificar IP:", value=lista_locales[loc_mod].get("ip", ""), key="mod_ip_loc")
                     
-                    if st.button("GUARDAR CAMBIOS"):
+                    if st.button("GUARDAR CAMBIOS", key="btn_save_loc"):
                         nuevo_nombre = n_loc_mod.strip()
                         if nuevo_nombre and nuevo_nombre != loc_mod:
                             if nuevo_nombre not in lista_locales:
@@ -2668,8 +2668,8 @@ elif pestaña == "Panel de Gerencia":
                             except Exception as e: show_db_error(e, "actualizando tienda")
 
                 st.markdown("---")
-                borrar_loc = st.selectbox("Dar de baja locación:", ["Seleccionar..."] + list(lista_locales.keys()))
-                if st.button("ELIMINAR") and borrar_loc != "Seleccionar...":
+                borrar_loc = st.selectbox("Dar de baja locación:", ["Seleccionar..."] + list(lista_locales.keys()), key="sel_del_loc")
+                if st.button("ELIMINAR", key="btn_del_loc") and borrar_loc != "Seleccionar...":
                     try:
                         supabase.table("locales").delete().eq("nombre", borrar_loc).execute()
                         recargar_app()
@@ -2680,10 +2680,10 @@ elif pestaña == "Panel de Gerencia":
                 for turno, horas in lista_turnos.items(): st.write(f"- **{turno}** | {horas.get('ingreso')} - {horas.get('salida')}")
                 
                 with st.expander("NUEVO BLOQUE", expanded=False):
-                    n_turno = st.text_input("Designación:")
+                    n_turno = st.text_input("Designación:", key="alta_n_turno")
                     c_h1, c_h2 = st.columns(2)
-                    h_ingreso, h_salida = c_h1.time_input("Ingreso:"), c_h2.time_input("Salida:")
-                    if st.button("CREAR") and n_turno:
+                    h_ingreso, h_salida = c_h1.time_input("Ingreso:", key="alta_h_ing"), c_h2.time_input("Salida:", key="alta_h_sal")
+                    if st.button("CREAR", key="btn_crear_tur") and n_turno:
                         try:
                             supabase.table("turnos").insert({"nombre": n_turno, "ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}).execute()
                             recargar_app()
@@ -2691,9 +2691,9 @@ elif pestaña == "Panel de Gerencia":
                         
                 st.markdown("---")
                 st.markdown("**EDICIÓN DE BLOQUES**")
-                turno_mod = st.selectbox("Seleccionar:", ["Seleccionar..."] + list(lista_turnos.keys()))
+                turno_mod = st.selectbox("Seleccionar:", ["Seleccionar..."] + list(lista_turnos.keys()), key="sel_mod_tur")
                 if turno_mod != "Seleccionar...":
-                    n_turno_mod = st.text_input("Renombrar:", value=turno_mod)
+                    n_turno_mod = st.text_input("Renombrar:", value=turno_mod, key="mod_n_tur")
                     try:
                         time_ing_def = datetime.datetime.strptime(lista_turnos[turno_mod].get('ingreso'), "%I:%M %p").time()
                         time_sal_def = datetime.datetime.strptime(lista_turnos[turno_mod].get('salida'), "%I:%M %p").time()
@@ -2701,10 +2701,10 @@ elif pestaña == "Panel de Gerencia":
                         time_ing_def, time_sal_def = ahora.time(), ahora.time()
                         
                     c_hm1, c_hm2 = st.columns(2)
-                    hm_ingreso = c_hm1.time_input("Ajustar Ingreso:", value=time_ing_def)
-                    hm_salida = c_hm2.time_input("Ajustar Salida:", value=time_sal_def)
+                    hm_ingreso = c_hm1.time_input("Ajustar Ingreso:", value=time_ing_def, key="mod_h_ing")
+                    hm_salida = c_hm2.time_input("Ajustar Salida:", value=time_sal_def, key="mod_h_sal")
                     
-                    if st.button("GUARDAR"):
+                    if st.button("GUARDAR", key="btn_save_tur"):
                         nuevo_nombre_t = n_turno_mod.strip()
                         if nuevo_nombre_t and nuevo_nombre_t != turno_mod:
                             if nuevo_nombre_t not in lista_turnos:
@@ -2723,8 +2723,8 @@ elif pestaña == "Panel de Gerencia":
                             except Exception as e: show_db_error(e, "actualizando horario")
 
                 st.markdown("---")
-                borrar_turno = st.selectbox("Dar de baja bloque:", ["Seleccionar..."] + list(lista_turnos.keys()))
-                if st.button("ELIMINAR BLOQUE") and borrar_turno != "Seleccionar...":
+                borrar_turno = st.selectbox("Dar de baja bloque:", ["Seleccionar..."] + list(lista_turnos.keys()), key="sel_del_tur")
+                if st.button("ELIMINAR BLOQUE", key="btn_del_tur") and borrar_turno != "Seleccionar...":
                     try:
                         supabase.table("turnos").delete().eq("nombre", borrar_turno).execute()
                         recargar_app()
@@ -2735,8 +2735,8 @@ elif pestaña == "Panel de Gerencia":
             with col_m1:
                 st.subheader("ALERTA DE RECEPCIÓN")
                 with st.form("form_alertas"):
-                    dest_ing = st.selectbox("Destino:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados))
-                    txt_alerta = st.text_area("Contenido:")
+                    dest_ing = st.selectbox("Destino:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="al_dest")
+                    txt_alerta = st.text_area("Contenido:", key="al_txt")
                     if st.form_submit_button("EMITIR ALERTA") and txt_alerta:
                         try:
                             supabase.table("alertas_ingreso").insert({"destinatario": dest_ing, "texto": txt_alerta}).execute()
@@ -2754,8 +2754,8 @@ elif pestaña == "Panel de Gerencia":
             with col_m2:
                 st.subheader("ANUNCIO PERMANENTE")
                 with st.form("form_fijo"):
-                    dest_fijo = st.selectbox("Destino:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="fijo")
-                    txt_fijo = st.text_area("Contenido:")
+                    dest_fijo = st.selectbox("Destino:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="fijo_dest")
+                    txt_fijo = st.text_area("Contenido:", key="fijo_txt")
                     if st.form_submit_button("FIJAR ANUNCIO") and txt_fijo:
                         try:
                             supabase.table("mensajes").insert({"destinatario": dest_fijo, "texto": txt_fijo}).execute()
@@ -2776,40 +2776,40 @@ elif pestaña == "Panel de Gerencia":
             with st.form("form_config"):
                 st.markdown("### FUNDAMENTOS")
                 c_conf1, c_conf2 = st.columns(2)
-                nuevo_titulo = c_conf1.text_input("IDENTIFICADOR DEL PORTAL", value=config_app.get("titulo_portal", "PORTAL CORPORATIVO"))
-                nueva_pass = c_conf2.text_input("CLAVE GERENCIAL", value=config_app.get("admin_password", "1234"), type="password")
+                nuevo_titulo = c_conf1.text_input("IDENTIFICADOR DEL PORTAL", value=config_app.get("titulo_portal", "PORTAL CORPORATIVO"), key="cfg_tit")
+                nueva_pass = c_conf2.text_input("CLAVE GERENCIAL", value=config_app.get("admin_password", "1234"), type="password", key="cfg_pass")
                 
                 c_conf3, c_conf4 = st.columns(2)
-                nueva_tol = c_conf3.number_input("TOLERANCIA (MIN)", value=int(config_app.get("tolerancia_minutos", 10)))
-                rad_metros = c_conf4.number_input("RANGO GPS (M)", value=int(config_app.get("radio_metros", 150)))
+                nueva_tol = c_conf3.number_input("TOLERANCIA (MIN)", value=int(config_app.get("tolerancia_minutos", 10)), key="cfg_tol")
+                rad_metros = c_conf4.number_input("RANGO GPS (M)", value=int(config_app.get("radio_metros", 150)), key="cfg_rad")
                 
-                nuevo_msg_dia = st.text_area("MANTRA / MENSAJE DEL DÍA", value=config_app.get("mensaje_dia", ""))
-                msg_tarde = st.text_input("ADVERTENCIA DE TARDANZA", value=config_app.get("mensaje_llegada_tarde", "Llegada fuera de parámetro."))
+                nuevo_msg_dia = st.text_area("MANTRA / MENSAJE DEL DÍA", value=config_app.get("mensaje_dia", ""), key="cfg_msg")
+                msg_tarde = st.text_input("ADVERTENCIA DE TARDANZA", value=config_app.get("mensaje_llegada_tarde", "Llegada fuera de parámetro."), key="cfg_tar")
                 
                 c_conf5, c_conf6 = st.columns(2)
-                rec_cajero = c_conf5.number_input("BONO AUDITORÍA (PTS)", value=int(config_app.get("recompensa_auditoria_cajero", 10)))
-                d_semana = c_conf6.selectbox("INICIO DE CICLO", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")))
+                rec_cajero = c_conf5.number_input("BONO AUDITORÍA (PTS)", value=int(config_app.get("recompensa_auditoria_cajero", 10)), key="cfg_rec")
+                d_semana = c_conf6.selectbox("INICIO DE CICLO", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")), key="cfg_dia")
                 
                 try:
                     f_pts_def = datetime.datetime.strptime(config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d")), "%Y-%m-%d").date()
                 except:
                     f_pts_def = ahora.date().replace(day=1)
-                n_fecha_pts = st.date_input("INICIO DE LIGA ACTUAL", value=f_pts_def)
+                n_fecha_pts = st.date_input("INICIO DE LIGA ACTUAL", value=f_pts_def, key="cfg_fpts")
 
                 st.markdown("### PROTOCOLOS DE SEGURIDAD")
                 col_op1, col_op2 = st.columns(2)
                 with col_op1:
-                    n_gps = st.checkbox("AUTORIZACIÓN SATELITAL (GPS)", value=get_bool_config("verificar_gps", True))
-                    n_wifi = st.checkbox("AUTORIZACIÓN RED LOCAL (WI-FI)", value=get_bool_config("verificar_wifi", False))
-                    n_auto = st.checkbox("PERMITIR ONBOARDING MANUAL DE PERSONAL", value=get_bool_config("autoregistro", False))
-                    n_sal_estricta = st.checkbox("CIERRE ESTRICTO (EXIGE RED/GPS PARA SALIR)", value=get_bool_config("salida_estricta", False))
-                    n_sal_manual = st.checkbox("INHABILITAR CIERRE AUTOMÁTICO", value=get_bool_config("exigir_salida_manual", False))
+                    n_gps = st.checkbox("AUTORIZACIÓN SATELITAL (GPS)", value=get_bool_config("verificar_gps", True), key="cfg_gps")
+                    n_wifi = st.checkbox("AUTORIZACIÓN RED LOCAL (WI-FI)", value=get_bool_config("verificar_wifi", False), key="cfg_wifi")
+                    n_auto = st.checkbox("PERMITIR ONBOARDING MANUAL DE PERSONAL", value=get_bool_config("autoregistro", False), key="cfg_aut")
+                    n_sal_estricta = st.checkbox("CIERRE ESTRICTO (EXIGE RED/GPS PARA SALIR)", value=get_bool_config("salida_estricta", False), key="cfg_se")
+                    n_sal_manual = st.checkbox("INHABILITAR CIERRE AUTOMÁTICO", value=get_bool_config("exigir_salida_manual", False), key="cfg_sm")
                 with col_op2:
-                    n_desc_tarde = st.checkbox("COMPUTAR DESCUENTO POR TARDANZA", value=get_bool_config("desc_tarde", True))
-                    n_desc_temp = st.checkbox("COMPUTAR DESCUENTO POR RETIRO ANTICIPADO", value=get_bool_config("desc_temp", True))
-                    n_perdon_tol = st.checkbox("ABSORBER TOLERANCIA EN CÓMPUTO", value=get_bool_config("perdonar_tolerancia", True))
-                    n_mostrar_hs = st.checkbox("VISIBILIDAD DE HORAS PARA EL OPERARIO", value=get_bool_config("mostrar_horas_empleado", False))
-                    n_estricto_plan = st.checkbox("BLOQUEO DE INGRESO FUERA DE PLANIFICACIÓN", value=get_bool_config("fichaje_estricto_plan", False))
+                    n_desc_tarde = st.checkbox("COMPUTAR DESCUENTO POR TARDANZA", value=get_bool_config("desc_tarde", True), key="cfg_dt")
+                    n_desc_temp = st.checkbox("COMPUTAR DESCUENTO POR RETIRO ANTICIPADO", value=get_bool_config("desc_temp", True), key="cfg_dtemp")
+                    n_perdon_tol = st.checkbox("ABSORBER TOLERANCIA EN CÓMPUTO", value=get_bool_config("perdonar_tolerancia", True), key="cfg_pt")
+                    n_mostrar_hs = st.checkbox("VISIBILIDAD DE HORAS PARA EL OPERARIO", value=get_bool_config("mostrar_horas_empleado", False), key="cfg_mh")
+                    n_estricto_plan = st.checkbox("BLOQUEO DE INGRESO FUERA DE PLANIFICACIÓN", value=get_bool_config("fichaje_estricto_plan", False), key="cfg_fep")
                 
                 if st.form_submit_button("APLICAR CONFIGURACIÓN"):
                     config_app["titulo_portal"] = nuevo_titulo
@@ -2855,12 +2855,12 @@ elif pestaña == "Panel de Gerencia":
                     st.write("---")
                 
                 st.markdown("**NUEVA LIGA DE RENDIMIENTO**")
-                n_nom = st.text_input("Designación:")
+                n_nom = st.text_input("Designación:", key="new_rn")
                 c_n1, c_n2 = st.columns(2)
-                n_mp = c_n1.checkbox("Visibilidad de Puntuación", value=True)
+                n_mp = c_n1.checkbox("Visibilidad de Puntuación", value=True, key="new_rmp")
                 c_n3, c_n4 = st.columns(2)
-                n_comp = c_n3.multiselect("Competidores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"])
-                n_esp = c_n4.multiselect("Espectadores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"])
+                n_comp = c_n3.multiselect("Competidores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"], key="new_rc")
+                n_esp = c_n4.multiselect("Espectadores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"], key="new_re")
                 
                 if st.form_submit_button("ACTUALIZAR LIGAS"):
                     if n_nom.strip():
@@ -2874,14 +2874,14 @@ elif pestaña == "Panel de Gerencia":
             st.subheader("PURGA DE DATOS")
             
             c_limp1, c_limp2, c_limp3 = st.columns(3)
-            tabla_a_limpiar = c_limp1.selectbox("TABLA:", ["Asistencia (Fichajes)", "Cierres de Caja", "Tareas y Puntos", "Reportes y Avisos"])
-            fecha_in_limp = c_limp2.date_input("DESDE:", value=ahora.date() - datetime.timedelta(days=365))
-            fecha_fi_limp = c_limp3.date_input("HASTA:", value=ahora.date() - datetime.timedelta(days=30))
+            tabla_a_limpiar = c_limp1.selectbox("TABLA:", ["Asistencia (Fichajes)", "Cierres de Caja", "Tareas y Puntos", "Reportes y Avisos"], key="limp_tab")
+            fecha_in_limp = c_limp2.date_input("DESDE:", value=ahora.date() - datetime.timedelta(days=365), key="limp_in")
+            fecha_fi_limp = c_limp3.date_input("HASTA:", value=ahora.date() - datetime.timedelta(days=30), key="limp_fi")
             
             st.warning("ACCIÓN DEPURATIVA: Los registros eliminados no podrán ser recuperados.")
-            confirmar_borrado = st.checkbox("AUTORIZO LA ELIMINACIÓN PERMANENTE.")
+            confirmar_borrado = st.checkbox("AUTORIZO LA ELIMINACIÓN PERMANENTE.", key="limp_chk")
             
-            if st.button("PURGAR REGISTROS", type="primary"):
+            if st.button("PURGAR REGISTROS", type="primary", key="limp_btn"):
                 if not confirmar_borrado:
                     st.error("Requiere autorización.")
                 else:
@@ -2925,21 +2925,21 @@ elif pestaña == "Panel de Gerencia":
 elif pestaña == nombre_tab_dueno:
     st.markdown('<div class="main-title" style="font-size: 2rem;">PANEL DEL PROPIETARIO</div>', unsafe_allow_html=True)
     
-    pass_owner = st.text_input("CLAVE DE ACCESO ROOT:", type="password")
+    pass_owner = st.text_input("CLAVE DE ACCESO ROOT:", type="password", key="login_root")
     
     if pass_owner == "master123":
         t_esp, t_lic = st.tabs(["MODO INCÓGNITO", "GESTIÓN DE LICENCIA"])
         
         with t_esp:
             st.subheader("AUDITORÍA DE SESIONES (INCÓGNITO)")
-            emp_espia = st.selectbox("SIMULAR TERMINAL DE:", ["Seleccionar..."] + sorted(lista_empleados))
-            if st.button("INICIAR INSTANCIA DE OPERARIO") and emp_espia != "Seleccionar...":
+            emp_espia = st.selectbox("SIMULAR TERMINAL DE:", ["Seleccionar..."] + sorted(lista_empleados), key="espia_emp")
+            if st.button("INICIAR INSTANCIA DE OPERARIO", key="btn_espia_emp") and emp_espia != "Seleccionar...":
                 st.session_state['incognito'] = True
                 st.session_state['incognito_user'] = emp_espia
                 recargar_app()
                 
             st.write("---")
-            if st.button("INICIAR INSTANCIA GERENCIAL"):
+            if st.button("INICIAR INSTANCIA GERENCIAL", key="btn_espia_ger"):
                 st.session_state['incognito'] = True
                 st.session_state['incognito_user'] = "Gerencia"
                 recargar_app()
@@ -2947,25 +2947,25 @@ elif pestaña == nombre_tab_dueno:
         with t_lic:
             st.subheader("PARÁMETROS DE CONTRATO Y MARCA")
             with st.form("form_owner"):
-                n_empresa = st.text_input("ENTIDAD PROVEEDORA", value=owner_config.get("empresa_nombre", ""))
-                n_tab = st.text_input("DESIGNACIÓN DE PESTAÑA ROOT", value=owner_config.get("nombre_tab_dueno", "OWNER"))
-                n_estado = st.selectbox("ESTADO DE LICENCIA", ["Activo", "Suspendido"], index=0 if owner_config.get("estado_licencia") == "Activo" else 1)
+                n_empresa = st.text_input("ENTIDAD PROVEEDORA", value=owner_config.get("empresa_nombre", ""), key="ow_emp")
+                n_tab = st.text_input("DESIGNACIÓN DE PESTAÑA ROOT", value=owner_config.get("nombre_tab_dueno", "OWNER"), key="ow_tab")
+                n_estado = st.selectbox("ESTADO DE LICENCIA", ["Activo", "Suspendido"], index=0 if owner_config.get("estado_licencia") == "Activo" else 1, key="ow_est")
                 
                 try: 
                     fv = datetime.datetime.strptime(owner_config.get("fecha_vencimiento", "2030-12-31"), "%Y-%m-%d").date()
                 except: 
                     fv = ahora.date()
-                n_venc = st.date_input("VENCIMIENTO DE CONTRATO", value=fv)
+                n_venc = st.date_input("VENCIMIENTO DE CONTRATO", value=fv, key="ow_fec")
                 
-                n_plan = st.text_input("PLAN ACTUAL", value=owner_config.get("plan_pago", "Mensual"))
-                n_mostrar_plan = st.checkbox("VISIBILIDAD DEL PLAN EN GERENCIA", value=owner_config.get("mostrar_membresia", False))
+                n_plan = st.text_input("PLAN ACTUAL", value=owner_config.get("plan_pago", "Mensual"), key="ow_pla")
+                n_mostrar_plan = st.checkbox("VISIBILIDAD DEL PLAN EN GERENCIA", value=owner_config.get("mostrar_membresia", False), key="ow_chk")
                 
-                n_bloqueo = st.text_area("MENSAJE DE BLOQUEO", value=owner_config.get("mensaje_bloqueo", ""))
-                n_aviso = st.text_area("AVISO PREVENCIMIENTO", value=owner_config.get("mensaje_aviso", ""))
-                d_aviso = st.number_input("DÍAS DE GRACIA", value=int(owner_config.get("dias_aviso", 5)))
+                n_bloqueo = st.text_area("MENSAJE DE BLOQUEO", value=owner_config.get("mensaje_bloqueo", ""), key="ow_blo")
+                n_aviso = st.text_area("AVISO PREVENCIMIENTO", value=owner_config.get("mensaje_aviso", ""), key="ow_avi")
+                d_aviso = st.number_input("DÍAS DE GRACIA", value=int(owner_config.get("dias_aviso", 5)), key="ow_dia")
                 
-                n_somos = st.text_area("MANIFIESTO CORPORATIVO", value=owner_config.get("quienes_somos", ""))
-                n_contacto = st.text_area("CANALES DE ASISTENCIA", value=owner_config.get("contactos", ""))
+                n_somos = st.text_area("MANIFIESTO CORPORATIVO", value=owner_config.get("quienes_somos", ""), key="ow_som")
+                n_contacto = st.text_area("CANALES DE ASISTENCIA", value=owner_config.get("contactos", ""), key="ow_con")
 
                 if st.form_submit_button("APLICAR PROTOCOLO"):
                     owner_config["empresa_nombre"] = n_empresa
