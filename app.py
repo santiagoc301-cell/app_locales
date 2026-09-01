@@ -1962,31 +1962,32 @@ elif pestaña == "💼 Panel de Gerencia":
             cols_fechas = [f"{nombres_dias[i]} {fechas_semana[i].strftime('%d/%m')}" for i in range(7)]
             str_fechas = [f.strftime("%Y-%m-%d") for f in fechas_semana]
             
-            st.info("💡 **Instrucciones:** Seleccioná a qué empleado le toca cubrir cada cupo. Si no necesitás llenar todos los cupos, dejalo en 'Nadie'.")
+            st.info("💡 **Instrucciones:** Abrí las pestañas de cada sucursal para organizar a tu equipo. Podés minimizarlas para que no ocupen lugar.")
             nuevos_datos_plan = {}
             opciones_emps = ["Nadie"] + sorted(lista_empleados)
             
+            # --- MEJORA: PESTAÑAS MINIMIZADAS POR SUCURSAL ---
             for loc in lista_locales.keys():
-                st.markdown(f"### 🏢 Sucursal: {loc}")
-                for turno, datos_turno in lista_turnos.items():
-                    st.markdown(f"**⏰ {turno}** ({datos_turno.get('ingreso')} a {datos_turno.get('salida')})")
-                    data_t = []
-                    for i in range(3):
-                        row_t = {"Cupo": f"🧑‍💼 Cupo {i+1}"}
-                        for j, f_str in enumerate(str_fechas):
-                            try:
-                                emps_asignados = planificacion_turnos.get(f_str, {}).get(loc, {}).get(turno, [])
-                                emp_name = emps_asignados[i] if i < len(emps_asignados) else "Nadie"
-                            except: emp_name = "Nadie"
-                            row_t[cols_fechas[j]] = emp_name
-                        data_t.append(row_t)
-                        
-                    df_plan_t = pd.DataFrame(data_t)
-                    config_cols_t = {"Cupo": st.column_config.TextColumn("Cupo", disabled=True)}
-                    for c in cols_fechas: config_cols_t[c] = st.column_config.SelectboxColumn(c, options=opciones_emps, default="Nadie")
-                    df_editado_t = st.data_editor(df_plan_t, column_config=config_cols_t, hide_index=True, use_container_width=True, key=f"ed_{loc}_{turno}", num_rows="dynamic")
-                    nuevos_datos_plan[(loc, turno)] = df_editado_t
-                    st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander(f"🏢 Organizar Sucursal: {loc}", expanded=False):
+                    for turno, datos_turno in lista_turnos.items():
+                        st.markdown(f"**⏰ {turno}** ({datos_turno.get('ingreso')} a {datos_turno.get('salida')})")
+                        data_t = []
+                        for i in range(3):
+                            row_t = {"Cupo": f"🧑‍💼 Cupo {i+1}"}
+                            for j, f_str in enumerate(str_fechas):
+                                try:
+                                    emps_asignados = planificacion_turnos.get(f_str, {}).get(loc, {}).get(turno, [])
+                                    emp_name = emps_asignados[i] if i < len(emps_asignados) else "Nadie"
+                                except: emp_name = "Nadie"
+                                row_t[cols_fechas[j]] = emp_name
+                            data_t.append(row_t)
+                            
+                        df_plan_t = pd.DataFrame(data_t)
+                        config_cols_t = {"Cupo": st.column_config.TextColumn("Cupo", disabled=True)}
+                        for c in cols_fechas: config_cols_t[c] = st.column_config.SelectboxColumn(c, options=opciones_emps, default="Nadie")
+                        df_editado_t = st.data_editor(df_plan_t, column_config=config_cols_t, hide_index=True, use_container_width=True, key=f"ed_{loc}_{turno}", num_rows="dynamic")
+                        nuevos_datos_plan[(loc, turno)] = df_editado_t
+                        st.markdown("<br>", unsafe_allow_html=True)
                     
             if st.button("💾 Guardar Planificación Semanal", use_container_width=True):
                 try:
@@ -2031,56 +2032,70 @@ elif pestaña == "💼 Panel de Gerencia":
                 mostrar_empleado = False
                 row = {"Empleado": emp}
                 
+                # --- MEJORA: FILTRA POR TURNO PLANIFICADO O POR TURNO REAL ---
                 for f_str in str_fechas:
                     p_loc, p_tur = get_plan_emp(f_str, emp)
-                    if (filtro_suc_comp == "Todas las sucursales" or p_loc == filtro_suc_comp) and \
-                       (filtro_tur_comp == "Todos los turnos" or p_tur == filtro_tur_comp):
-                        if p_tur != "Libre":
-                            mostrar_empleado = True
+                    
+                    real_estado, real_turno, real_sucursal = "No Fichó", "", ""
+                    if not df_asist_comp.empty:
+                        f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Entrada")].reset_index(drop=True)
+                        if not f_asist.empty:
+                            real_estado = f_asist.iloc[-1]["Estado"]
+                            if isinstance(real_estado, pd.Series): real_estado = real_estado.iloc[0]
+                            real_turno = f_asist.iloc[-1]["Turno"]
+                            if isinstance(real_turno, pd.Series): real_turno = real_turno.iloc[0]
+                            real_sucursal = f_asist.iloc[-1]["Sucursal"]
+                            if isinstance(real_sucursal, pd.Series): real_sucursal = real_sucursal.iloc[0]
                             
+                    match_plan_loc = (filtro_suc_comp == "Todas las sucursales" or p_loc == filtro_suc_comp)
+                    match_plan_tur = (filtro_tur_comp == "Todos los turnos" or p_tur == filtro_tur_comp)
+                    match_real_loc = (filtro_suc_comp == "Todas las sucursales" or real_sucursal == filtro_suc_comp)
+                    match_real_tur = (filtro_tur_comp == "Todos los turnos" or real_turno == filtro_tur_comp)
+                    
+                    if (match_plan_loc and match_plan_tur and p_tur != "Libre") or (match_real_loc and match_real_tur and real_estado != "No Fichó"):
+                        mostrar_empleado = True
+                        
                 if filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos":
                     mostrar_empleado = True 
 
                 if not mostrar_empleado:
                     continue 
                     
+                # --- MEJORA: RELACIÓN CLARA DEL CAMBIO DE HORARIO ---
                 for i, f_str in enumerate(str_fechas):
-                    plan_loc, plan_turno = get_plan_emp(f_str, emp)
+                    p_loc, p_tur = get_plan_emp(f_str, emp)
                     real_estado, real_turno, real_sucursal = "No Fichó", "", ""
                     
                     if not df_asist_comp.empty:
                         f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Entrada")].reset_index(drop=True)
                         if not f_asist.empty:
                             real_estado = f_asist.iloc[-1]["Estado"]
-                            if isinstance(real_estado, pd.Series):
-                                real_estado = real_estado.iloc[0]
+                            if isinstance(real_estado, pd.Series): real_estado = real_estado.iloc[0]
                             real_turno = f_asist.iloc[-1]["Turno"]
-                            if isinstance(real_turno, pd.Series):
-                                real_turno = real_turno.iloc[0]
+                            if isinstance(real_turno, pd.Series): real_turno = real_turno.iloc[0]
                             real_sucursal = f_asist.iloc[-1]["Sucursal"]
-                            if isinstance(real_sucursal, pd.Series):
-                                real_sucursal = real_sucursal.iloc[0]
+                            if isinstance(real_sucursal, pd.Series): real_sucursal = real_sucursal.iloc[0]
                         else:
                             if not df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Ausente")].empty:
                                 real_estado = "Ausente Reportado"
                                 
                     f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
                     if f_date > today_date:
-                        cell_val = f"⏳ {plan_turno} en {plan_loc}" if plan_turno != "Libre" else "Libre"
+                        cell_val = f"⏳ {p_tur} en {p_loc}" if p_tur != "Libre" else "Libre"
                     else:
-                        if plan_turno == "Libre":
+                        if p_tur == "Libre":
                             cell_val = "✅ Libre" if real_estado == "No Fichó" else f"🚨 Vino en su franco a {real_sucursal} ({real_turno})"
                         else:
                             if real_estado == "No Fichó":
-                                cell_val = f"⏳ Pendiente" if f_date == today_date else f"❌ Faltó sin aviso"
+                                cell_val = f"⏳ Pendiente" if f_date == today_date else f"❌ Faltó a {p_loc} ({p_tur})"
                             elif real_estado == "Ausente Reportado":
-                                cell_val = f"❌ Ausente reportado"
+                                cell_val = f"❌ Ausente reportado en {p_loc} ({p_tur})"
                             else:
-                                if plan_loc and (real_sucursal != plan_loc or real_turno != plan_turno):
+                                if p_loc and (real_sucursal != p_loc or real_turno != p_tur):
                                     planificados_aca = planificacion_turnos.get(f_str, {}).get(real_sucursal, {}).get(real_turno, [])
                                     planificados_str = ", ".join([p for p in planificados_aca if p != "Nadie"])
                                     swap_msg = f" (Posible cambio con: {planificados_str})" if planificados_str else ""
-                                    cell_val = f"⚠️ CAMBIO NO AVISADO: Debía ir a {plan_loc} pero fue a {real_sucursal} {swap_msg}"
+                                    cell_val = f"⚠️ CAMBIO: Plan ({p_loc} | {p_tur}) -> Real ({real_sucursal} | {real_turno}){swap_msg}"
                                 else:
                                     if real_estado == "A tiempo": cell_val = f"✅ A tiempo en {real_sucursal}"
                                     elif real_estado == "Tarde": cell_val = f"🚨 Tarde en {real_sucursal}"
@@ -2107,7 +2122,7 @@ elif pestaña == "💼 Panel de Gerencia":
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown(generate_html_download(df_comp, f"Comparativa_Horarios_{start_date_plan}.csv", "📥 Descargar Planilla Completa (CSV)"), unsafe_allow_html=True)
             else:
-                st.info("No hay turnos planificados que coincidan con los filtros seleccionados.")
+                st.info("No hay turnos planificados ni asistencias reales que coincidan con los filtros seleccionados.")
 
         with tab_puntos:
             st.markdown('<div class="main-title" style="font-size: 2rem;">🏆 Ranking de Puntos</div>', unsafe_allow_html=True)
