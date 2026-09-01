@@ -17,17 +17,17 @@ st.set_page_config(page_title="Gestión Corporativa", page_icon="✨", layout="w
 st.markdown("""
 <style>
 /* ---> IMPORTAR FUENTES DE ALTA COSTURA <--- */
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Manrope:wght@300;400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Manrope:wght@300;400;500;600&display=swap');
 
 /* ---> RESET Y MODO OSCURO FORZADO <--- */
-.stApp { background-color: #050505 !important; color: #E5E4E2 !important; font-family: 'Manrope', sans-serif !important; }
+.stApp { background-color: #050505 !important; color: #E5E4E2 !important; }
 [data-testid="stToolbar"] { display: none !important; }
 .viewerBadge_container { display: none !important; }
 footer { display: none !important; }
 #MainMenu { display: none !important; }
 
-/* ---> TIPOGRAFÍA GLOBAL <--- */
-html, body, p, div, span, label { font-family: 'Manrope', sans-serif !important; font-weight: 300; }
+/* ---> TIPOGRAFÍA GLOBAL (Sin romper los iconos nativos de Streamlit) <--- */
+p, label, li, h1, h2, h3, h4, h5, h6 { font-family: 'Manrope', sans-serif; color: #E5E4E2; }
 h1, h2, h3, .main-title { font-family: 'Cinzel', serif !important; text-transform: uppercase; letter-spacing: 3px; font-weight: 400; color: #D4AF37 !important;}
 
 /* ---> PESTAÑAS (TABS) ESTILO EDITORIAL <--- */
@@ -53,11 +53,11 @@ button[data-testid="baseButton-primary"] {
     min-height: 70px !important;
     font-size: 1.2rem !important;
     font-family: 'Cinzel', serif !important;
-    border-radius: 0px !important;
+    border-radius: 4px !important;
     font-weight: 600 !important;
     text-transform: uppercase;
     letter-spacing: 4px;
-    background: transparent !important;
+    background: rgba(212, 175, 55, 0.05) !important;
     color: #D4AF37 !important;
     border: 1px solid #D4AF37 !important;
     transition: all 0.4s ease !important;
@@ -68,41 +68,44 @@ button[data-testid="baseButton-primary"]:hover {
     box-shadow: 0 10px 30px -10px rgba(212, 175, 55, 0.4) !important;
 }
 .stButton>button:not([data-testid="baseButton-primary"]) { 
-    border-radius: 0px; 
-    font-family: 'Manrope', sans-serif;
-    font-weight: 400; 
+    border-radius: 4px !important; 
+    font-family: 'Manrope', sans-serif !important;
+    font-weight: 600 !important; 
     text-transform: uppercase;
     letter-spacing: 1px;
     transition: all 0.3s ease; 
-    border: 1px solid #333 !important; 
+    border: 1px solid #444 !important; 
     background-color: #111 !important;
-    color: #A0A0A0 !important;
+    color: #E5E4E2 !important;
 }
 .stButton>button:not([data-testid="baseButton-primary"]):hover { 
     border-color: #D4AF37 !important;
     color: #D4AF37 !important;
+    background-color: #1a1a1a !important;
 }
 
-/* ---> INPUTS Y SELECTBOX MINIMALISTAS <--- */
-.stTextInput input, .stDateInput input, .stTimeInput input, .stNumberInput input {
-    background-color: transparent !important;
-    border: none !important;
-    border-bottom: 1px solid #333 !important;
-    border-radius: 0 !important;
-    color: #E5E4E2 !important;
+/* ---> INPUTS Y SELECTBOX (Ahora SÚPER legibles) <--- */
+.stTextInput input, .stDateInput input, .stTimeInput input, .stNumberInput input, .stTextArea textarea {
+    background-color: #111111 !important;
+    border: 1px solid #333333 !important;
+    border-radius: 4px !important;
+    color: #FFFFFF !important;
     font-family: 'Manrope', sans-serif !important;
-    padding-left: 0 !important;
+    padding: 12px 15px !important;
+    font-weight: 500 !important;
 }
-.stTextInput input:focus, .stDateInput input:focus { border-bottom: 1px solid #D4AF37 !important; box-shadow: none !important; }
+.stTextInput input:focus, .stDateInput input:focus, .stTimeInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus { 
+    border-color: #D4AF37 !important; 
+    box-shadow: 0 0 5px rgba(212, 175, 55, 0.5) !important; 
+}
 div[data-baseweb="select"] > div {
-    background-color: transparent !important;
-    border: none !important;
-    border-bottom: 1px solid #333 !important;
-    border-radius: 0 !important;
-    color: #E5E4E2 !important;
+    background-color: #111111 !important;
+    border: 1px solid #333333 !important;
+    border-radius: 4px !important;
+    color: #FFFFFF !important;
 }
 
-/* ---> METRICAS Y TARJETAS (NEUMORPHISM OSCURO) <--- */
+/* ---> METRICAS Y TARJETAS <--- */
 div[data-testid="metric-container"] { 
     background: rgba(15, 15, 15, 0.8) !important; 
     backdrop-filter: blur(10px);
@@ -114,24 +117,24 @@ div[data-testid="metric-container"] {
 }
 div[data-testid="stMetricValue"] { font-size: 2.2rem; font-family: 'Cinzel', serif; font-weight: 400; color: #D4AF37; }
 
-/* ---> ALERTAS Y AVISOS MUTEADOS <--- */
-.alert-box { padding: 15px; border-left: 2px solid #991B1B; background-color: #1a0b0b; margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
-.task-box { padding: 15px; border-left: 2px solid #065F46; background-color: #061710; margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
-.task-pend { padding: 15px; border-left: 2px solid #92400E; background-color: #171105; margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
-.task-rej { padding: 15px; border-left: 2px solid #991B1B; background-color: #1a0b0b; margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
-.report-box { padding: 15px; border-left: 2px solid #5B21B6; background-color: #0f081c; margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
-.super-box { padding: 20px; border: 1px solid rgba(212, 175, 55, 0.2); background: #0a0a0a; margin-bottom: 15px; color: #D4AF37; text-align: center; font-family: 'Cinzel', serif; letter-spacing: 1px;}
-.validation-box { padding: 15px; border: 1px solid #222; background-color: #0a0a0a; margin-bottom: 10px; color: #A0A0A0; font-size: 0.9rem;}
+/* ---> ALERTAS Y AVISOS <--- */
+.alert-box { padding: 15px; border-radius: 4px; border-left: 3px solid #EF4444; background-color: rgba(239, 68, 68, 0.1); margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
+.task-box { padding: 15px; border-radius: 4px; border-left: 3px solid #10B981; background-color: rgba(16, 185, 129, 0.1); margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
+.task-pend { padding: 15px; border-radius: 4px; border-left: 3px solid #D4AF37; background-color: rgba(212, 175, 55, 0.1); margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
+.task-rej { padding: 15px; border-radius: 4px; border-left: 3px solid #EF4444; background-color: rgba(239, 68, 68, 0.1); margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
+.report-box { padding: 15px; border-radius: 4px; border-left: 3px solid #8B5CF6; background-color: rgba(139, 92, 246, 0.1); margin-bottom: 15px; color: #E5E4E2; font-size: 0.9rem;}
+.super-box { padding: 20px; border: 1px solid rgba(212, 175, 55, 0.3); background: #0a0a0a; margin-bottom: 15px; color: #D4AF37; text-align: center; font-family: 'Cinzel', serif; letter-spacing: 1px; border-radius: 4px;}
+.validation-box { padding: 15px; border-radius: 4px; border: 1px solid #333; background-color: #0a0a0a; margin-bottom: 10px; color: #A0A0A0; font-size: 0.9rem;}
 
 /* ---> CREDENCIAL EMPLEADO (BLACK CARD) <--- */
 .credencial { 
-    background: linear-gradient(135deg, #111 0%, #050505 100%); 
+    background: linear-gradient(135deg, #151515 0%, #050505 100%); 
     color: #E5E4E2; 
     padding: 30px 25px; 
     border-radius: 8px; 
-    box-shadow: 0 20px 40px -10px rgba(0,0,0,0.8); 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.9); 
     margin-bottom: 30px; 
-    border: 1px solid rgba(212, 175, 55, 0.15);
+    border: 1px solid rgba(212, 175, 55, 0.2);
     position: relative;
     overflow: hidden;
 }
@@ -140,16 +143,16 @@ div[data-testid="stMetricValue"] { font-size: 2.2rem; font-family: 'Cinzel', ser
     background: radial-gradient(circle, rgba(212, 175, 55, 0.05) 0%, transparent 60%);
     pointer-events: none;
 }
-.cred-nombre { font-family: 'Cinzel', serif; font-size: 2.2rem; font-weight: 400; margin: 0; color: #D4AF37; letter-spacing: 2px; text-transform: uppercase;}
-.cred-rol { font-size: 0.9rem; color: #737373; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 4px; font-weight: 400;}
-.cred-nivel { font-family: 'Manrope', sans-serif; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; color: #A0A0A0; border-top: 1px solid #222; padding-top: 15px;}
+.cred-nombre { font-family: 'Cinzel', serif; font-size: 2.2rem; font-weight: 600; margin: 0; color: #D4AF37; letter-spacing: 2px; text-transform: uppercase;}
+.cred-rol { font-size: 0.9rem; color: #A0A0A0; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 4px; font-weight: 400;}
+.cred-nivel { font-family: 'Manrope', sans-serif; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; color: #E5E4E2; border-top: 1px solid #333; padding-top: 15px;}
 
 /* ---> TABLAS DE DATOS <--- */
-[data-testid="stDataFrame"] { background: #0a0a0a; border: 1px solid #222; }
+[data-testid="stDataFrame"] { background: #0a0a0a; border: 1px solid #333; border-radius: 4px;}
 
 /* ---> BLOQUEO PANTALLA <--- */
-.bloqueo-pantalla { padding: 60px 40px; background: #050505; border: 1px solid #991B1B; text-align: center; margin-top: 50px; }
-.bloqueo-titulo { font-family: 'Cinzel', serif; font-size: 3rem; color: #991B1B; letter-spacing: 5px; margin-bottom: 20px; text-transform: uppercase;}
+.bloqueo-pantalla { padding: 60px 40px; background: #050505; border: 1px solid #EF4444; text-align: center; margin-top: 50px; border-radius: 4px;}
+.bloqueo-titulo { font-family: 'Cinzel', serif; font-size: 3rem; color: #EF4444; letter-spacing: 5px; margin-bottom: 20px; text-transform: uppercase;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -541,7 +544,7 @@ if not df_punt_check.empty:
                                 "tipo": "Salida",
                                 "estado": "Salida Automática",
                                 "distancia_m": 0.0,
-                                "nota": "Cierre automático."
+                                "nota": "Cierre automático del sistema."
                             })
                     except Exception as e:
                         pass
@@ -553,7 +556,7 @@ titulo_app_personalizado = config_app.get("titulo_portal", "PORTAL CORPORATIVO")
 nombre_tab_dueno = owner_config.get("nombre_tab_dueno", "OWNER")
 
 st.markdown(f'<div class="main-title" style="text-align: center;">{titulo_app_personalizado}</div>', unsafe_allow_html=True)
-pestaña = st.selectbox("Navegación:", ["Portal del Empleado", "Panel de Gerencia", nombre_tab_dueno], label_visibility="collapsed")
+pestaña = st.selectbox("NAVEGACIÓN", ["Portal del Empleado", "Panel de Gerencia", nombre_tab_dueno], label_visibility="collapsed")
 st.write("---")
 
 # ==========================================
@@ -597,10 +600,10 @@ if pestaña == "Portal del Empleado":
         device_id = st.session_state.get('device_id')
 
     if config_app.get("mensaje_dia", "").strip() != "":
-        st.info(f"COMUNICADO: {config_app['mensaje_dia']}")
+        st.info(f"COMUNICADO INSTITUCIONAL: {config_app['mensaje_dia']}")
 
     if not device_id:
-        st.info("Autenticando equipo...")
+        st.info("Autenticando terminal...")
     else:
         if empleado_en_celu:
             if 'fichaje_exitoso' in st.session_state:
@@ -648,7 +651,7 @@ if pestaña == "Portal del Empleado":
                     datos_turno_activo = {"Sucursal": str(ultimo_reg["Sucursal"]), "Turno": str(ultimo_reg["Turno"]), "Distancia_m": dist_guardada}
                     
             rol_empleado = roles_empleados.get(empleado_en_celu, 'Staff')
-            st.markdown(f"<div class='credencial'><p class='cred-nombre'>{empleado_en_celu}</p><p class='cred-rol'>{rol_empleado}</p><div class='cred-nivel'>STATUS: {calcular_nivel(puntos_actuales)} &nbsp;|&nbsp; {puntos_actuales} Pts</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='credencial'><p class='cred-nombre'>{empleado_en_celu}</p><p class='cred-rol'>{rol_empleado}</p><div class='cred-nivel'>STATUS: {calcular_nivel(puntos_actuales)} &nbsp;|&nbsp; {puntos_actuales} PTS</div></div>", unsafe_allow_html=True)
             
             with st.expander("SMART CHECK-IN", expanded=True):
                 st.markdown("### RADAR DE POSICIÓN")
@@ -724,14 +727,14 @@ if pestaña == "Portal del Empleado":
                                 st.error("No hay turnos programados en este horario.")
                             else:
                                 idx_sel = turnos_disponibles_ahora.index(turno_planificado) if turno_planificado in turnos_disponibles_ahora else 0
-                                turno_seleccionado = st.selectbox("Seleccionar turno:", turnos_disponibles_ahora, index=idx_sel)
+                                turno_seleccionado = st.selectbox("SELECCIONAR TURNO:", turnos_disponibles_ahora, index=idx_sel, key="sel_turno_in")
                                 mostrar_boton_entrada = True
                                 
                                 if turno_planificado != "Libre" and turno_planificado != turno_seleccionado:
                                     st.info(f"Nota: Su planificación original indicaba el turno {turno_planificado}.")
 
                         if mostrar_boton_entrada and turno_seleccionado:
-                            nota_empleado = st.text_input("NOVEDADES (OPCIONAL):", placeholder="Escriba aquí...")
+                            nota_empleado = st.text_input("NOVEDADES (OPCIONAL):", placeholder="Escriba aquí...", key="nota_in")
                             st.markdown("<br>", unsafe_allow_html=True)
                             
                             if st.button("REGISTRAR ENTRADA", use_container_width=True, type="primary"):
@@ -792,7 +795,7 @@ if pestaña == "Portal del Empleado":
                                 st.error("No hay turnos disponibles en esta sucursal.")
                             else:
                                 idx_sel = turnos_disponibles_ahora.index(nuevo_turno_planificado) if nuevo_turno_planificado in turnos_disponibles_ahora else 0
-                                turno_seleccionado = st.selectbox("Turno a fichar:", turnos_disponibles_ahora, index=idx_sel)
+                                turno_seleccionado = st.selectbox("TURNO A REGISTRAR:", turnos_disponibles_ahora, index=idx_sel, key="sel_turno_cambio")
                                 mostrar_btn_cambio = True
 
                         if mostrar_btn_cambio and turno_seleccionado:
@@ -858,7 +861,7 @@ if pestaña == "Portal del Empleado":
                                 if get_bool_config("verificar_gps", True) and not en_rango_sal: puede_salir = False
                                 
                             if puede_salir:
-                                nota_empleado = st.text_input("NOVEDAD AL SALIR (OPCIONAL):")
+                                nota_empleado = st.text_input("NOVEDAD AL SALIR (OPCIONAL):", key="nota_out")
                                 
                                 st.markdown("<br>", unsafe_allow_html=True)
                                 if st.button("REGISTRAR SALIDA", use_container_width=True, type="primary"):
@@ -889,14 +892,14 @@ if pestaña == "Portal del Empleado":
                 else:
                     with st.form("form_olvido_ingreso"):
                         c_olv1, c_olv2 = st.columns(2)
-                        suc_olv = c_olv1.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()))
-                        turno_olv = c_olv2.selectbox("Turno a corregir:", ["Seleccionar..."] + list(lista_turnos.keys()))
+                        suc_olv = c_olv1.selectbox("SUCURSAL:", ["Seleccionar..."] + list(lista_locales.keys()), key="olv_suc")
+                        turno_olv = c_olv2.selectbox("TURNO A CORREGIR:", ["Seleccionar..."] + list(lista_turnos.keys()), key="olv_tur")
                         
                         c_olv3, c_olv4 = st.columns(2)
-                        fecha_olvido = c_olv3.date_input("Fecha:", value=ahora.date())
-                        hora_real = c_olv4.time_input("Hora Real de Ingreso:", value=ahora.time())
+                        fecha_olvido = c_olv3.date_input("FECHA:", value=ahora.date(), key="olv_fec")
+                        hora_real = c_olv4.time_input("HORA REAL DE INGRESO:", value=ahora.time(), key="olv_hor")
                         
-                        motivo_olv = st.text_input("Motivo:")
+                        motivo_olv = st.text_input("MOTIVO:", key="olv_mot")
                         
                         if st.form_submit_button("ENVIAR A AUDITORÍA"):
                             if suc_olv == "Seleccionar..." or turno_olv == "Seleccionar..." or not motivo_olv.strip():
@@ -1064,7 +1067,7 @@ if pestaña == "Portal del Empleado":
                     if ent_act is not None:
                         horas_semanales_acumuladas += procesar_tramo_emp(ent_act, None)
                         
-                st.markdown(f"<div class='super-box'>COMPUTO SEMANAL: {formato_horas_texto(horas_semanales_acumuladas)} <br><span style='color: #737373; font-size: 0.8rem; font-family: Manrope, sans-serif;'>({fecha_inicio_sem.strftime('%d/%m')} - {fecha_fin_sem.strftime('%d/%m')})</span></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='super-box'>CÓMPUTO SEMANAL: {formato_horas_texto(horas_semanales_acumuladas)} <br><span style='color: #737373; font-size: 0.8rem; font-family: Manrope, sans-serif;'>({fecha_inicio_sem.strftime('%d/%m')} - {fecha_fin_sem.strftime('%d/%m')})</span></div>", unsafe_allow_html=True)
 
             # 6. PANEL SUPERVISOR
             if rol_empleado in ["Cajero", "Encargado"]:
@@ -1100,9 +1103,9 @@ if pestaña == "Portal del Empleado":
                         if auditables:
                             with st.form("form_sup_salida"):
                                 c_s1, c_s2 = st.columns(2)
-                                s_emp_salida = c_s1.selectbox("Compañero:", ["Seleccionar..."] + auditables)
-                                s_hora_salida = c_s2.time_input("Hora de salida:", ahora.time())
-                                s_motivo_salida = st.text_input("Nota de Auditoría:")
+                                s_emp_salida = c_s1.selectbox("COMPAÑERO:", ["Seleccionar..."] + auditables, key="sup_emp")
+                                s_hora_salida = c_s2.time_input("HORA DE SALIDA:", ahora.time(), key="sup_hor")
+                                s_motivo_salida = st.text_input("NOTA DE AUDITORÍA:", key="sup_not")
                                 if st.form_submit_button("FICHAR SALIDA AUDITADA"):
                                     if s_emp_salida == "Seleccionar...":
                                         st.warning("Seleccione empleado.")
@@ -1149,10 +1152,10 @@ if pestaña == "Portal del Empleado":
                 if rol_empleado in ["Cajero", "Encargado"]:
                     opciones_reporte.append("Sugerir Ajuste de Puntos a Operario")
                     
-                tipo_rep = st.selectbox("Categoría:", opciones_reporte)
+                tipo_rep = st.selectbox("CATEGORÍA:", opciones_reporte, key="rep_cat")
                 
                 if tipo_rep in ["Incumplimiento de políticas", "Sugerir Ajuste de Puntos a Operario"]:
-                    implicado = st.selectbox("Implicado:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu])
+                    implicado = st.selectbox("IMPLICADO:", ["Seleccionar..."] + [e for e in lista_empleados if e != empleado_en_celu], key="rep_imp")
                 else:
                     implicado = "N/A"
                     
@@ -1161,11 +1164,11 @@ if pestaña == "Portal del Empleado":
                     pts_recompensa_info = config_app.get("recompensa_auditoria_cajero", 10)
                     if rol_empleado == "Cajero":
                         st.info(f"Recompensa de auditoría por aprobación: +{pts_recompensa_info} pts.")
-                    pts_sugeridos = st.number_input("Puntos propuestos:", value=0, step=1)
+                    pts_sugeridos = st.number_input("PUNTOS PROPUESTOS:", value=0, step=1, key="rep_pts")
                     
-                detalle_rep = st.text_area("Detalle del reporte:")
+                detalle_rep = st.text_area("DETALLE DEL REPORTE:", key="rep_det")
                 
-                if st.button("ENVIAR REPORTE"):
+                if st.button("ENVIAR REPORTE", key="btn_enviar_rep"):
                     if not detalle_rep.strip(): 
                         st.warning("Detalle requerido.")
                     elif implicado == "Seleccionar...": 
@@ -1235,10 +1238,10 @@ if pestaña == "Portal del Empleado":
                 st.write(owner_config.get('contactos', ''))
         else:
             if get_bool_config("autoregistro", False):
-                st.info("PROCESO DE VINCULACIÓN DE DISPOSITIVO ACTIVO.")
-                nuevo_nombre_emp = st.text_input("Nombre Operario:")
-                rol_elegido_auto = st.selectbox("Designación:", lista_roles_disponibles)
-                if st.button("SINCRONIZAR TERMINAL") and nuevo_nombre_emp.strip():
+                st.info("PROCESO DE VINCULACIÓN DE TERMINAL ACTIVO.")
+                nuevo_nombre_emp = st.text_input("NOMBRE OPERARIO:", key="reg_nom")
+                rol_elegido_auto = st.selectbox("DESIGNACIÓN:", lista_roles_disponibles, key="reg_rol")
+                if st.button("SINCRONIZAR TERMINAL", key="reg_btn") and nuevo_nombre_emp.strip():
                     n_emp = nuevo_nombre_emp.strip()
                     match = next((e for e in lista_empleados if e.lower() == n_emp.lower()), None)
                     
@@ -1257,8 +1260,8 @@ if pestaña == "Portal del Empleado":
                             show_db_error(e, "vinculando dispositivo")
             else:
                 st.info("AUTO-REGISTRO INACTIVO. Seleccione credencial emitida por Gerencia.")
-                emp_vincular = st.selectbox("CREDENCIAL:", ["Seleccionar..."] + sorted(lista_empleados))
-                if st.button("SINCRONIZAR TERMINAL") and emp_vincular != "Seleccionar...":
+                emp_vincular = st.selectbox("CREDENCIAL:", ["Seleccionar..."] + sorted(lista_empleados), key="vinc_emp")
+                if st.button("SINCRONIZAR TERMINAL", key="vinc_btn") and emp_vincular != "Seleccionar...":
                     if emp_vincular in dispositivos_vinculados:
                         st.error("Credencial en uso en otra terminal.")
                     elif device_id in dispositivos_vinculados.values():
@@ -2094,7 +2097,7 @@ elif pestaña == "Panel de Gerencia":
                 if isinstance(val, str):
                     if 'OK EN' in val: return 'background-color: #061710; color: #10B981; font-weight: 600;'
                     if 'FALTA' in val or 'AUSENTE' in val: return 'background-color: #1a0b0b; color: #EF4444; font-weight: 600;'
-                    if 'TARDE' in val or 'EXTRA' in val: return 'background-color: #171105; color: #F59E0B; font-weight: 600;'
+                    if 'TARDE' in val or 'EXTRA' in val: return 'background-color: #171105; color: #D4AF37; font-weight: 600;'
                     if 'CAMBIO' in val: return 'background-color: #1a0b0b; color: #D4AF37; font-weight: 800; border: 1px solid #D4AF37;' 
                     if 'PENDIENTE' in val or 'PLAN:' in val: return 'background-color: #050505; color: #A0A0A0; font-weight: 600;'
                 return ''
@@ -2557,6 +2560,8 @@ elif pestaña == "Panel de Gerencia":
                                     except: pass
                                     try: supabase.table("tareas_individuales").update({"empleado": nn}).eq("empleado", emp_mod).execute()
                                     except: pass
+                                    
+                                    st.success(f"Nombre actualizado a {nn} en toda la base de datos.")
                                     recargar_app()
                                 except Exception as e: show_db_error(e, "actualizando empleado")
                         else:
