@@ -182,7 +182,7 @@ div[data-testid="stMetricValue"] { font-size: 2.2rem; font-family: 'Cinzel', ser
 .c-libre { background: #050505;}
 .c-libre .main-txt { color: #222; font-size: 0.7rem; font-style: italic;}
 
-/* NUEVO: Escáner Modal de Conflictos */
+/* Escáner Modal de Conflictos */
 .conflict-box { background: rgba(239, 68, 68, 0.05); border: 1px solid #EF4444; border-radius: 4px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #EF4444;}
 .conflict-title { color: #EF4444; font-family: 'Cinzel', serif; font-size: 1.1rem; font-weight: bold; margin-bottom: 10px; letter-spacing: 1px;}
 .conflict-item { color: #E5E4E2; font-size: 0.9rem; margin-bottom: 5px; font-family: 'Manrope', sans-serif; display: flex; align-items: center; gap: 8px;}
@@ -506,7 +506,7 @@ def formato_horas_texto(h_decimal):
 def generate_html_download(df, filename, label):
     csv_b64 = base64.b64encode(df.to_csv(index=False).encode('utf-8')).decode()
     return f'<a href="data:file/csv;base64,{csv_b64}" download="{filename}" style="display: block; width: 100%; text-align: center; padding: 0.8rem 1rem; background-color: transparent; color: #D4AF37; border: 1px solid #D4AF37; border-radius: 0; text-decoration: none; font-family: \'Cinzel\', serif; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; margin-top: 15px; transition: all 0.3s ease;">{label}</a>'
-# ==========================================
+    # ==========================================
 # 3. IDENTIFICACIÓN Y MODO INCÓGNITO (ESPÍA)
 # ==========================================
 empleado_en_celu = None
@@ -1893,6 +1893,7 @@ with tab_horarios:
                         if exito:
                             st.success(f"Fichaje guardado. (Estado: {estado_final})")
                             recargar_app()
+                            
             st.markdown("---")
             
             st.markdown("### EDITAR FICHAJES EXISTENTES")
@@ -2018,7 +2019,6 @@ with tab_horarios:
                         st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("GUARDAR PLANIFICACIÓN", use_container_width=True, key="btn_save_rost"):
-                # --- NUEVO: SISTEMA DE VALIDACIÓN ANTI-DUPLICADOS (ESCÁNER DE CONFLICTOS) ---
                 errores_duplicados = []
                 for f_str in str_fechas:
                     for turno in lista_turnos.keys():
@@ -2075,7 +2075,6 @@ with tab_horarios:
             html_content = "<div class='roster-wrapper'>"
             hay_datos_para_mostrar = False
 
-            # Recorrer cada empleado para armar su línea de tiempo matricial
             for emp in sorted(lista_empleados):
                 dias_html = ""
                 emp_tiene_turnos_visibles = False
@@ -2085,14 +2084,12 @@ with tab_horarios:
                     es_futuro = f_date > today_date
                     es_hoy = f_date == today_date
                     
-                    # 1. Buscar planificados
                     planificados = []
                     for loc, turnos_dict in planificacion_turnos.get(f_str, {}).items():
                         for t_name, emps in turnos_dict.items():
                             if emp in emps:
                                 planificados.append({"turno": t_name, "sucursal": loc})
                     
-                    # 2. Buscar reales
                     reales_hoy = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str)] if not df_asist_comp.empty else pd.DataFrame()
                     reales_entradas = reales_hoy[reales_hoy["Tipo"] == "Entrada"] if not reales_hoy.empty else pd.DataFrame()
                     reales_ausencias = reales_hoy[reales_hoy["Tipo"] == "Ausente"] if not reales_hoy.empty else pd.DataFrame()
@@ -2100,7 +2097,6 @@ with tab_horarios:
                     celdas_html = ""
                     turnos_procesados = set()
 
-                    # -- A. PROCESAR LO PLANIFICADO --
                     for plan in planificados:
                         p_tur = plan["turno"]
                         p_loc = plan["sucursal"]
@@ -2126,7 +2122,6 @@ with tab_horarios:
                                 if suc_real != p_loc:
                                     celdas_html += f"<div class='roster-cell c-cambio'><div class='sub-txt'>Plan: {p_loc} ({p_tur})</div><div class='main-txt'>🔄 Fichó en: {suc_real}</div></div>"
                                 else:
-                                    # VISUAL MUTING: "Apagamos" las celdas perfectas para evitar carga visual
                                     if estado_real == "A tiempo":
                                         celdas_html += f"<div class='roster-cell c-ok'><div class='main-txt'>✓ Cumplido</div></div>"
                                     elif estado_real == "Tarde":
@@ -2141,7 +2136,6 @@ with tab_horarios:
                                 else:
                                     celdas_html += f"<div class='roster-cell c-falta'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>❌ NO FICHÓ</div></div>"
 
-                    # -- B. PROCESAR EXTRAS (Fue, pero no estaba planificado) --
                     if not es_futuro and not reales_entradas.empty:
                         for idx, row in reales_entradas.iterrows():
                             r_tur = row["Turno"]
@@ -2156,7 +2150,6 @@ with tab_horarios:
                                 emp_tiene_turnos_visibles = True
                                 celdas_html += f"<div class='roster-cell c-extra'><div class='sub-txt'>🔵 TURNO EXTRA</div><div class='main-txt'>En: {r_suc} - {r_tur}</div></div>"
 
-                    # -- C. SI NO HUBO NADA --
                     if not celdas_html:
                         if filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos":
                             celdas_html = "<div class='roster-cell c-libre'><div class='main-txt'>Libre</div></div>"
