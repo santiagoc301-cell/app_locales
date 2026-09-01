@@ -212,12 +212,15 @@ def save_json(key_name, data):
     except Exception as e:
         show_db_error(e, f"guardando '{key_name}'")
 
+# ---> CORRECCIÓN: EVITA DUPLICACIÓN DE COLUMNAS <---
 @st.cache_data(ttl=15, show_spinner=False)
 def load_df(table_name):
     try:
         res = supabase.table(table_name).select('*').execute()
         if res.data:
             df = pd.DataFrame(res.data)
+            df.columns = df.columns.str.lower()
+            df = df.loc[:, ~df.columns.duplicated()]
             if table_name == "asistencia":
                 df = df.rename(columns={"empleado": "Empleado", "fecha": "Fecha", "hora": "Hora", "sucursal": "Sucursal", "turno": "Turno", "tipo": "Tipo", "estado": "Estado", "distancia_m": "Distancia_m", "nota": "Nota"})
             elif table_name == "tareas_log":
@@ -529,7 +532,6 @@ if not df_punt_check.empty:
                             })
                     except Exception as e:
                         pass
-
 # ==========================================
 # 4. NAVEGACIÓN FRONTAL PARA CELULARES
 # ==========================================
