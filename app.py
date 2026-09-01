@@ -496,13 +496,16 @@ for t_name, t_data in lista_turnos.items():
 df_punt_check = load_df("asistencia")
 if not df_punt_check.empty:
     df_punt_check['Timestamp'] = pd.to_datetime(df_punt_check['Fecha'].astype(str) + ' ' + df_punt_check['Hora'].astype(str), errors='coerce')
-    df_punt_check = df_punt_check.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
+    df_punt_check = df_punt_check.dropna(subset=['Timestamp']).sort_values(by="Timestamp").reset_index(drop=True)
     
     for emp_check in lista_empleados:
-        df_e_check = df_punt_check[df_punt_check["Empleado"] == emp_check]
+        df_e_check = df_punt_check[df_punt_check["Empleado"] == emp_check].reset_index(drop=True)
         if not df_e_check.empty:
             ultimo_fichaje = df_e_check.iloc[-1]
-            if ultimo_fichaje["Tipo"] == "Entrada":
+            tipo_uf = ultimo_fichaje["Tipo"]
+            if isinstance(tipo_uf, pd.Series):
+                tipo_uf = tipo_uf.iloc[0]
+            if tipo_uf == "Entrada":
                 turno_activo = str(ultimo_fichaje["Turno"])
                 if turno_activo in lista_turnos:
                     try:
@@ -616,9 +619,14 @@ if pestaña == "📱 Portal del Empleado":
             if not df_hoy.empty:
                 if 'id' in df_hoy.columns:
                     df_hoy['id_num'] = pd.to_numeric(df_hoy['id'], errors='coerce')
-                    df_hoy = df_hoy.sort_values(by="id_num")
+                    df_hoy = df_hoy.sort_values(by="id_num").reset_index(drop=True)
+                else:
+                    df_hoy = df_hoy.reset_index(drop=True)
                 ultimo_reg = df_hoy.iloc[-1]
-                if ultimo_reg["Tipo"] == "Entrada":
+                tipo_ur = ultimo_reg["Tipo"]
+                if isinstance(tipo_ur, pd.Series):
+                    tipo_ur = tipo_ur.iloc[0]
+                if tipo_ur == "Entrada":
                     estado_laboral = "Adentro"
                     try: dist_guardada = float(ultimo_reg.get("Distancia_m", 0.0))
                     except: dist_guardada = 0.0
@@ -1065,13 +1073,21 @@ if pestaña == "📱 Portal del Empleado":
                         if not df_hoy_todos.empty:
                             if 'id' in df_hoy_todos.columns:
                                 df_hoy_todos['id_num'] = pd.to_numeric(df_hoy_todos['id'], errors='coerce')
-                                df_hoy_todos = df_hoy_todos.sort_values(by="id_num")
+                                df_hoy_todos = df_hoy_todos.sort_values(by="id_num").reset_index(drop=True)
+                            else:
+                                df_hoy_todos = df_hoy_todos.reset_index(drop=True)
                             for e_comp in lista_empleados:
                                 if e_comp != empleado_en_celu:
-                                    df_c = df_hoy_todos[df_hoy_todos["Empleado"] == e_comp]
+                                    df_c = df_hoy_todos[df_hoy_todos["Empleado"] == e_comp].reset_index(drop=True)
                                     if not df_c.empty:
                                         ult_c = df_c.iloc[-1]
-                                        if ult_c["Tipo"] == "Entrada" and str(ult_c["Sucursal"]) == str(suc_cajero):
+                                        tipo_uc = ult_c["Tipo"]
+                                        if isinstance(tipo_uc, pd.Series):
+                                            tipo_uc = tipo_uc.iloc[0]
+                                        suc_uc = ult_c["Sucursal"]
+                                        if isinstance(suc_uc, pd.Series):
+                                            suc_uc = suc_uc.iloc[0]
+                                        if tipo_uc == "Entrada" and str(suc_uc) == str(suc_cajero):
                                             auditables.append(e_comp)
                                             
                         if auditables:
@@ -1100,9 +1116,11 @@ if pestaña == "📱 Portal del Empleado":
                                             hora_str_salida = s_hora_salida.strftime("%I:%M:%S %p")
                                             nota_final = f"[Auditado por {empleado_en_celu}] {s_motivo_salida}"
                                             turno_del_auditado = "Manual"
-                                            df_aud_turno = df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Entrada")]
+                                            df_aud_turno = df_hoy_todos[(df_hoy_todos["Empleado"] == s_emp_salida) & (df_hoy_todos["Tipo"] == "Entrada")].reset_index(drop=True)
                                             if not df_aud_turno.empty:
                                                 turno_del_auditado = df_aud_turno.iloc[-1]["Turno"]
+                                                if isinstance(turno_del_auditado, pd.Series):
+                                                    turno_del_auditado = turno_del_auditado.iloc[0]
                                             
                                             exito = insert_row("salidas_pendientes", {
                                                 "fecha": str(fecha_hoy), "hora": str(hora_str_salida), "empleado": str(s_emp_salida),
@@ -1173,9 +1191,11 @@ if pestaña == "📱 Portal del Empleado":
                     tareas_hoy_df = df_tl[(df_tl["Empleado"] == empleado_en_celu) & (df_tl["Fecha"] == fecha_hoy)] if not df_tl.empty else pd.DataFrame()
                     for t in tareas_totales:
                         t_nombre, t_puntos = t.get('tarea'), t.get('puntos')
-                        t_reg = tareas_hoy_df[tareas_hoy_df["Tarea"] == t_nombre] if not tareas_hoy_df.empty else pd.DataFrame()
+                        t_reg = tareas_hoy_df[tareas_hoy_df["Tarea"] == t_nombre].reset_index(drop=True) if not tareas_hoy_df.empty else pd.DataFrame()
                         if not t_reg.empty:
                             est_t = t_reg.iloc[-1]["Estado"]
+                            if isinstance(est_t, pd.Series):
+                                est_t = est_t.iloc[0]
                             if est_t == "Aprobada": st.markdown(f"<div class='task-box'>✅ <b>{t_nombre}</b> (+{t_puntos} pts) - <b>Aprobada</b></div>", unsafe_allow_html=True)
                             elif est_t == "Rechazada": st.markdown(f"<div class='task-rej'>❌ <b>{t_nombre}</b> - Rechazada</div>", unsafe_allow_html=True)
                             else: st.markdown(f"<div class='task-pend'>⏳ <b>{t_nombre}</b> - Esperando auditoría...</div>", unsafe_allow_html=True)
@@ -2019,11 +2039,17 @@ elif pestaña == "💼 Panel de Gerencia":
                     real_estado, real_turno, real_sucursal = "No Fichó", "", ""
                     
                     if not df_asist_comp.empty:
-                        f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Entrada")]
+                        f_asist = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Entrada")].reset_index(drop=True)
                         if not f_asist.empty:
                             real_estado = f_asist.iloc[-1]["Estado"]
+                            if isinstance(real_estado, pd.Series):
+                                real_estado = real_estado.iloc[0]
                             real_turno = f_asist.iloc[-1]["Turno"]
+                            if isinstance(real_turno, pd.Series):
+                                real_turno = real_turno.iloc[0]
                             real_sucursal = f_asist.iloc[-1]["Sucursal"]
+                            if isinstance(real_sucursal, pd.Series):
+                                real_sucursal = real_sucursal.iloc[0]
                         else:
                             if not df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str) & (df_asist_comp["Tipo"] == "Ausente")].empty:
                                 real_estado = "Ausente Reportado"
@@ -2227,9 +2253,11 @@ elif pestaña == "💼 Panel de Gerencia":
                             id_modificar = None
                             
                             if not df_asist_olv.empty:
-                                filtro = df_asist_olv[(df_asist_olv["Empleado"] == emp_cp) & (df_asist_olv["Fecha"] == fec_cp) & (df_asist_olv["Tipo"] == "Entrada") & (df_asist_olv["Turno"] == tur_cp)]
+                                filtro = df_asist_olv[(df_asist_olv["Empleado"] == emp_cp) & (df_asist_olv["Fecha"] == fec_cp) & (df_asist_olv["Tipo"] == "Entrada") & (df_asist_olv["Turno"] == tur_cp)].reset_index(drop=True)
                                 if not filtro.empty:
                                     id_modificar = filtro.iloc[-1]["id"]
+                                    if isinstance(id_modificar, pd.Series):
+                                        id_modificar = id_modificar.iloc[0]
                                     ya_existe = True
                             
                             estado_final = "A tiempo"
