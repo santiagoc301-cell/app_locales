@@ -2173,6 +2173,7 @@ if pestaña == "Panel de Gerencia" and acceso_concedido:
                 
         html_content += "</div>"
 
+        # AQUÍ ESTÁ EL COMANDO CLAVE PARA QUE SE DIBUJE EL HTML
         if hay_datos_para_mostrar:
             st.markdown(html_content, unsafe_allow_html=True)
         else:
@@ -3057,5 +3058,5 @@ elif pestaña == nombre_tab_dueno:
                     st.success("Protocolos del Propietario actualizados.")
                     recargar_app()
                     
-    elif pass_owner != "":
-        st.error("CREDENCIALES INVÁLIDAS.")
+elif pass_owner != "":
+    st.error("CREDENCIALES INVÁLIDAS.")
