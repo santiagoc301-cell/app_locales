@@ -2038,12 +2038,10 @@ elif pestaña == "Panel de Gerencia":
                                     control_empleados[e] = loc
 
                 if errores_duplicados:
-                    st.markdown("""
-                    <div class='conflict-box'>
-                        <div class='conflict-title'>🛑 CONFLICTO DETECTADO</div>
-                        """ + "".join([f"<div class='conflict-item'>{err}</div>" for err in errores_duplicados]) + """
-                    </div>
-                    """, unsafe_allow_html=True)
+                    conflict_html = "<div class='conflict-box'><div class='conflict-title'>🛑 CONFLICTO DETECTADO</div>"
+                    conflict_html += "".join([f"<div class='conflict-item'>{err}</div>" for err in errores_duplicados])
+                    conflict_html += "</div>"
+                    st.markdown(conflict_html, unsafe_allow_html=True)
                 else:
                     try:
                         inserts = []
@@ -2074,7 +2072,20 @@ elif pestaña == "Panel de Gerencia":
             if not df_asist_comp.empty:
                 df_asist_comp = df_asist_comp.reset_index(drop=True)
 
+            # --- ENCABEZADO ÚNICO DE FECHAS ---
+            header_days_html = ""
+            for date_title in cols_fechas:
+                header_days_html += f"<div style='flex: 1; text-align: center; padding: 12px 5px; font-family: \"Cinzel\", serif; font-size: 0.8rem; font-weight: bold; color: #D4AF37; border-right: 1px solid #1A1A1A;'>{date_title}</div>"
+            
+            header_row_html = (
+                "<div class='roster-row' style='background: #050505; border-bottom: 2px solid #D4AF37; margin-bottom: 8px;'>"
+                "<div class='roster-emp' style='background: #050505; color: #D4AF37; justify-content: center; border-right: 1px solid #1A1A1A;'>OPERARIO</div>"
+                f"<div class='roster-days'>{header_days_html}</div>"
+                "</div>"
+            )
+
             html_content = "<div class='roster-wrapper'>"
+            filas_empleados_html = ""
             hay_datos_para_mostrar = False
 
             for emp in sorted(lista_empleados):
@@ -2158,20 +2169,19 @@ elif pestaña == "Panel de Gerencia":
                         else:
                             celdas_html = "<div class='roster-cell c-libre'><div class='main-txt'>-</div></div>"
 
-                    dias_html += f"<div style='display:flex; flex-direction:column; flex:1; border-right: 1px solid #1A1A1A;'><div style='font-size:0.7rem; color:#737373; text-align:center; padding:5px 0; border-bottom:1px solid #1A1A1A; font-weight: 600; letter-spacing: 1px;'>{cols_fechas[j]}</div><div style='display:flex; flex-direction:column; height:100%;'>{celdas_html}</div></div>"
+                    dias_html += f"<div style='display:flex; flex-direction:column; flex:1; border-right: 1px solid #1A1A1A;'>{celdas_html}</div>"
 
                 if emp_tiene_turnos_visibles or (filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos"):
                     hay_datos_para_mostrar = True
-                    html_content += f"""
-                    <div class='roster-row'>
-                        <div class='roster-emp'>{emp}</div>
-                        <div class='roster-days'>{dias_html}</div>
-                    </div>
-                    """
-                    
-            html_content += "</div>"
+                    filas_empleados_html += (
+                        "<div class='roster-row'>"
+                        f"<div class='roster-emp'>{emp}</div>"
+                        f"<div class='roster-days'>{dias_html}</div>"
+                        "</div>"
+                    )
 
             if hay_datos_para_mostrar:
+                html_content += header_row_html + filas_empleados_html + "</div>"
                 st.markdown(html_content, unsafe_allow_html=True)
             else:
                 st.info("No hay planificaciones que coincidan con los filtros seleccionados.")
