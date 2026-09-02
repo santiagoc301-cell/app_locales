@@ -1604,7 +1604,7 @@ elif pestaña == "Panel de Gerencia":
                     nota_caja = c_caj8.text_input("Novedades / Notas:", key="caja_not")
                     
                     if st.form_submit_button("GUARDAR CIERRE"):
-                        if caj_emp == "Seleccionar...":
+                        if caj_emp == "Seleccionar..." or caj_suc == "Seleccionar...":
                             st.warning("Seleccione Responsable y Sucursal.")
                         else:
                             exito = insert_row("cierres_caja", {"fecha": caj_fecha.strftime("%Y-%m-%d"), "hora": hora_hoy, "cajero": caj_emp, "sucursal": caj_suc, "turno": "N/A", "efectivo": val_efectivo, "tarjeta": val_tarjeta, "transferencia": val_transf, "total_ventas": val_total, "nota": nota_caja.strip()})
@@ -2038,12 +2038,10 @@ elif pestaña == "Panel de Gerencia":
                                     control_empleados[e] = loc
 
                 if errores_duplicados:
-                    st.markdown("""
-                    <div class='conflict-box'>
-                        <div class='conflict-title'>🛑 CONFLICTO DETECTADO</div>
-                        """ + "".join([f"<div class='conflict-item'>{err}</div>" for err in errores_duplicados]) + """
-                    </div>
-                    """, unsafe_allow_html=True)
+                    conflict_html = "<div class='conflict-box'><div class='conflict-title'>🛑 CONFLICTO DETECTADO</div>"
+                    conflict_html += "".join([f"<div class='conflict-item'>{err}</div>" for err in errores_duplicados])
+                    conflict_html += "</div>"
+                    st.markdown(conflict_html, unsafe_allow_html=True)
                 else:
                     try:
                         inserts = []
@@ -2176,12 +2174,7 @@ elif pestaña == "Panel de Gerencia":
 
                 if emp_tiene_turnos_visibles or (filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos"):
                     hay_datos_para_mostrar = True
-                    html_content += f"""
-                    <div class='roster-row'>
-                        <div class='roster-emp'>{emp}</div>
-                        <div class='roster-days'>{dias_html}</div>
-                    </div>
-                    """
+                    html_content += f"<div class='roster-row'><div class='roster-emp'>{emp}</div><div class='roster-days'>{dias_html}</div></div>"
                     
             html_content += "</div>"
 
