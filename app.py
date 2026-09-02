@@ -506,6 +506,7 @@ def formato_horas_texto(h_decimal):
 def generate_html_download(df, filename, label):
     csv_b64 = base64.b64encode(df.to_csv(index=False).encode('utf-8')).decode()
     return f'<a href="data:file/csv;base64,{csv_b64}" download="{filename}" style="display: block; width: 100%; text-align: center; padding: 0.8rem 1rem; background-color: transparent; color: #D4AF37; border: 1px solid #D4AF37; border-radius: 0; text-decoration: none; font-family: \'Cinzel\', serif; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; margin-top: 15px; transition: all 0.3s ease;">{label}</a>'
+
 # ==========================================
 # 3. IDENTIFICACIÓN Y MODO INCÓGNITO (ESPÍA)
 # ==========================================
@@ -520,6 +521,7 @@ elif 'device_id' in st.session_state:
         if dev == st.session_state['device_id']:
             empleado_en_celu = emp
             break
+
 # ==========================================
 # LÓGICA CORE DE MOTOR DE TIEMPO (FILTRO DINÁMICO)
 # ==========================================
@@ -612,7 +614,6 @@ if pestaña in ["Portal del Empleado", "Panel de Gerencia"]:
         </div>
         """, unsafe_allow_html=True)
         st.stop()
-
 # ==========================================
 # 5. INTERFAZ: PORTAL DEL EMPLEADO
 # ==========================================
@@ -1823,7 +1824,8 @@ elif pestaña == "Panel de Gerencia":
                                     except Exception as e: show_db_error(e, "eliminando tarifa")
                 else: 
                     st.info("Sin sueldos configurados. Valor defecto: $0.")
-with tab_horarios:
+
+        with tab_horarios:
             st.markdown('<div class="main-title" style="font-size: 2rem;">PLANIFICACIÓN Y HORARIOS</div>', unsafe_allow_html=True)
             
             st.markdown("### AGREGAR FICHAJE MANUAL")
