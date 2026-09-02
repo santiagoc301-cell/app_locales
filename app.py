@@ -506,7 +506,7 @@ def formato_horas_texto(h_decimal):
 def generate_html_download(df, filename, label):
     csv_b64 = base64.b64encode(df.to_csv(index=False).encode('utf-8')).decode()
     return f'<a href="data:file/csv;base64,{csv_b64}" download="{filename}" style="display: block; width: 100%; text-align: center; padding: 0.8rem 1rem; background-color: transparent; color: #D4AF37; border: 1px solid #D4AF37; border-radius: 0; text-decoration: none; font-family: \'Cinzel\', serif; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; margin-top: 15px; transition: all 0.3s ease;">{label}</a>'
-# ==========================================
+    # ==========================================
 # 3. IDENTIFICACIÓN Y MODO INCÓGNITO (ESPÍA)
 # ==========================================
 empleado_en_celu = None
@@ -1823,1171 +1823,1175 @@ elif pestaña == "Panel de Gerencia":
                                     except Exception as e: show_db_error(e, "eliminando tarifa")
                 else: 
                     st.info("Sin sueldos configurados. Valor defecto: $0.")
-with tab_horarios:
-            st.markdown('<div class="main-title" style="font-size: 2rem;">PLANIFICACIÓN Y HORARIOS</div>', unsafe_allow_html=True)
-            
-            st.markdown("### AGREGAR FICHAJE MANUAL")
-            with st.form("form_add_fichaje"):
-                c_add1, c_add2, c_add3 = st.columns(3)
-                add_emp = c_add1.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados), key="add_emp")
-                add_fecha = c_add2.date_input("Fecha:", value=ahora.date(), key="add_fec")
-                add_hora = c_add3.time_input("Hora:", value=ahora.time(), key="add_hor")
+# ==========================================
+# CONTINUACIÓN PANEL DE GERENCIA (INICIA EN MARGEN 0)
+# ==========================================
+if pestaña == "Panel de Gerencia" and acceso_concedido:
+    with tab_horarios:
+        st.markdown('<div class="main-title" style="font-size: 2rem;">PLANIFICACIÓN Y HORARIOS</div>', unsafe_allow_html=True)
+        
+        st.markdown("### AGREGAR FICHAJE MANUAL")
+        with st.form("form_add_fichaje"):
+            c_add1, c_add2, c_add3 = st.columns(3)
+            add_emp = c_add1.selectbox("Empleado:", ["Seleccionar..."] + sorted(lista_empleados), key="add_emp")
+            add_fecha = c_add2.date_input("Fecha:", value=ahora.date(), key="add_fec")
+            add_hora = c_add3.time_input("Hora:", value=ahora.time(), key="add_hor")
 
-                c_add4, c_add5, c_add6 = st.columns(3)
-                add_suc = c_add4.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()), key="add_suc")
-                add_turno = c_add5.selectbox("Turno:", ["Seleccionar..."] + list(lista_turnos.keys()) + ["Manual"], key="add_tur")
-                add_tipo = c_add6.selectbox("Tipo:", ["Entrada", "Salida"], key="add_tip")
+            c_add4, c_add5, c_add6 = st.columns(3)
+            add_suc = c_add4.selectbox("Sucursal:", ["Seleccionar..."] + list(lista_locales.keys()), key="add_suc")
+            add_turno = c_add5.selectbox("Turno:", ["Seleccionar..."] + list(lista_turnos.keys()) + ["Manual"], key="add_tur")
+            add_tipo = c_add6.selectbox("Tipo:", ["Entrada", "Salida"], key="add_tip")
 
-                c_add7, c_add8 = st.columns([1, 2])
-                add_estado = c_add7.selectbox("Estado:", ["Automático (Calculado)"] + ESTADOS_POSIBLES, key="add_est")
-                add_nota = c_add8.text_input("Nota / Motivo:", key="add_not")
+            c_add7, c_add8 = st.columns([1, 2])
+            add_estado = c_add7.selectbox("Estado:", ["Automático (Calculado)"] + ESTADOS_POSIBLES, key="add_est")
+            add_nota = c_add8.text_input("Nota / Motivo:", key="add_not")
 
-                if st.form_submit_button("GUARDAR FICHAJE"):
-                    if "Seleccionar..." in [add_emp, add_suc, add_turno]:
-                        st.warning("Seleccione Empleado, Sucursal y Turno.")
-                    else:
-                        str_hora = add_hora.strftime("%I:%M:%S %p")
-                        str_fecha = add_fecha.strftime("%Y-%m-%d")
-                        dt_fichaje = datetime.datetime.combine(add_fecha, add_hora)
-                        
-                        estado_final = add_estado
-                        if add_estado == "Automático (Calculado)":
-                            if add_turno in lista_turnos:
-                                try:
-                                    t_ing_obj = datetime.datetime.strptime(lista_turnos[add_turno]["ingreso"], "%I:%M %p").time()
-                                    t_sal_obj = datetime.datetime.strptime(lista_turnos[add_turno]["salida"], "%I:%M %p").time()
-                                    
-                                    dt_ing_ofi = datetime.datetime.combine(add_fecha, t_ing_obj)
-                                    dt_sal_ofi = datetime.datetime.combine(add_fecha, t_sal_obj)
-                                    
-                                    if dt_sal_ofi < dt_ing_ofi:
-                                        if add_tipo == "Salida" and add_hora < datetime.time(12, 0): 
-                                            dt_ing_ofi -= datetime.timedelta(days=1)
-                                        else:
-                                            dt_sal_ofi += datetime.timedelta(days=1)
-
-                                    if add_tipo == "Entrada":
-                                        tolerancia = int(config_app.get("tolerancia_minutos", 10))
-                                        limite_tarde = dt_ing_ofi + datetime.timedelta(minutes=tolerancia)
-                                        estado_final = "Tarde" if dt_fichaje > limite_tarde else "A tiempo"
-                                    
-                                    elif add_tipo == "Salida":
-                                        estado_final = "Retiro Temprano" if dt_fichaje < dt_sal_ofi else "Salida"
-                                        
-                                except Exception as e:
-                                    estado_final = "A tiempo" if add_tipo == "Entrada" else "Salida"
-                            else:
-                                estado_final = "A tiempo" if add_tipo == "Entrada" else "Salida"
-                                
-                        exito = insert_row("asistencia", {
-                            "fecha": str_fecha,
-                            "hora": str_hora,
-                            "empleado": add_emp,
-                            "sucursal": add_suc,
-                            "turno": add_turno,
-                            "tipo": add_tipo,
-                            "estado": estado_final,
-                            "distancia_m": 0.0,
-                            "nota": f"[Carga Manual] {add_nota}".strip()
-                        })
-                        if exito:
-                            st.success(f"Fichaje guardado. (Estado: {estado_final})")
-                            recargar_app()
-                            
-            st.markdown("---")
-            
-            st.markdown("### EDITAR FICHAJES EXISTENTES")
-            c_edh1, c_edh2 = st.columns(2)
-            emp_mod_horario = c_edh1.selectbox("Seleccionar Empleado:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_mod_hor")
-            fecha_mod_horario = c_edh2.date_input("Fecha a buscar:", value=ahora.date(), key="f_mod_hor")
-            
-            if emp_mod_horario != "Seleccionar...":
-                df_asist_mod = load_df("asistencia")
-                if not df_asist_mod.empty:
-                    df_asist_mod = df_asist_mod.reset_index(drop=True)
-                    df_fil = df_asist_mod[(df_asist_mod["Empleado"] == emp_mod_horario) & (df_asist_mod["Fecha"] == str(fecha_mod_horario))].reset_index(drop=True)
-                    if not df_fil.empty:
-                        turnos_del_dia = df_fil["Turno"].unique()
-                        for turno_str in turnos_del_dia:
-                            st.markdown(f"#### {turno_str}")
-                            df_t = df_fil[df_fil["Turno"] == turno_str].reset_index(drop=True)
-                            
-                            for idx, row in df_t.iterrows():
-                                with st.expander(f"{row['Tipo']} - {row['Sucursal']} ({row['Hora']})", expanded=False):
-                                    c_m1, c_m2, c_m3 = st.columns(3)
-                                    
-                                    pd_t = pd.to_datetime(row['Hora'], errors='coerce')
-                                    time_val = pd_t.time() if not pd.isna(pd_t) else ahora.time()
-                                    pd_f = pd.to_datetime(row['Fecha'], errors='coerce')
-                                    date_val = pd_f.date() if not pd.isna(pd_f) else ahora.date()
-                                    
-                                    nueva_fecha = c_m1.date_input("Fecha:", value=date_val, key=f"fec_{row['id']}")
-                                    nueva_hora = c_m2.time_input("Hora:", value=time_val, key=f"time_{row['id']}")
-                                    nuevo_tipo = c_m3.selectbox("Tipo:", ["Entrada", "Salida"], index=0 if row['Tipo']=="Entrada" else 1, key=f"tip_{row['id']}")
-                                    
-                                    c_m4, c_m5, c_m6 = st.columns(3)
-                                    
-                                    suc_ops = list(lista_locales.keys())
-                                    if row['Sucursal'] not in suc_ops: suc_ops.append(row['Sucursal'])
-                                    idx_suc = suc_ops.index(row['Sucursal'])
-                                    nueva_sucursal = c_m4.selectbox("Sucursal:", suc_ops, index=idx_suc, key=f"suc_{row['id']}")
-                                    
-                                    turnos_ops = list(lista_turnos.keys()) + ["Manual", "N/A"]
-                                    if row['Turno'] not in turnos_ops: turnos_ops.append(row['Turno'])
-                                    idx_tur = turnos_ops.index(row['Turno'])
-                                    nuevo_turno = c_m5.selectbox("Turno:", turnos_ops, index=idx_tur, key=f"tur_{row['id']}")
-                                    
-                                    est_ops = ESTADOS_POSIBLES.copy()
-                                    if row['Estado'] not in est_ops: est_ops.append(row['Estado'])
-                                    idx_est = est_ops.index(row['Estado'])
-                                    nuevo_estado = c_m6.selectbox("Estado:", est_ops, index=idx_est, key=f"est_{row['id']}")
-                                    
-                                    nueva_nota = st.text_input("Nota:", value=row.get('Nota', ''), key=f"not_{row['id']}")
-                                    
-                                    c_btn1, c_btn2 = st.columns(2)
-                                    if c_btn1.button("GUARDAR CAMBIOS", key=f"btn_upd_{row['id']}"):
-                                        try:
-                                            supabase.table("asistencia").update({
-                                                "fecha": nueva_fecha.strftime("%Y-%m-%d"),
-                                                "hora": nueva_hora.strftime("%I:%M:%S %p"),
-                                                "tipo": nuevo_tipo,
-                                                "sucursal": nueva_sucursal,
-                                                "turno": nuevo_turno,
-                                                "estado": nuevo_estado,
-                                                "nota": nueva_nota
-                                            }).eq("id", int(row['id'])).execute()
-                                            st.success("Fichaje actualizado.")
-                                            recargar_app()
-                                        except Exception as e: show_db_error(e, "actualizando fichaje")
-                                    if c_btn2.button("ELIMINAR FICHAJE", key=f"btn_del_{row['id']}"):
-                                        try:
-                                            supabase.table("asistencia").delete().eq("id", int(row['id'])).execute()
-                                            st.success("Fichaje eliminado.")
-                                            recargar_app()
-                                        except Exception as e: show_db_error(e, "eliminando fichaje")
-                    else:
-                        st.info("Sin registros para esta fecha y empleado.")
-                        
-            st.markdown("---")
-            st.subheader("PLANILLA SEMANAL (ROSTER)")
-            today_date = ahora.date()
-            
-            inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
-            dia_inicio_actual = today_date - datetime.timedelta(days=(today_date.weekday() - inicio_semana_int) % 7)
-            
-            c_plan1, c_plan2 = st.columns([1,3])
-            semana_sel = c_plan1.selectbox("SELECCIONAR SEMANA:", ["Esta Semana", "Semana Próxima", "Semana Anterior", "Elegir Fecha"], key="sel_sem_rost")
-            
-            if semana_sel == "Esta Semana": start_date_plan = dia_inicio_actual
-            elif semana_sel == "Semana Próxima": start_date_plan = dia_inicio_actual + datetime.timedelta(days=7)
-            elif semana_sel == "Semana Anterior": start_date_plan = dia_inicio_actual - datetime.timedelta(days=7)
-            else:
-                start_date_plan = c_plan2.date_input("Elegir Inicio de semana:", value=dia_inicio_actual, key="fec_sem_rost")
-                
-            if (start_date_plan.weekday() - inicio_semana_int) % 7 != 0: 
-                start_date_plan = start_date_plan - datetime.timedelta(days=(start_date_plan.weekday() - inicio_semana_int) % 7)
-                
-            fechas_semana = [start_date_plan + datetime.timedelta(days=i) for i in range(7)]
-            nombres_dias_todos = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-            nombres_dias = nombres_dias_todos[inicio_semana_int:] + nombres_dias_todos[:inicio_semana_int]
-            cols_fechas = [f"{nombres_dias[i]} {fechas_semana[i].strftime('%d/%m')}" for i in range(7)]
-            str_fechas = [f.strftime("%Y-%m-%d") for f in fechas_semana]
-            
-            nuevos_datos_plan = {}
-            opciones_emps = ["Nadie"] + sorted(lista_empleados)
-            
-            for loc in lista_locales.keys():
-                with st.expander(f"SUCURSAL: {loc}", expanded=False):
-                    for turno, datos_turno in lista_turnos.items():
-                        st.markdown(f"**{turno.upper()}** ({datos_turno.get('ingreso')} - {datos_turno.get('salida')})")
-                        data_t = []
-                        for i in range(3):
-                            row_t = {"Cupo": f"CUPO {i+1}"}
-                            for j, f_str in enumerate(str_fechas):
-                                try:
-                                    emps_asignados = planificacion_turnos.get(f_str, {}).get(loc, {}).get(turno, [])
-                                    emp_name = emps_asignados[i] if i < len(emps_asignados) else "Nadie"
-                                except: emp_name = "Nadie"
-                                row_t[cols_fechas[j]] = emp_name
-                            data_t.append(row_t)
-                            
-                        df_plan_t = pd.DataFrame(data_t)
-                        config_cols_t = {"Cupo": st.column_config.TextColumn("Cupo", disabled=True)}
-                        for c in cols_fechas: config_cols_t[c] = st.column_config.SelectboxColumn(c, options=opciones_emps, default="Nadie")
-                        df_editado_t = st.data_editor(df_plan_t, column_config=config_cols_t, hide_index=True, use_container_width=True, key=f"ed_{loc}_{turno}", num_rows="dynamic")
-                        nuevos_datos_plan[(loc, turno)] = df_editado_t
-                        st.markdown("<br>", unsafe_allow_html=True)
-            
-            if st.button("GUARDAR PLANIFICACIÓN", use_container_width=True, key="btn_save_rost"):
-                errores_duplicados = []
-                for f_str in str_fechas:
-                    for turno in lista_turnos.keys():
-                        control_empleados = {}
-                        for loc in lista_locales.keys():
-                            df_e = nuevos_datos_plan[(loc, turno)]
-                            day_col = cols_fechas[str_fechas.index(f_str)]
-                            emps = df_e[day_col].dropna().tolist()
-                            emps = [e for e in emps if e != "Nadie" and str(e).strip() != ""]
-                            
-                            for e in emps:
-                                if e in control_empleados:
-                                    errores_duplicados.append(f"⚠️ <b>{e}</b> fue asignado a <b>{control_empleados[e]}</b> y a <b>{loc}</b> simultáneamente. (Día: {day_col}, Turno: {turno}).")
-                                else:
-                                    control_empleados[e] = loc
-
-                if errores_duplicados:
-                    st.markdown("""
-                    <div class='conflict-box'>
-                        <div class='conflict-title'>🛑 CONFLICTO DETECTADO</div>
-                        """ + "".join([f"<div class='conflict-item'>{err}</div>" for err in errores_duplicados]) + """
-                    </div>
-                    """, unsafe_allow_html=True)
+            if st.form_submit_button("GUARDAR FICHAJE"):
+                if "Seleccionar..." in [add_emp, add_suc, add_turno]:
+                    st.warning("Seleccione Empleado, Sucursal y Turno.")
                 else:
-                    try:
-                        inserts = []
-                        for f_str in str_fechas:
-                            supabase.table("planificacion_turnos").delete().eq("fecha", f_str).execute()
-                            for loc in lista_locales.keys():
-                                for turno in lista_turnos.keys():
-                                    df_e = nuevos_datos_plan[(loc, turno)]
-                                    day_col = cols_fechas[str_fechas.index(f_str)]
-                                    emps = df_e[day_col].dropna().tolist()
-                                    emps = list(dict.fromkeys([e for e in emps if e != "Nadie" and str(e).strip() != ""]))
-                                    for e in emps:
-                                        inserts.append({"fecha": f_str, "sucursal": loc, "turno": turno, "empleado": e})
-                        if inserts:
-                            supabase.table("planificacion_turnos").insert(inserts).execute()
-                        st.success("Planificación semanal validada y guardada con éxito.")
-                        recargar_app()
-                    except Exception as e: show_db_error(e, "guardando planificación")
-                
-            st.markdown("---")
-            st.subheader("MATRIZ DE DESVIACIONES (PLAN VS. REAL)")
-            
-            c_comp1, c_comp2 = st.columns(2)
-            filtro_suc_comp = c_comp1.selectbox("FILTRAR POR SUCURSAL:", ["Todas las sucursales"] + list(lista_locales.keys()), key="filtro_suc_comp")
-            filtro_tur_comp = c_comp2.selectbox("FILTRAR POR TURNO:", ["Todos los turnos"] + list(lista_turnos.keys()), key="filtro_tur_comp")
-
-            df_asist_comp = load_df("asistencia")
-            if not df_asist_comp.empty:
-                df_asist_comp = df_asist_comp.reset_index(drop=True)
-
-            html_content = "<div class='roster-wrapper'>"
-            hay_datos_para_mostrar = False
-
-            for emp in sorted(lista_empleados):
-                dias_html = ""
-                emp_tiene_turnos_visibles = False
-                
-                for j, f_str in enumerate(str_fechas):
-                    f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
-                    es_futuro = f_date > today_date
-                    es_hoy = f_date == today_date
+                    str_hora = add_hora.strftime("%I:%M:%S %p")
+                    str_fecha = add_fecha.strftime("%Y-%m-%d")
+                    dt_fichaje = datetime.datetime.combine(add_fecha, add_hora)
                     
-                    planificados = []
-                    for loc, turnos_dict in planificacion_turnos.get(f_str, {}).items():
-                        for t_name, emps in turnos_dict.items():
-                            if emp in emps:
-                                planificados.append({"turno": t_name, "sucursal": loc})
-                    
-                    reales_hoy = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str)] if not df_asist_comp.empty else pd.DataFrame()
-                    reales_entradas = reales_hoy[reales_hoy["Tipo"] == "Entrada"] if not reales_hoy.empty else pd.DataFrame()
-                    reales_ausencias = reales_hoy[reales_hoy["Tipo"] == "Ausente"] if not reales_hoy.empty else pd.DataFrame()
-
-                    celdas_html = ""
-                    turnos_procesados = set()
-
-                    for plan in planificados:
-                        p_tur = plan["turno"]
-                        p_loc = plan["sucursal"]
-                        turnos_procesados.add(p_tur)
-                        
-                        if filtro_suc_comp != "Todas las sucursales" and p_loc != filtro_suc_comp: continue
-                        if filtro_tur_comp != "Todos los turnos" and p_tur != filtro_tur_comp: continue
-                        
-                        emp_tiene_turnos_visibles = True
-                        
-                        if es_futuro:
-                            celdas_html += f"<div class='roster-cell c-pend'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>PENDIENTE</div></div>"
-                        else:
-                            asist = reales_entradas[reales_entradas["Turno"] == p_tur] if not reales_entradas.empty else pd.DataFrame()
-                            ausencia = reales_ausencias[reales_ausencias["Turno"] == p_tur] if not reales_ausencias.empty else pd.DataFrame()
-                            
-                            if not asist.empty:
-                                estado_real = asist.iloc[-1]["Estado"]
-                                suc_real = asist.iloc[-1]["Sucursal"]
-                                if isinstance(estado_real, pd.Series): estado_real = estado_real.iloc[0]
-                                if isinstance(suc_real, pd.Series): suc_real = suc_real.iloc[0]
+                    estado_final = add_estado
+                    if add_estado == "Automático (Calculado)":
+                        if add_turno in lista_turnos:
+                            try:
+                                t_ing_obj = datetime.datetime.strptime(lista_turnos[add_turno]["ingreso"], "%I:%M %p").time()
+                                t_sal_obj = datetime.datetime.strptime(lista_turnos[add_turno]["salida"], "%I:%M %p").time()
                                 
-                                if suc_real != p_loc:
-                                    celdas_html += f"<div class='roster-cell c-cambio'><div class='sub-txt'>Plan: {p_loc} ({p_tur})</div><div class='main-txt'>🔄 Fichó en: {suc_real}</div></div>"
-                                else:
-                                    if estado_real == "A tiempo":
-                                        celdas_html += f"<div class='roster-cell c-ok'><div class='main-txt'>✓ Cumplido</div></div>"
-                                    elif estado_real == "Tarde":
-                                        celdas_html += f"<div class='roster-cell c-tarde'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>⚠️ TARDE</div></div>"
+                                dt_ing_ofi = datetime.datetime.combine(add_fecha, t_ing_obj)
+                                dt_sal_ofi = datetime.datetime.combine(add_fecha, t_sal_obj)
+                                
+                                if dt_sal_ofi < dt_ing_ofi:
+                                    if add_tipo == "Salida" and add_hora < datetime.time(12, 0): 
+                                        dt_ing_ofi -= datetime.timedelta(days=1)
                                     else:
-                                        celdas_html += f"<div class='roster-cell c-ok'><div class='main-txt'>✓ Cumplido</div></div>"
-                            elif not ausencia.empty:
-                                celdas_html += f"<div class='roster-cell c-falta'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>❌ AUSENTE REP.</div></div>"
-                            else:
-                                if es_hoy:
-                                    celdas_html += f"<div class='roster-cell c-pend'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>EN ESPERA</div></div>"
-                                else:
-                                    celdas_html += f"<div class='roster-cell c-falta'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>❌ NO FICHÓ</div></div>"
+                                        dt_sal_ofi += datetime.timedelta(days=1)
 
-                    if not es_futuro and not reales_entradas.empty:
-                        for idx, row in reales_entradas.iterrows():
-                            r_tur = row["Turno"]
-                            if isinstance(r_tur, pd.Series): r_tur = r_tur.iloc[0]
-                            if r_tur not in turnos_procesados and r_tur != "Manual" and str(r_tur) != "nan":
-                                r_suc = row["Sucursal"]
-                                if isinstance(r_suc, pd.Series): r_suc = r_suc.iloc[0]
+                                if add_tipo == "Entrada":
+                                    tolerancia = int(config_app.get("tolerancia_minutos", 10))
+                                    limite_tarde = dt_ing_ofi + datetime.timedelta(minutes=tolerancia)
+                                    estado_final = "Tarde" if dt_fichaje > limite_tarde else "A tiempo"
                                 
-                                if filtro_suc_comp != "Todas las sucursales" and r_suc != filtro_suc_comp: continue
-                                if filtro_tur_comp != "Todos los turnos" and r_tur != filtro_tur_comp: continue
-                                
-                                emp_tiene_turnos_visibles = True
-                                celdas_html += f"<div class='roster-cell c-extra'><div class='sub-txt'>🔵 TURNO EXTRA</div><div class='main-txt'>En: {r_suc} - {r_tur}</div></div>"
-
-                    if not celdas_html:
-                        if filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos":
-                            celdas_html = "<div class='roster-cell c-libre'><div class='main-txt'>Libre</div></div>"
+                                elif add_tipo == "Salida":
+                                    estado_final = "Retiro Temprano" if dt_fichaje < dt_sal_ofi else "Salida"
+                                    
+                            except Exception as e:
+                                estado_final = "A tiempo" if add_tipo == "Entrada" else "Salida"
                         else:
-                            celdas_html = "<div class='roster-cell c-libre'><div class='main-txt'>-</div></div>"
-
-                    dias_html += f"<div style='display:flex; flex-direction:column; flex:1; border-right: 1px solid #1A1A1A;'><div style='font-size:0.7rem; color:#737373; text-align:center; padding:5px 0; border-bottom:1px solid #1A1A1A; font-weight: 600; letter-spacing: 1px;'>{cols_fechas[j]}</div><div style='display:flex; flex-direction:column; height:100%;'>{celdas_html}</div></div>"
-
-                if emp_tiene_turnos_visibles or (filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos"):
-                    hay_datos_para_mostrar = True
-                    html_content += f"""
-                    <div class='roster-row'>
-                        <div class='roster-emp'>{emp}</div>
-                        <div class='roster-days'>{dias_html}</div>
-                    </div>
-                    """
-                    
-            html_content += "</div>"
-
-            if hay_datos_para_mostrar:
-                st.markdown(html_content, unsafe_allow_html=True)
-            else:
-                st.info("No hay planificaciones que coincidan con los filtros seleccionados.")
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            df_export_roster = pd.DataFrame([{"Info": "Para ver la data cruda, descárguela desde la sección Analytics."}])
-            st.markdown(generate_html_download(df_export_roster, f"Comparativa_Horarios_Resumen.csv", "DESCARGAR DATA PLANA (CSV)"), unsafe_allow_html=True)
-
-        with tab_puntos:
-            st.markdown('<div class="main-title" style="font-size: 2rem;">RANKING CORPORATIVO</div>', unsafe_allow_html=True)
-            c_fil1, c_fil2 = st.columns([1,3])
-            filtro_p = c_fil1.selectbox("FILTRAR RANKING:", ["Período Activo (Desde Reseteo)", "Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_p_gr")
-            rango_punt = c_fil2.date_input("FECHAS:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date()), key="rango_p_gr") if filtro_p == "Personalizado" else None
-            
-            if filtro_p == "Período Activo (Desde Reseteo)":
-                f_ini_pts = config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d"))
-                p_in, p_fi = datetime.datetime.strptime(f_ini_pts, "%Y-%m-%d").date(), ahora.date()
-            else: p_in, p_fi = get_fechas_filtro(filtro_p, rango_punt)
-            
-            df_p, df_t = load_df("asistencia"), load_df("tareas_log")
-            if not df_p.empty:
-                df_p['F_Obj'] = pd.to_datetime(df_p['Fecha'], errors='coerce').dt.date
-                df_p = df_p[(df_p['F_Obj'] >= p_in) & (df_p['F_Obj'] <= p_fi)]
-            if not df_t.empty:
-                df_t['F_Obj'] = pd.to_datetime(df_t['Fecha'], errors='coerce').dt.date
-                df_t = df_t[(df_t['F_Obj'] >= p_in) & (df_t['F_Obj'] <= p_fi)]
-                
-            reg = config_app.get("reglas_puntos", {})
-            ajustes_per = [p for p in lista_puntos if p_in <= datetime.datetime.strptime(p.get('Fecha', p.get('fecha')), "%Y-%m-%d").date() <= p_fi]
-            ranking_data = []
-            
-            for emp in lista_empleados:
-                e_aj = sum([int(p.get('Puntos', p.get('puntos', 0))) for p in ajustes_per if p.get('Empleado', p.get('empleado')) == emp and p.get('Estado', p.get('estado', 'Aprobada')) == 'Aprobada'])
-                e_tp = pd.to_numeric(df_t[(df_t["Empleado"] == emp) & (df_t["Estado"] == "Aprobada")]["Puntos"], errors='coerce').fillna(0).astype(int).sum() if not df_t.empty else 0
-                df_e = df_p[df_p["Empleado"] == emp] if not df_p.empty else pd.DataFrame()
-                e_ok = len(df_e[df_e["Estado"] == "A tiempo"]) if not df_e.empty else 0
-                e_tar = len(df_e[df_e["Estado"] == "Tarde"]) if not df_e.empty else 0
-                e_au = len(df_e[df_e["Tipo"] == "Ausente"]) if not df_e.empty else 0
-                puntaje = reg.get('base', 100) + (e_ok * reg.get('A tiempo', 0)) + (e_tar * reg.get('Tarde', -5)) + (e_au * reg.get('Ausente', -15)) + e_aj + e_tp
-                ranking_data.append({"Personal": emp, "Nivel": calcular_nivel(puntaje), "PUNTOS": puntaje, "Pts Tareas": e_tp, "Ajustes": e_aj, "Tardes": e_tar, "Faltas": e_au})
-                
-            st.dataframe(pd.DataFrame(ranking_data).sort_values(by="PUNTOS", ascending=False), use_container_width=True, hide_index=True)
-            st.markdown("---")
-            
-            st.subheader("AUDITORÍA DE PUNTUACIÓN")
-            if puntos_cajero_pendientes:
-                for pt in puntos_cajero_pendientes:
-                    if pt.get("Estado", pt.get("estado")) == "Pendiente de auditoría":
-                        pt_id = pt.get("id")
-                        pt_sug = pt.get("Puntos_Sugeridos", pt.get("puntos_sugeridos", 0))
-                        st.markdown(f"<div class='task-pend'><b>{pt.get('Emisor', pt.get('emisor'))}</b> sugiere {'sumar' if pt_sug > 0 else 'restar'} <b>{abs(pt_sug)} pts</b> a <b>{pt.get('Compañero', pt.get('compañero'))}</b><br>Motivo: <i>{pt.get('Motivo', pt.get('motivo'))}</i></div>", unsafe_allow_html=True)
+                            estado_final = "A tiempo" if add_tipo == "Entrada" else "Salida"
+                            
+                    exito = insert_row("asistencia", {
+                        "fecha": str_fecha,
+                        "hora": str_hora,
+                        "empleado": add_emp,
+                        "sucursal": add_suc,
+                        "turno": add_turno,
+                        "tipo": add_tipo,
+                        "estado": estado_final,
+                        "distancia_m": 0.0,
+                        "nota": f"[Carga Manual] {add_nota}".strip()
+                    })
+                    if exito:
+                        st.success(f"Fichaje guardado. (Estado: {estado_final})")
+                        recargar_app()
                         
-                        recompensa_cajero = st.number_input(f"Bono para el auditor '{pt.get('Emisor', pt.get('emisor'))}':", value=int(config_app.get("recompensa_auditoria_cajero", 10)), step=1, key=f"rec_cajero_{pt_id}")
+        st.markdown("---")
+        
+        st.markdown("### EDITAR FICHAJES EXISTENTES")
+        c_edh1, c_edh2 = st.columns(2)
+        emp_mod_horario = c_edh1.selectbox("Seleccionar Empleado:", ["Seleccionar..."] + sorted(lista_empleados), key="emp_mod_hor")
+        fecha_mod_horario = c_edh2.date_input("Fecha a buscar:", value=ahora.date(), key="f_mod_hor")
+        
+        if emp_mod_horario != "Seleccionar...":
+            df_asist_mod = load_df("asistencia")
+            if not df_asist_mod.empty:
+                df_asist_mod = df_asist_mod.reset_index(drop=True)
+                df_fil = df_asist_mod[(df_asist_mod["Empleado"] == emp_mod_horario) & (df_asist_mod["Fecha"] == str(fecha_mod_horario))].reset_index(drop=True)
+                if not df_fil.empty:
+                    turnos_del_dia = df_fil["Turno"].unique()
+                    for turno_str in turnos_del_dia:
+                        st.markdown(f"#### {turno_str}")
+                        df_t = df_fil[df_fil["Turno"] == turno_str].reset_index(drop=True)
                         
-                        c1, c2, c3 = st.columns([1,1,2])
-                        if c1.button("APROBAR", key=f"apr_caj_{pt_id}"):
-                            try:
-                                insert_row("ajustes_puntos", {
-                                    "fecha": pt.get("Fecha", pt.get("fecha")), 
-                                    "empleado": pt.get("Compañero", pt.get("compañero")), 
-                                    "puntos": pt_sug, 
-                                    "motivo": f"[{pt.get('Emisor', pt.get('emisor'))}] {pt.get('Motivo', pt.get('motivo'))}", 
-                                    "autor": "Gerencia", 
-                                    "estado": "Aprobada"
-                                })
+                        for idx, row in df_t.iterrows():
+                            with st.expander(f"{row['Tipo']} - {row['Sucursal']} ({row['Hora']})", expanded=False):
+                                c_m1, c_m2, c_m3 = st.columns(3)
                                 
-                                emisor_actual = pt.get("Emisor", pt.get("emisor"))
-                                rol_emisor = roles_empleados.get(emisor_actual, "")
-                                if recompensa_cajero > 0 and rol_emisor == "Cajero":
-                                    insert_row("ajustes_puntos", {
-                                        "fecha": fecha_hoy, 
-                                        "empleado": emisor_actual, 
-                                        "puntos": recompensa_cajero, 
-                                        "motivo": "Bono por auditoría de personal.", 
-                                        "autor": "Gerencia", 
-                                        "estado": "Aprobada"
-                                    })
+                                pd_t = pd.to_datetime(row['Hora'], errors='coerce')
+                                time_val = pd_t.time() if not pd.isna(pd_t) else ahora.time()
+                                pd_f = pd.to_datetime(row['Fecha'], errors='coerce')
+                                date_val = pd_f.date() if not pd.isna(pd_f) else ahora.date()
                                 
-                                supabase.table("puntos_cajero_pendientes").update({"estado": "Aprobado"}).eq("id", pt_id).execute()
-                                st.success("Procesado.")
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "aprobando sugerencia")
-                            
-                        if c2.button("DENEGAR", key=f"den_caj_{pt_id}"):
-                            try:
-                                supabase.table("puntos_cajero_pendientes").update({"estado": "Rechazado"}).eq("id", pt_id).execute()
-                                st.info("Descartado.")
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "denegando sugerencia")
-            else:
-                st.info("Sin auditorías pendientes.")
+                                nueva_fecha = c_m1.date_input("Fecha:", value=date_val, key=f"fec_{row['id']}")
+                                nueva_hora = c_m2.time_input("Hora:", value=time_val, key=f"time_{row['id']}")
+                                nuevo_tipo = c_m3.selectbox("Tipo:", ["Entrada", "Salida"], index=0 if row['Tipo']=="Entrada" else 1, key=f"tip_{row['id']}")
+                                
+                                c_m4, c_m5, c_m6 = st.columns(3)
+                                
+                                suc_ops = list(lista_locales.keys())
+                                if row['Sucursal'] not in suc_ops: suc_ops.append(row['Sucursal'])
+                                idx_suc = suc_ops.index(row['Sucursal'])
+                                nueva_sucursal = c_m4.selectbox("Sucursal:", suc_ops, index=idx_suc, key=f"suc_{row['id']}")
+                                
+                                turnos_ops = list(lista_turnos.keys()) + ["Manual", "N/A"]
+                                if row['Turno'] not in turnos_ops: turnos_ops.append(row['Turno'])
+                                idx_tur = turnos_ops.index(row['Turno'])
+                                nuevo_turno = c_m5.selectbox("Turno:", turnos_ops, index=idx_tur, key=f"tur_{row['id']}")
+                                
+                                est_ops = ESTADOS_POSIBLES.copy()
+                                if row['Estado'] not in est_ops: est_ops.append(row['Estado'])
+                                idx_est = est_ops.index(row['Estado'])
+                                nuevo_estado = c_m6.selectbox("Estado:", est_ops, index=idx_est, key=f"est_{row['id']}")
+                                
+                                nueva_nota = st.text_input("Nota:", value=row.get('Nota', ''), key=f"not_{row['id']}")
+                                
+                                c_btn1, c_btn2 = st.columns(2)
+                                if c_btn1.button("GUARDAR CAMBIOS", key=f"btn_upd_{row['id']}"):
+                                    try:
+                                        supabase.table("asistencia").update({
+                                            "fecha": nueva_fecha.strftime("%Y-%m-%d"),
+                                            "hora": nueva_hora.strftime("%I:%M:%S %p"),
+                                            "tipo": nuevo_tipo,
+                                            "sucursal": nueva_sucursal,
+                                            "turno": nuevo_turno,
+                                            "estado": nuevo_estado,
+                                            "nota": nueva_nota
+                                        }).eq("id", int(row['id'])).execute()
+                                        st.success("Fichaje actualizado.")
+                                        recargar_app()
+                                    except Exception as e: show_db_error(e, "actualizando fichaje")
+                                if c_btn2.button("ELIMINAR FICHAJE", key=f"btn_del_{row['id']}"):
+                                    try:
+                                        supabase.table("asistencia").delete().eq("id", int(row['id'])).execute()
+                                        st.success("Fichaje eliminado.")
+                                        recargar_app()
+                                    except Exception as e: show_db_error(e, "eliminando fichaje")
+                else:
+                    st.info("Sin registros para esta fecha y empleado.")
+                    
+        st.markdown("---")
+        st.subheader("PLANILLA SEMANAL (ROSTER)")
+        today_date = ahora.date()
+        
+        inicio_semana_int = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}.get(config_app.get("dia_inicio_semana", "Lunes"), 0)
+        dia_inicio_actual = today_date - datetime.timedelta(days=(today_date.weekday() - inicio_semana_int) % 7)
+        
+        c_plan1, c_plan2 = st.columns([1,3])
+        semana_sel = c_plan1.selectbox("SELECCIONAR SEMANA:", ["Esta Semana", "Semana Próxima", "Semana Anterior", "Elegir Fecha"], key="sel_sem_rost")
+        
+        if semana_sel == "Esta Semana": start_date_plan = dia_inicio_actual
+        elif semana_sel == "Semana Próxima": start_date_plan = dia_inicio_actual + datetime.timedelta(days=7)
+        elif semana_sel == "Semana Anterior": start_date_plan = dia_inicio_actual - datetime.timedelta(days=7)
+        else:
+            start_date_plan = c_plan2.date_input("Elegir Inicio de semana:", value=dia_inicio_actual, key="fec_sem_rost")
             
-            st.markdown("---")
-            st.subheader("APLICAR BONO O MULTA")
-            with st.form("form_bonos"):
-                c_b1, c_b2, c_b3, c_b4 = st.columns([2,1,1,2])
-                ap_emp = c_b1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados), key="ab_emp")
-                ap_fecha = c_b2.date_input("Fecha:", ahora.date(), key="ab_fec")
-                ap_puntos = c_b3.number_input("Puntos (+/-):", value=0, step=1, key="ab_pts")
-                ap_motivo = c_b4.text_input("Motivo:", key="ab_mot")
-                if st.form_submit_button("APLICAR AJUSTE"):
-                    if ap_emp == "Seleccionar...":
-                        st.warning("Datos incompletos.")
-                    else:
-                        exito = insert_row("ajustes_puntos", {"fecha": ap_fecha.strftime("%Y-%m-%d"), "empleado": ap_emp, "puntos": ap_puntos, "motivo": ap_motivo.strip(), "autor": "Gerencia", "estado": "Aprobada"})
-                        if exito:
-                            st.success("Ajuste aplicado.")
-                            recargar_app()
-
-        with tab_tareas:
-            st.subheader("SOLICITUDES DE RETIRO TEMPRANO")
-            if salidas_pendientes:
-                for sp in salidas_pendientes:
-                    sp_id = sp.get("id")
-                    emp_sp = sp.get('Empleado', sp.get('empleado'))
-                    hor_sp = sp.get('Hora', sp.get('hora'))
-                    aut_sp = sp.get('Autor', sp.get('autor'))
-                    not_sp = sp.get('Nota', sp.get('nota'))
-                    st.markdown(f"<div class='task-pend'><b>{emp_sp}</b> solicitó retiro: <b>{hor_sp}</b> (Auditor: {aut_sp})<br>Motivo: <i>{not_sp}</i></div>", unsafe_allow_html=True)
-                    c1, c2 = st.columns(2)
-                    if c1.button("APROBAR", key=f"apr_sal_{sp_id}"):
-                        try:
-                            insert_row("asistencia", {"fecha": sp.get("Fecha", sp.get("fecha")), "hora": hor_sp, "empleado": emp_sp, "sucursal": sp.get("Sucursal", sp.get("sucursal")), "turno": sp.get("Turno", sp.get("turno")), "tipo": "Salida", "estado": "Retiro Temprano", "nota": not_sp})
-                            supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "aprobando salida")
-                    if c2.button("DENEGAR", key=f"den_sal_{sp_id}"):
-                        try:
-                            supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "denegando salida")
-            else:
-                st.info("Sin solicitudes pendientes.")
-                
-            st.markdown("---")
-            st.subheader("CORRECCIONES DE INGRESO (OLVIDOS)")
-            if correcciones_pendientes:
-                for cp in correcciones_pendientes:
-                    cp_id = cp.get("id")
-                    emp_cp = cp.get('Empleado', cp.get('empleado'))
-                    fec_cp = cp.get('Fecha', cp.get('fecha'))
-                    hor_cp = cp.get('Hora_Real', cp.get('hora_real'))
-                    suc_cp = cp.get('Sucursal', cp.get('sucursal'))
-                    tur_cp = cp.get('Turno', cp.get('turno'))
-                    mot_cp = cp.get('Motivo', cp.get('motivo'))
-                    st.markdown(f"<div class='task-pend'><b>{emp_cp}</b> declaró ingreso: <b>{hor_cp}</b> el {fec_cp} en {suc_cp} ({tur_cp}).<br>Motivo: <i>{mot_cp}</i></div>", unsafe_allow_html=True)
-                    c1, c2 = st.columns(2)
-                    
-                    pts_penalidad = config_app.get("reglas_puntos", {}).get("Olvido Fichaje", -10)
-                    
-                    if c1.button(f"APROBAR E IMPUTAR ({pts_penalidad} PTS)", key=f"apr_olv_{cp_id}"):
-                        try:
-                            df_asist_olv = load_df("asistencia")
-                            if not df_asist_olv.empty:
-                                df_asist_olv = df_asist_olv.reset_index(drop=True)
-                            ya_existe = False
-                            id_modificar = None
-                            
-                            if not df_asist_olv.empty:
-                                filtro = df_asist_olv[(df_asist_olv["Empleado"] == emp_cp) & (df_asist_olv["Fecha"] == fec_cp) & (df_asist_olv["Tipo"] == "Entrada") & (df_asist_olv["Turno"] == tur_cp)].reset_index(drop=True)
-                                if not filtro.empty:
-                                    id_modificar = filtro.iloc[-1]["id"]
-                                    if isinstance(id_modificar, pd.Series):
-                                        id_modificar = id_modificar.iloc[0]
-                                    ya_existe = True
-                            
-                            estado_final = "A tiempo"
+        if (start_date_plan.weekday() - inicio_semana_int) % 7 != 0: 
+            start_date_plan = start_date_plan - datetime.timedelta(days=(start_date_plan.weekday() - inicio_semana_int) % 7)
+            
+        fechas_semana = [start_date_plan + datetime.timedelta(days=i) for i in range(7)]
+        nombres_dias_todos = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+        nombres_dias = nombres_dias_todos[inicio_semana_int:] + nombres_dias_todos[:inicio_semana_int]
+        cols_fechas = [f"{nombres_dias[i]} {fechas_semana[i].strftime('%d/%m')}" for i in range(7)]
+        str_fechas = [f.strftime("%Y-%m-%d") for f in fechas_semana]
+        
+        nuevos_datos_plan = {}
+        opciones_emps = ["Nadie"] + sorted(lista_empleados)
+        
+        for loc in lista_locales.keys():
+            with st.expander(f"SUCURSAL: {loc}", expanded=False):
+                for turno, datos_turno in lista_turnos.items():
+                    st.markdown(f"**{turno.upper()}** ({datos_turno.get('ingreso')} - {datos_turno.get('salida')})")
+                    data_t = []
+                    for i in range(3):
+                        row_t = {"Cupo": f"CUPO {i+1}"}
+                        for j, f_str in enumerate(str_fechas):
                             try:
-                                t_ing_obj = datetime.datetime.strptime(lista_turnos[tur_cp]["ingreso"], "%I:%M %p").time()
-                                dt_ing_ofi = datetime.datetime.combine(datetime.datetime.strptime(fec_cp, "%Y-%m-%d").date(), t_ing_obj)
-                                dt_fichaje_real = datetime.datetime.combine(datetime.datetime.strptime(fec_cp, "%Y-%m-%d").date(), datetime.datetime.strptime(hor_cp, "%I:%M:%S %p").time())
-                                
-                                tolerancia = int(config_app.get("tolerancia_minutos", 10))
-                                if dt_fichaje_real > (dt_ing_ofi + datetime.timedelta(minutes=tolerancia)):
-                                    estado_final = "Tarde"
-                            except: pass
-                            
-                            nota_final = f"[Corregido por Gerencia] {mot_cp}"
-                            
-                            if ya_existe:
-                                supabase.table("asistencia").update({
-                                    "hora": hor_cp,
-                                    "estado": estado_final,
-                                    "nota": nota_final
-                                }).eq("id", int(id_modificar)).execute()
+                                emps_asignados = planificacion_turnos.get(f_str, {}).get(loc, {}).get(turno, [])
+                                emp_name = emps_asignados[i] if i < len(emps_asignados) else "Nadie"
+                            except: emp_name = "Nadie"
+                            row_t[cols_fechas[j]] = emp_name
+                        data_t.append(row_t)
+                        
+                    df_plan_t = pd.DataFrame(data_t)
+                    config_cols_t = {"Cupo": st.column_config.TextColumn("Cupo", disabled=True)}
+                    for c in cols_fechas: config_cols_t[c] = st.column_config.SelectboxColumn(c, options=opciones_emps, default="Nadie")
+                    df_editado_t = st.data_editor(df_plan_t, column_config=config_cols_t, hide_index=True, use_container_width=True, key=f"ed_{loc}_{turno}", num_rows="dynamic")
+                    nuevos_datos_plan[(loc, turno)] = df_editado_t
+                    st.markdown("<br>", unsafe_allow_html=True)
+        
+        if st.button("GUARDAR PLANIFICACIÓN", use_container_width=True, key="btn_save_rost"):
+            errores_duplicados = []
+            for f_str in str_fechas:
+                for turno in lista_turnos.keys():
+                    control_empleados = {}
+                    for loc in lista_locales.keys():
+                        df_e = nuevos_datos_plan[(loc, turno)]
+                        day_col = cols_fechas[str_fechas.index(f_str)]
+                        emps = df_e[day_col].dropna().tolist()
+                        emps = [e for e in emps if e != "Nadie" and str(e).strip() != ""]
+                        
+                        for e in emps:
+                            if e in control_empleados:
+                                errores_duplicados.append(f"⚠️ <b>{e}</b> fue asignado a <b>{control_empleados[e]}</b> y a <b>{loc}</b> simultáneamente. (Día: {day_col}, Turno: {turno}).")
                             else:
-                                insert_row("asistencia", {
-                                    "fecha": fec_cp,
-                                    "hora": hor_cp,
-                                    "empleado": emp_cp,
-                                    "sucursal": suc_cp,
-                                    "turno": tur_cp,
-                                    "tipo": "Entrada",
-                                    "estado": estado_final,
-                                    "distancia_m": 0.0,
-                                    "nota": nota_final
-                                })
+                                control_empleados[e] = loc
+
+            if errores_duplicados:
+                st.markdown("""
+                <div class='conflict-box'>
+                    <div class='conflict-title'>🛑 CONFLICTO DETECTADO</div>
+                    """ + "".join([f"<div class='conflict-item'>{err}</div>" for err in errores_duplicados]) + """
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                try:
+                    inserts = []
+                    for f_str in str_fechas:
+                        supabase.table("planificacion_turnos").delete().eq("fecha", f_str).execute()
+                        for loc in lista_locales.keys():
+                            for turno in lista_turnos.keys():
+                                df_e = nuevos_datos_plan[(loc, turno)]
+                                day_col = cols_fechas[str_fechas.index(f_str)]
+                                emps = df_e[day_col].dropna().tolist()
+                                emps = list(dict.fromkeys([e for e in emps if e != "Nadie" and str(e).strip() != ""]))
+                                for e in emps:
+                                    inserts.append({"fecha": f_str, "sucursal": loc, "turno": turno, "empleado": e})
+                    if inserts:
+                        supabase.table("planificacion_turnos").insert(inserts).execute()
+                    st.success("Planificación semanal validada y guardada con éxito.")
+                    recargar_app()
+                except Exception as e: show_db_error(e, "guardando planificación")
+            
+        st.markdown("---")
+        st.subheader("MATRIZ DE DESVIACIONES (PLAN VS. REAL)")
+        
+        c_comp1, c_comp2 = st.columns(2)
+        filtro_suc_comp = c_comp1.selectbox("FILTRAR POR SUCURSAL:", ["Todas las sucursales"] + list(lista_locales.keys()), key="filtro_suc_comp")
+        filtro_tur_comp = c_comp2.selectbox("FILTRAR POR TURNO:", ["Todos los turnos"] + list(lista_turnos.keys()), key="filtro_tur_comp")
+
+        df_asist_comp = load_df("asistencia")
+        if not df_asist_comp.empty:
+            df_asist_comp = df_asist_comp.reset_index(drop=True)
+
+        html_content = "<div class='roster-wrapper'>"
+        hay_datos_para_mostrar = False
+
+        for emp in sorted(lista_empleados):
+            dias_html = ""
+            emp_tiene_turnos_visibles = False
+            
+            for j, f_str in enumerate(str_fechas):
+                f_date = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
+                es_futuro = f_date > today_date
+                es_hoy = f_date == today_date
+                
+                planificados = []
+                for loc, turnos_dict in planificacion_turnos.get(f_str, {}).items():
+                    for t_name, emps in turnos_dict.items():
+                        if emp in emps:
+                            planificados.append({"turno": t_name, "sucursal": loc})
+                
+                reales_hoy = df_asist_comp[(df_asist_comp["Empleado"] == emp) & (df_asist_comp["Fecha"] == f_str)] if not df_asist_comp.empty else pd.DataFrame()
+                reales_entradas = reales_hoy[reales_hoy["Tipo"] == "Entrada"] if not reales_hoy.empty else pd.DataFrame()
+                reales_ausencias = reales_hoy[reales_hoy["Tipo"] == "Ausente"] if not reales_hoy.empty else pd.DataFrame()
+
+                celdas_html = ""
+                turnos_procesados = set()
+
+                for plan in planificados:
+                    p_tur = plan["turno"]
+                    p_loc = plan["sucursal"]
+                    turnos_procesados.add(p_tur)
+                    
+                    if filtro_suc_comp != "Todas las sucursales" and p_loc != filtro_suc_comp: continue
+                    if filtro_tur_comp != "Todos los turnos" and p_tur != filtro_tur_comp: continue
+                    
+                    emp_tiene_turnos_visibles = True
+                    
+                    if es_futuro:
+                        celdas_html += f"<div class='roster-cell c-pend'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>PENDIENTE</div></div>"
+                    else:
+                        asist = reales_entradas[reales_entradas["Turno"] == p_tur] if not reales_entradas.empty else pd.DataFrame()
+                        ausencia = reales_ausencias[reales_ausencias["Turno"] == p_tur] if not reales_ausencias.empty else pd.DataFrame()
+                        
+                        if not asist.empty:
+                            estado_real = asist.iloc[-1]["Estado"]
+                            suc_real = asist.iloc[-1]["Sucursal"]
+                            if isinstance(estado_real, pd.Series): estado_real = estado_real.iloc[0]
+                            if isinstance(suc_real, pd.Series): suc_real = suc_real.iloc[0]
                             
+                            if suc_real != p_loc:
+                                celdas_html += f"<div class='roster-cell c-cambio'><div class='sub-txt'>Plan: {p_loc} ({p_tur})</div><div class='main-txt'>🔄 Fichó en: {suc_real}</div></div>"
+                            else:
+                                if estado_real == "A tiempo":
+                                    celdas_html += f"<div class='roster-cell c-ok'><div class='main-txt'>✓ Cumplido</div></div>"
+                                elif estado_real == "Tarde":
+                                    celdas_html += f"<div class='roster-cell c-tarde'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>⚠️ TARDE</div></div>"
+                                else:
+                                    celdas_html += f"<div class='roster-cell c-ok'><div class='main-txt'>✓ Cumplido</div></div>"
+                        elif not ausencia.empty:
+                            celdas_html += f"<div class='roster-cell c-falta'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>❌ AUSENTE REP.</div></div>"
+                        else:
+                            if es_hoy:
+                                celdas_html += f"<div class='roster-cell c-pend'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>EN ESPERA</div></div>"
+                            else:
+                                celdas_html += f"<div class='roster-cell c-falta'><div class='sub-txt'>Plan: {p_loc} - {p_tur}</div><div class='main-txt'>❌ NO FICHÓ</div></div>"
+
+                if not es_futuro and not reales_entradas.empty:
+                    for idx, row in reales_entradas.iterrows():
+                        r_tur = row["Turno"]
+                        if isinstance(r_tur, pd.Series): r_tur = r_tur.iloc[0]
+                        if r_tur not in turnos_procesados and r_tur != "Manual" and str(r_tur) != "nan":
+                            r_suc = row["Sucursal"]
+                            if isinstance(r_suc, pd.Series): r_suc = r_suc.iloc[0]
+                            
+                            if filtro_suc_comp != "Todas las sucursales" and r_suc != filtro_suc_comp: continue
+                            if filtro_tur_comp != "Todos los turnos" and r_tur != filtro_tur_comp: continue
+                            
+                            emp_tiene_turnos_visibles = True
+                            celdas_html += f"<div class='roster-cell c-extra'><div class='sub-txt'>🔵 TURNO EXTRA</div><div class='main-txt'>En: {r_suc} - {r_tur}</div></div>"
+
+                if not celdas_html:
+                    if filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos":
+                        celdas_html = "<div class='roster-cell c-libre'><div class='main-txt'>Libre</div></div>"
+                    else:
+                        celdas_html = "<div class='roster-cell c-libre'><div class='main-txt'>-</div></div>"
+
+                dias_html += f"<div style='display:flex; flex-direction:column; flex:1; border-right: 1px solid #1A1A1A;'><div style='font-size:0.7rem; color:#737373; text-align:center; padding:5px 0; border-bottom:1px solid #1A1A1A; font-weight: 600; letter-spacing: 1px;'>{cols_fechas[j]}</div><div style='display:flex; flex-direction:column; height:100%;'>{celdas_html}</div></div>"
+
+            if emp_tiene_turnos_visibles or (filtro_suc_comp == "Todas las sucursales" and filtro_tur_comp == "Todos los turnos"):
+                hay_datos_para_mostrar = True
+                html_content += f"""
+                <div class='roster-row'>
+                    <div class='roster-emp'>{emp}</div>
+                    <div class='roster-days'>{dias_html}</div>
+                </div>
+                """
+                
+        html_content += "</div>"
+
+        if hay_datos_para_mostrar:
+            st.markdown(html_content, unsafe_allow_html=True)
+        else:
+            st.info("No hay planificaciones que coincidan con los filtros seleccionados.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        df_export_roster = pd.DataFrame([{"Info": "Para ver la data cruda, descárguela desde la sección Analytics."}])
+        st.markdown(generate_html_download(df_export_roster, f"Comparativa_Horarios_Resumen.csv", "DESCARGAR DATA PLANA (CSV)"), unsafe_allow_html=True)
+
+    with tab_puntos:
+        st.markdown('<div class="main-title" style="font-size: 2rem;">RANKING CORPORATIVO</div>', unsafe_allow_html=True)
+        c_fil1, c_fil2 = st.columns([1,3])
+        filtro_p = c_fil1.selectbox("FILTRAR RANKING:", ["Período Activo (Desde Reseteo)", "Este Mes", "Mes Anterior", "Esta Semana", "Hoy", "Todo el Historial", "Personalizado"], key="filtro_p_gr")
+        rango_punt = c_fil2.date_input("FECHAS:", value=(ahora.date() - datetime.timedelta(days=7), ahora.date()), key="rango_p_gr") if filtro_p == "Personalizado" else None
+        
+        if filtro_p == "Período Activo (Desde Reseteo)":
+            f_ini_pts = config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d"))
+            p_in, p_fi = datetime.datetime.strptime(f_ini_pts, "%Y-%m-%d").date(), ahora.date()
+        else: p_in, p_fi = get_fechas_filtro(filtro_p, rango_punt)
+        
+        df_p, df_t = load_df("asistencia"), load_df("tareas_log")
+        if not df_p.empty:
+            df_p['F_Obj'] = pd.to_datetime(df_p['Fecha'], errors='coerce').dt.date
+            df_p = df_p[(df_p['F_Obj'] >= p_in) & (df_p['F_Obj'] <= p_fi)]
+        if not df_t.empty:
+            df_t['F_Obj'] = pd.to_datetime(df_t['Fecha'], errors='coerce').dt.date
+            df_t = df_t[(df_t['F_Obj'] >= p_in) & (df_t['F_Obj'] <= p_fi)]
+            
+        reg = config_app.get("reglas_puntos", {})
+        ajustes_per = [p for p in lista_puntos if p_in <= datetime.datetime.strptime(p.get('Fecha', p.get('fecha')), "%Y-%m-%d").date() <= p_fi]
+        ranking_data = []
+        
+        for emp in lista_empleados:
+            e_aj = sum([int(p.get('Puntos', p.get('puntos', 0))) for p in ajustes_per if p.get('Empleado', p.get('empleado')) == emp and p.get('Estado', p.get('estado', 'Aprobada')) == 'Aprobada'])
+            e_tp = pd.to_numeric(df_t[(df_t["Empleado"] == emp) & (df_t["Estado"] == "Aprobada")]["Puntos"], errors='coerce').fillna(0).astype(int).sum() if not df_t.empty else 0
+            df_e = df_p[df_p["Empleado"] == emp] if not df_p.empty else pd.DataFrame()
+            e_ok = len(df_e[df_e["Estado"] == "A tiempo"]) if not df_e.empty else 0
+            e_tar = len(df_e[df_e["Estado"] == "Tarde"]) if not df_e.empty else 0
+            e_au = len(df_e[df_e["Tipo"] == "Ausente"]) if not df_e.empty else 0
+            puntaje = reg.get('base', 100) + (e_ok * reg.get('A tiempo', 0)) + (e_tar * reg.get('Tarde', -5)) + (e_au * reg.get('Ausente', -15)) + e_aj + e_tp
+            ranking_data.append({"Personal": emp, "Nivel": calcular_nivel(puntaje), "PUNTOS": puntaje, "Pts Tareas": e_tp, "Ajustes": e_aj, "Tardes": e_tar, "Faltas": e_au})
+            
+        st.dataframe(pd.DataFrame(ranking_data).sort_values(by="PUNTOS", ascending=False), use_container_width=True, hide_index=True)
+        st.markdown("---")
+        
+        st.subheader("AUDITORÍA DE PUNTUACIÓN")
+        if puntos_cajero_pendientes:
+            for pt in puntos_cajero_pendientes:
+                if pt.get("Estado", pt.get("estado")) == "Pendiente de auditoría":
+                    pt_id = pt.get("id")
+                    pt_sug = pt.get("Puntos_Sugeridos", pt.get("puntos_sugeridos", 0))
+                    st.markdown(f"<div class='task-pend'><b>{pt.get('Emisor', pt.get('emisor'))}</b> sugiere {'sumar' if pt_sug > 0 else 'restar'} <b>{abs(pt_sug)} pts</b> a <b>{pt.get('Compañero', pt.get('compañero'))}</b><br>Motivo: <i>{pt.get('Motivo', pt.get('motivo'))}</i></div>", unsafe_allow_html=True)
+                    
+                    recompensa_cajero = st.number_input(f"Bono para el auditor '{pt.get('Emisor', pt.get('emisor'))}':", value=int(config_app.get("recompensa_auditoria_cajero", 10)), step=1, key=f"rec_cajero_{pt_id}")
+                    
+                    c1, c2, c3 = st.columns([1,1,2])
+                    if c1.button("APROBAR", key=f"apr_caj_{pt_id}"):
+                        try:
                             insert_row("ajustes_puntos", {
-                                "fecha": str(fecha_hoy),
-                                "empleado": emp_cp,
-                                "puntos": pts_penalidad,
-                                "motivo": "Penalidad automática: Omisión de registro operativo.",
-                                "autor": "Gerencia",
+                                "fecha": pt.get("Fecha", pt.get("fecha")), 
+                                "empleado": pt.get("Compañero", pt.get("compañero")), 
+                                "puntos": pt_sug, 
+                                "motivo": f"[{pt.get('Emisor', pt.get('emisor'))}] {pt.get('Motivo', pt.get('motivo'))}", 
+                                "autor": "Gerencia", 
                                 "estado": "Aprobada"
                             })
                             
-                            supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "corrigiendo ingreso")
-                        
-                    if c2.button("DENEGAR", key=f"den_olv_{cp_id}"):
-                        try:
-                            supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "denegando corrección")
-            else:
-                st.info("Sin correcciones pendientes.")
-
-            st.markdown("---")
-            st.subheader("TAREAS OPERATIVAS PENDIENTES")
-            df_tl_all = load_df("tareas_log")
-            if not df_tl_all.empty:
-                pend_tareas = df_tl_all[df_tl_all["Estado"] == "Pendiente"]
-                for idx, row in pend_tareas.iterrows():
-                    c_p1, c_p2, c_p3 = st.columns([4, 1, 1])
-                    c_p1.markdown(f"**{row['Empleado']}** reportó: '{row['Tarea']}' (+{row['Puntos']} pts)")
-                    if c_p2.button("APROBAR", key=f"apr_t_{row['id']}"):
-                        try:
-                            supabase.table("tareas_log").update({"estado": "Aprobada"}).eq("id", int(row['id'])).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "aprobando tarea")
-                    if c_p3.button("RECHAZAR", key=f"rec_t_{row['id']}"):
-                        try:
-                            supabase.table("tareas_log").update({"estado": "Rechazada"}).eq("id", int(row['id'])).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "rechazando tarea")
-                        
-            puntos_pendientes = [p for p in lista_puntos if p.get("Estado", p.get("estado")) == "Pendiente"]
-            if puntos_pendientes:
-                st.write("**EVALUACIONES PENDIENTES:**")
-                for p in lista_puntos:
-                    if p.get("Estado", p.get("estado")) == "Pendiente":
-                        p_id = p.get("id")
-                        c_pp1, c_pp2, c_pp3 = st.columns([4, 1, 1])
-                        c_pp1.markdown(f"**{p.get('Autor', p.get('autor'))}** sugiere **{p.get('Puntos', p.get('puntos'))} pts** a **{p.get('Empleado', p.get('empleado'))}** (Motivo: {p.get('Motivo', p.get('motivo'))})")
-                        if c_pp2.button("APROBAR", key=f"apr_p_{p_id}"):
-                            try:
-                                supabase.table("ajustes_puntos").update({"estado": "Aprobada"}).eq("id", p_id).execute()
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "aprobando puntos")
-                        if c_pp3.button("RECHAZAR", key=f"rec_p_{p_id}"):
-                            try:
-                                supabase.table("ajustes_puntos").update({"estado": "Rechazada"}).eq("id", p_id).execute()
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "rechazando puntos")
+                            emisor_actual = pt.get("Emisor", pt.get("emisor"))
+                            rol_emisor = roles_empleados.get(emisor_actual, "")
+                            if recompensa_cajero > 0 and rol_emisor == "Cajero":
+                                insert_row("ajustes_puntos", {
+                                    "fecha": fecha_hoy, 
+                                    "empleado": emisor_actual, 
+                                    "puntos": recompensa_cajero, 
+                                    "motivo": "Bono por auditoría de personal.", 
+                                    "autor": "Gerencia", 
+                                    "estado": "Aprobada"
+                                })
                             
-            st.subheader("BUZÓN DE REPORTES")
-            for r in reportes_log:
-                if r.get("Estado", r.get("estado")) == "Pendiente de lectura":
-                    r_id = r.get("id")
-                    st.markdown(f"<div class='report-box'><b>REPORTE RECIBIDO</b> | {r.get('Fecha', r.get('fecha'))} {r.get('Hora', r.get('hora'))}<br><b>Emisor:</b> {r.get('Emisor', r.get('emisor'))} | <b>Categoría:</b> {r.get('Tipo', r.get('tipo'))}<br><b>Detalle:</b> <i>'{r.get('Detalle', r.get('detalle'))}'</i></div>", unsafe_allow_html=True)
-                    if st.button("MARCAR COMO VISTO", key=f"visto_rep_{r_id}"):
-                        try:
-                            supabase.table("reportes").update({"estado": "Visto"}).eq("id", r_id).execute()
+                            supabase.table("puntos_cajero_pendientes").update({"estado": "Aprobado"}).eq("id", pt_id).execute()
+                            st.success("Procesado.")
                             recargar_app()
-                        except Exception as e: show_db_error(e, "marcando reporte")
+                        except Exception as e: show_db_error(e, "aprobando sugerencia")
+                        
+                    if c2.button("DENEGAR", key=f"den_caj_{pt_id}"):
+                        try:
+                            supabase.table("puntos_cajero_pendientes").update({"estado": "Rechazado"}).eq("id", pt_id).execute()
+                            st.info("Descartado.")
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "denegando sugerencia")
+        else:
+            st.info("Sin auditorías pendientes.")
+        
+        st.markdown("---")
+        st.subheader("APLICAR BONO O MULTA")
+        with st.form("form_bonos"):
+            c_b1, c_b2, c_b3, c_b4 = st.columns([2,1,1,2])
+            ap_emp = c_b1.selectbox("Personal:", ["Seleccionar..."] + sorted(lista_empleados), key="ab_emp")
+            ap_fecha = c_b2.date_input("Fecha:", ahora.date(), key="ab_fec")
+            ap_puntos = c_b3.number_input("Puntos (+/-):", value=0, step=1, key="ab_pts")
+            ap_motivo = c_b4.text_input("Motivo:", key="ab_mot")
+            if st.form_submit_button("APLICAR AJUSTE"):
+                if ap_emp == "Seleccionar...":
+                    st.warning("Datos incompletos.")
+                else:
+                    exito = insert_row("ajustes_puntos", {"fecha": ap_fecha.strftime("%Y-%m-%d"), "empleado": ap_emp, "puntos": ap_puntos, "motivo": ap_motivo.strip(), "autor": "Gerencia", "estado": "Aprobada"})
+                    if exito:
+                        st.success("Ajuste aplicado.")
+                        recargar_app()
 
-        with tab_perfil:
-            st.markdown('<div class="main-title" style="font-size: 2rem;">DOSSIER INDIVIDUAL 360°</div>', unsafe_allow_html=True)
-            col_pf1, col_pf2 = st.columns([1,3])
-            emp_perfil = col_pf1.selectbox("SELECCIONAR EMPLEADO:", ["Seleccionar..."] + sorted(lista_empleados), key="sel_perf_emp")
-            filtro_pf = col_pf2.selectbox("PERÍODO A EVALUAR:", ["Este Mes", "Mes Anterior", "Esta Semana", "Todo el Historial"], key="filtro_perf")
-            pf_in, pf_fi = get_fechas_filtro(filtro_pf)
+    with tab_tareas:
+        st.subheader("SOLICITUDES DE RETIRO TEMPRANO")
+        if salidas_pendientes:
+            for sp in salidas_pendientes:
+                sp_id = sp.get("id")
+                emp_sp = sp.get('Empleado', sp.get('empleado'))
+                hor_sp = sp.get('Hora', sp.get('hora'))
+                aut_sp = sp.get('Autor', sp.get('autor'))
+                not_sp = sp.get('Nota', sp.get('nota'))
+                st.markdown(f"<div class='task-pend'><b>{emp_sp}</b> solicitó retiro: <b>{hor_sp}</b> (Auditor: {aut_sp})<br>Motivo: <i>{not_sp}</i></div>", unsafe_allow_html=True)
+                c1, c2 = st.columns(2)
+                if c1.button("APROBAR", key=f"apr_sal_{sp_id}"):
+                    try:
+                        insert_row("asistencia", {"fecha": sp.get("Fecha", sp.get("fecha")), "hora": hor_sp, "empleado": emp_sp, "sucursal": sp.get("Sucursal", sp.get("sucursal")), "turno": sp.get("Turno", sp.get("turno")), "tipo": "Salida", "estado": "Retiro Temprano", "nota": not_sp})
+                        supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "aprobando salida")
+                if c2.button("DENEGAR", key=f"den_sal_{sp_id}"):
+                    try:
+                        supabase.table("salidas_pendientes").delete().eq("id", sp_id).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "denegando salida")
+        else:
+            st.info("Sin solicitudes pendientes.")
             
-            if emp_perfil != "Seleccionar...":
-                st.write(f"**ROL:** `{roles_empleados.get(emp_perfil, 'N/A')}` | **ESTADO:** {'Conectado' if emp_perfil in dispositivos_vinculados else 'Desconectado'}")
-                df_act_p, df_tar_p = load_df("asistencia"), load_df("tareas_log")
-                if not df_act_p.empty:
-                    df_act_p = df_act_p.reset_index(drop=True)
-                if not df_tar_p.empty:
-                    df_tar_p = df_tar_p.reset_index(drop=True)
-                if not df_act_p.empty:
-                    df_act_p['F_Obj'] = pd.to_datetime(df_act_p['Fecha'], errors='coerce').dt.date
-                    df_e_p = df_act_p[(df_act_p["Empleado"] == emp_perfil) & (df_act_p['F_Obj'] >= pf_in) & (df_act_p['F_Obj'] <= pf_fi)].copy().reset_index(drop=True)
-                    e_atiempo = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "A tiempo")])
-                    e_tardes = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "Tarde")])
-                    e_ausencias = len(df_e_p[df_e_p["Tipo"] == "Ausente"])
-                    
-                    df_e_p['Timestamp'] = pd.to_datetime(df_e_p['Fecha'].astype(str) + ' ' + df_e_p['Hora'].astype(str), errors='coerce')
-                    df_e_p = df_e_p.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
-                    
-                    entrada_actual = None
-                    horas_totales = 0.0
-                    
-                    def procesar_tramo_perfil(entrada_row, salida_row):
-                        h_in = entrada_row["Timestamp"]
-                        t_eval = str(entrada_row["Turno"]).strip()
-                        h_tramo = 0.0
-                        h_out_real = salida_row["Timestamp"] if salida_row is not None else None
+        st.markdown("---")
+        st.subheader("CORRECCIONES DE INGRESO (OLVIDOS)")
+        if correcciones_pendientes:
+            for cp in correcciones_pendientes:
+                cp_id = cp.get("id")
+                emp_cp = cp.get('Empleado', cp.get('empleado'))
+                fec_cp = cp.get('Fecha', cp.get('fecha'))
+                hor_cp = cp.get('Hora_Real', cp.get('hora_real'))
+                suc_cp = cp.get('Sucursal', cp.get('sucursal'))
+                tur_cp = cp.get('Turno', cp.get('turno'))
+                mot_cp = cp.get('Motivo', cp.get('motivo'))
+                st.markdown(f"<div class='task-pend'><b>{emp_cp}</b> declaró ingreso: <b>{hor_cp}</b> el {fec_cp} en {suc_cp} ({tur_cp}).<br>Motivo: <i>{mot_cp}</i></div>", unsafe_allow_html=True)
+                c1, c2 = st.columns(2)
+                
+                pts_penalidad = config_app.get("reglas_puntos", {}).get("Olvido Fichaje", -10)
+                
+                if c1.button(f"APROBAR E IMPUTAR ({pts_penalidad} PTS)", key=f"apr_olv_{cp_id}"):
+                    try:
+                        df_asist_olv = load_df("asistencia")
+                        if not df_asist_olv.empty:
+                            df_asist_olv = df_asist_olv.reset_index(drop=True)
+                        ya_existe = False
+                        id_modificar = None
                         
-                        if not h_out_real:
-                            if t_eval in lista_turnos:
-                                try:
-                                    t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
-                                    h_out_real = datetime.datetime.combine(h_in.date(), t_out_obj)
-                                    if h_out_real < h_in: h_out_real += datetime.timedelta(days=1)
-                                except: h_out_real = h_in
-                            else:
-                                h_out_real = h_in
+                        if not df_asist_olv.empty:
+                            filtro = df_asist_olv[(df_asist_olv["Empleado"] == emp_cp) & (df_asist_olv["Fecha"] == fec_cp) & (df_asist_olv["Tipo"] == "Entrada") & (df_asist_olv["Turno"] == tur_cp)].reset_index(drop=True)
+                            if not filtro.empty:
+                                id_modificar = filtro.iloc[-1]["id"]
+                                if isinstance(id_modificar, pd.Series):
+                                    id_modificar = id_modificar.iloc[0]
+                                ya_existe = True
                         
+                        estado_final = "A tiempo"
+                        try:
+                            t_ing_obj = datetime.datetime.strptime(lista_turnos[tur_cp]["ingreso"], "%I:%M %p").time()
+                            dt_ing_ofi = datetime.datetime.combine(datetime.datetime.strptime(fec_cp, "%Y-%m-%d").date(), t_ing_obj)
+                            dt_fichaje_real = datetime.datetime.combine(datetime.datetime.strptime(fec_cp, "%Y-%m-%d").date(), datetime.datetime.strptime(hor_cp, "%I:%M:%S %p").time())
+                            
+                            tolerancia = int(config_app.get("tolerancia_minutos", 10))
+                            if dt_fichaje_real > (dt_ing_ofi + datetime.timedelta(minutes=tolerancia)):
+                                estado_final = "Tarde"
+                        except: pass
+                        
+                        nota_final = f"[Corregido por Gerencia] {mot_cp}"
+                        
+                        if ya_existe:
+                            supabase.table("asistencia").update({
+                                "hora": hor_cp,
+                                "estado": estado_final,
+                                "nota": nota_final
+                            }).eq("id", int(id_modificar)).execute()
+                        else:
+                            insert_row("asistencia", {
+                                "fecha": fec_cp,
+                                "hora": hor_cp,
+                                "empleado": emp_cp,
+                                "sucursal": suc_cp,
+                                "turno": tur_cp,
+                                "tipo": "Entrada",
+                                "estado": estado_final,
+                                "distancia_m": 0.0,
+                                "nota": nota_final
+                            })
+                        
+                        insert_row("ajustes_puntos", {
+                            "fecha": str(fecha_hoy),
+                            "empleado": emp_cp,
+                            "puntos": pts_penalidad,
+                            "motivo": "Penalidad automática: Omisión de registro operativo.",
+                            "autor": "Gerencia",
+                            "estado": "Aprobada"
+                        })
+                        
+                        supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "corrigiendo ingreso")
+                    
+                if c2.button("DENEGAR", key=f"den_olv_{cp_id}"):
+                    try:
+                        supabase.table("correcciones_pendientes").delete().eq("id", cp_id).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "denegando corrección")
+        else:
+            st.info("Sin correcciones pendientes.")
+
+        st.markdown("---")
+        st.subheader("TAREAS OPERATIVAS PENDIENTES")
+        df_tl_all = load_df("tareas_log")
+        if not df_tl_all.empty:
+            pend_tareas = df_tl_all[df_tl_all["Estado"] == "Pendiente"]
+            for idx, row in pend_tareas.iterrows():
+                c_p1, c_p2, c_p3 = st.columns([4, 1, 1])
+                c_p1.markdown(f"**{row['Empleado']}** reportó: '{row['Tarea']}' (+{row['Puntos']} pts)")
+                if c_p2.button("APROBAR", key=f"apr_t_{row['id']}"):
+                    try:
+                        supabase.table("tareas_log").update({"estado": "Aprobada"}).eq("id", int(row['id'])).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "aprobando tarea")
+                if c_p3.button("RECHAZAR", key=f"rec_t_{row['id']}"):
+                    try:
+                        supabase.table("tareas_log").update({"estado": "Rechazada"}).eq("id", int(row['id'])).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "rechazando tarea")
+                    
+        puntos_pendientes = [p for p in lista_puntos if p.get("Estado", p.get("estado")) == "Pendiente"]
+        if puntos_pendientes:
+            st.write("**EVALUACIONES PENDIENTES:**")
+            for p in lista_puntos:
+                if p.get("Estado", p.get("estado")) == "Pendiente":
+                    p_id = p.get("id")
+                    c_pp1, c_pp2, c_pp3 = st.columns([4, 1, 1])
+                    c_pp1.markdown(f"**{p.get('Autor', p.get('autor'))}** sugiere **{p.get('Puntos', p.get('puntos'))} pts** a **{p.get('Empleado', p.get('empleado'))}** (Motivo: {p.get('Motivo', p.get('motivo'))})")
+                    if c_pp2.button("APROBAR", key=f"apr_p_{p_id}"):
+                        try:
+                            supabase.table("ajustes_puntos").update({"estado": "Aprobada"}).eq("id", p_id).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "aprobando puntos")
+                    if c_pp3.button("RECHAZAR", key=f"rec_p_{p_id}"):
+                        try:
+                            supabase.table("ajustes_puntos").update({"estado": "Rechazada"}).eq("id", p_id).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "rechazando puntos")
+                        
+        st.subheader("BUZÓN DE REPORTES")
+        for r in reportes_log:
+            if r.get("Estado", r.get("estado")) == "Pendiente de lectura":
+                r_id = r.get("id")
+                st.markdown(f"<div class='report-box'><b>REPORTE RECIBIDO</b> | {r.get('Fecha', r.get('fecha'))} {r.get('Hora', r.get('hora'))}<br><b>Emisor:</b> {r.get('Emisor', r.get('emisor'))} | <b>Categoría:</b> {r.get('Tipo', r.get('tipo'))}<br><b>Detalle:</b> <i>'{r.get('Detalle', r.get('detalle'))}'</i></div>", unsafe_allow_html=True)
+                if st.button("MARCAR COMO VISTO", key=f"visto_rep_{r_id}"):
+                    try:
+                        supabase.table("reportes").update({"estado": "Visto"}).eq("id", r_id).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "marcando reporte")
+
+    with tab_perfil:
+        st.markdown('<div class="main-title" style="font-size: 2rem;">DOSSIER INDIVIDUAL 360°</div>', unsafe_allow_html=True)
+        col_pf1, col_pf2 = st.columns([1,3])
+        emp_perfil = col_pf1.selectbox("SELECCIONAR EMPLEADO:", ["Seleccionar..."] + sorted(lista_empleados), key="sel_perf_emp")
+        filtro_pf = col_pf2.selectbox("PERÍODO A EVALUAR:", ["Este Mes", "Mes Anterior", "Esta Semana", "Todo el Historial"], key="filtro_perf")
+        pf_in, pf_fi = get_fechas_filtro(filtro_pf)
+        
+        if emp_perfil != "Seleccionar...":
+            st.write(f"**ROL:** `{roles_empleados.get(emp_perfil, 'N/A')}` | **ESTADO:** {'Conectado' if emp_perfil in dispositivos_vinculados else 'Desconectado'}")
+            df_act_p, df_tar_p = load_df("asistencia"), load_df("tareas_log")
+            if not df_act_p.empty:
+                df_act_p = df_act_p.reset_index(drop=True)
+            if not df_tar_p.empty:
+                df_tar_p = df_tar_p.reset_index(drop=True)
+            if not df_act_p.empty:
+                df_act_p['F_Obj'] = pd.to_datetime(df_act_p['Fecha'], errors='coerce').dt.date
+                df_e_p = df_act_p[(df_act_p["Empleado"] == emp_perfil) & (df_act_p['F_Obj'] >= pf_in) & (df_act_p['F_Obj'] <= pf_fi)].copy().reset_index(drop=True)
+                e_atiempo = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "A tiempo")])
+                e_tardes = len(df_e_p[(df_e_p["Tipo"] == "Entrada") & (df_e_p["Estado"] == "Tarde")])
+                e_ausencias = len(df_e_p[df_e_p["Tipo"] == "Ausente"])
+                
+                df_e_p['Timestamp'] = pd.to_datetime(df_e_p['Fecha'].astype(str) + ' ' + df_e_p['Hora'].astype(str), errors='coerce')
+                df_e_p = df_e_p.dropna(subset=['Timestamp']).sort_values(by="Timestamp")
+                
+                entrada_actual = None
+                horas_totales = 0.0
+                
+                def procesar_tramo_perfil(entrada_row, salida_row):
+                    h_in = entrada_row["Timestamp"]
+                    t_eval = str(entrada_row["Turno"]).strip()
+                    h_tramo = 0.0
+                    h_out_real = salida_row["Timestamp"] if salida_row is not None else None
+                    
+                    if not h_out_real:
                         if t_eval in lista_turnos:
                             try:
-                                t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
                                 t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
-                                h_in_ofi = datetime.datetime.combine(h_in.date(), t_in_obj)
-                                h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
-                                if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
+                                h_out_real = datetime.datetime.combine(h_in.date(), t_out_obj)
+                                if h_out_real < h_in: h_out_real += datetime.timedelta(days=1)
+                            except: h_out_real = h_in
+                        else:
+                            h_out_real = h_in
+                    
+                    if t_eval in lista_turnos:
+                        try:
+                            t_in_obj = pd.to_datetime(lista_turnos[t_eval].get("ingreso")).time()
+                            t_out_obj = pd.to_datetime(lista_turnos[t_eval].get("salida")).time()
+                            h_in_ofi = datetime.datetime.combine(h_in.date(), t_in_obj)
+                            h_out_ofi = datetime.datetime.combine(h_in.date(), t_out_obj)
+                            if h_out_ofi < h_in_ofi: h_out_ofi += datetime.timedelta(days=1)
+                            
+                            if (h_in_ofi - h_in).total_seconds() > 43200:
+                                h_in_ofi -= datetime.timedelta(days=1); h_out_ofi -= datetime.timedelta(days=1)
+                            elif (h_in - h_in_ofi).total_seconds() > 43200:
+                                h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
                                 
-                                if (h_in_ofi - h_in).total_seconds() > 43200:
-                                    h_in_ofi -= datetime.timedelta(days=1); h_out_ofi -= datetime.timedelta(days=1)
-                                elif (h_in - h_in_ofi).total_seconds() > 43200:
-                                    h_in_ofi += datetime.timedelta(days=1); h_out_ofi += datetime.timedelta(days=1)
-                                    
-                                h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
-                                
-                                minutos_tarde = (h_in - h_in_ofi).total_seconds() / 60.0
-                                if get_bool_config("desc_tarde", True):
-                                    tolerancia_m = int(config_app.get("tolerancia_minutos", 10))
-                                    if get_bool_config("perdonar_tolerancia", True) and (minutos_tarde <= tolerancia_m):
-                                        desc_in = 0.0
-                                    else:
-                                        desc_in = max(0.0, minutos_tarde / 60.0)
-                                else:
+                            h_tramo_oficial = (h_out_ofi - h_in_ofi).total_seconds() / 3600.0
+                            
+                            minutos_tarde = (h_in - h_in_ofi).total_seconds() / 60.0
+                            if get_bool_config("desc_tarde", True):
+                                tolerancia_m = int(config_app.get("tolerancia_minutos", 10))
+                                if get_bool_config("perdonar_tolerancia", True) and (minutos_tarde <= tolerancia_m):
                                     desc_in = 0.0
-                                    
-                                desc_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0 if get_bool_config("desc_temp", True) else 0.0
+                                else:
+                                    desc_in = max(0.0, minutos_tarde / 60.0)
+                            else:
+                                desc_in = 0.0
                                 
-                                desc_in = max(0.0, desc_in)
-                                desc_out = max(0.0, desc_out)
-                                
-                                h_tramo = h_tramo_oficial - desc_in - desc_out
-                            except:
-                                h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
-                        else:
+                            desc_out = (h_out_ofi - h_out_real).total_seconds() / 3600.0 if get_bool_config("desc_temp", True) else 0.0
+                            
+                            desc_in = max(0.0, desc_in)
+                            desc_out = max(0.0, desc_out)
+                            
+                            h_tramo = h_tramo_oficial - desc_in - desc_out
+                        except:
                             h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
-                            
-                        return max(0.0, h_tramo)
-
-                    for _, row_f in df_e_p.iterrows():
-                        tipo_reg = str(row_f["Tipo"]).strip()
-                        if tipo_reg == "Entrada":
-                            if entrada_actual is not None:
-                                horas_totales += procesar_tramo_perfil(entrada_actual, None)
-                            entrada_actual = row_f
-                        elif tipo_reg in ["Salida", "Salida Automática", "Salida (Cambio Local)", "Retiro Temprano"] and entrada_actual is not None:
-                            horas_totales += procesar_tramo_perfil(entrada_actual, row_f)
-                            entrada_actual = None
-                            
-                    if entrada_actual is not None:
-                        horas_totales += procesar_tramo_perfil(entrada_actual, None)
+                    else:
+                        h_tramo = (h_out_real - h_in).total_seconds() / 3600.0
                         
-                    e_aj = sum([int(p.get('Puntos', p.get('puntos', 0))) for p in lista_puntos if p.get('Empleado', p.get('empleado')) == emp_perfil and p.get('Estado', p.get('estado', 'Aprobada')) == 'Aprobada' and pf_in <= datetime.datetime.strptime(p.get('Fecha', p.get('fecha')), "%Y-%m-%d").date() <= pf_fi])
-                    e_tp = 0
-                    if not df_tar_p.empty:
-                        df_tar_p['F_Obj'] = pd.to_datetime(df_tar_p['Fecha'], errors='coerce').dt.date
-                        e_tp = pd.to_numeric(df_tar_p[(df_tar_p["Empleado"] == emp_perfil) & (df_tar_p["Estado"] == "Aprobada") & (df_tar_p['F_Obj'] >= pf_in) & (df_tar_p['F_Obj'] <= pf_fi)]["Puntos"], errors='coerce').fillna(0).astype(int).sum()
-                        
-                    reg = config_app.get("reglas_puntos", {})
-                    puntaje = reg.get('base', 100) + (e_atiempo * reg.get('A tiempo', 0)) + (e_tardes * reg.get('Tarde', -5)) + (e_ausencias * reg.get('Ausente', -15)) + e_aj + e_tp
-                    c_pf1, c_pf2, c_pf3, c_pf4 = st.columns(4)
-                    
-                    c_pf1.metric("HORAS TRABAJADAS", formato_horas_texto(horas_totales))
-                    c_pf2.metric("STATUS", f"{puntaje} PTS")
-                    c_pf3.metric("TARDANZAS", e_tardes)
-                    c_pf4.metric("AUSENCIAS", e_ausencias)
-                    
-                    with st.expander("FICHA DETALLADA"):
-                        if 'id' in df_e_p.columns:
-                            df_e_p['id_num'] = pd.to_numeric(df_e_p['id'], errors='coerce')
-                            df_e_p = df_e_p.sort_values(by="id_num", ascending=False)
-                        st.dataframe(df_e_p[["Fecha", "Hora", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]], use_container_width=True, hide_index=True)
+                    return max(0.0, h_tramo)
 
-        with tab_staff:
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                st.subheader("ESTADO DE TERMINALES")
-                datos_conexion = []
-                for emp in sorted(lista_empleados):
-                    estado_cel = "CONECTADO" if emp in dispositivos_vinculados else "DESCONECTADO"
-                    datos_conexion.append({"Empleado": emp, "Estado": estado_cel})
-                st.dataframe(pd.DataFrame(datos_conexion), use_container_width=True, hide_index=True)
+                for _, row_f in df_e_p.iterrows():
+                    tipo_reg = str(row_f["Tipo"]).strip()
+                    if tipo_reg == "Entrada":
+                        if entrada_actual is not None:
+                            horas_totales += procesar_tramo_perfil(entrada_actual, None)
+                        entrada_actual = row_f
+                    elif tipo_reg in ["Salida", "Salida Automática", "Salida (Cambio Local)", "Retiro Temprano"] and entrada_actual is not None:
+                        horas_totales += procesar_tramo_perfil(entrada_actual, row_f)
+                        entrada_actual = None
+                        
+                if entrada_actual is not None:
+                    horas_totales += procesar_tramo_perfil(entrada_actual, None)
+                    
+                e_aj = sum([int(p.get('Puntos', p.get('puntos', 0))) for p in lista_puntos if p.get('Empleado', p.get('empleado')) == emp_perfil and p.get('Estado', p.get('estado', 'Aprobada')) == 'Aprobada' and pf_in <= datetime.datetime.strptime(p.get('Fecha', p.get('fecha')), "%Y-%m-%d").date() <= pf_fi])
+                e_tp = 0
+                if not df_tar_p.empty:
+                    df_tar_p['F_Obj'] = pd.to_datetime(df_tar_p['Fecha'], errors='coerce').dt.date
+                    e_tp = pd.to_numeric(df_tar_p[(df_tar_p["Empleado"] == emp_perfil) & (df_tar_p["Estado"] == "Aprobada") & (df_tar_p['F_Obj'] >= pf_in) & (df_tar_p['F_Obj'] <= pf_fi)]["Puntos"], errors='coerce').fillna(0).astype(int).sum()
+                    
+                reg = config_app.get("reglas_puntos", {})
+                puntaje = reg.get('base', 100) + (e_atiempo * reg.get('A tiempo', 0)) + (e_tardes * reg.get('Tarde', -5)) + (e_ausencias * reg.get('Ausente', -15)) + e_aj + e_tp
+                c_pf1, c_pf2, c_pf3, c_pf4 = st.columns(4)
                 
+                c_pf1.metric("HORAS TRABAJADAS", formato_horas_texto(horas_totales))
+                c_pf2.metric("STATUS", f"{puntaje} PTS")
+                c_pf3.metric("TARDANZAS", e_tardes)
+                c_pf4.metric("AUSENCIAS", e_ausencias)
+                
+                with st.expander("FICHA DETALLADA"):
+                    if 'id' in df_e_p.columns:
+                        df_e_p['id_num'] = pd.to_numeric(df_e_p['id'], errors='coerce')
+                        df_e_p = df_e_p.sort_values(by="id_num", ascending=False)
+                    st.dataframe(df_e_p[["Fecha", "Hora", "Sucursal", "Turno", "Tipo", "Estado", "Nota"]], use_container_width=True, hide_index=True)
+
+    with tab_staff:
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            st.subheader("ESTADO DE TERMINALES")
+            datos_conexion = []
+            for emp in sorted(lista_empleados):
+                estado_cel = "CONECTADO" if emp in dispositivos_vinculados else "DESCONECTADO"
+                datos_conexion.append({"Empleado": emp, "Estado": estado_cel})
+            st.dataframe(pd.DataFrame(datos_conexion), use_container_width=True, hide_index=True)
+            
+            st.markdown("---")
+            st.subheader("ALTA DE PERSONAL")
+            with st.form("form_alta_emp"):
+                nuevo_emp = st.text_input("Nombre Operario:", key="alta_n_emp")
+                rol_asignar = st.selectbox("Designación:", lista_roles_disponibles, key="alta_r_emp")
+                if st.form_submit_button("REGISTRAR") and nuevo_emp:
+                    n_emp = nuevo_emp.strip()
+                    if any(e.lower() == n_emp.lower() for e in lista_empleados):
+                        st.error("Registro duplicado.")
+                    else:
+                        try:
+                            supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_asignar, "dispositivo_id": ""}).execute()
+                            st.success("Registrado correctamente.")
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "agregando empleado")
+                    
+            if lista_empleados:
                 st.markdown("---")
-                st.subheader("ALTA DE PERSONAL")
-                with st.form("form_alta_emp"):
-                    nuevo_emp = st.text_input("Nombre Operario:", key="alta_n_emp")
-                    rol_asignar = st.selectbox("Designación:", lista_roles_disponibles, key="alta_r_emp")
-                    if st.form_submit_button("REGISTRAR") and nuevo_emp:
-                        n_emp = nuevo_emp.strip()
-                        if any(e.lower() == n_emp.lower() for e in lista_empleados):
-                            st.error("Registro duplicado.")
-                        else:
-                            try:
-                                supabase.table("empleados").insert({"nombre": n_emp, "rol": rol_asignar, "dispositivo_id": ""}).execute()
-                                st.success("Registrado correctamente.")
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "agregando empleado")
-                        
-                if lista_empleados:
-                    st.markdown("---")
-                    st.markdown("**EDICIÓN DE PERSONAL**")
-                    emp_mod = st.selectbox("Seleccionar:", sorted(lista_empleados), key="mod_sel_emp")
-                    nuevo_nombre_mod = st.text_input("Corregir Nombre:", value=emp_mod, key="mod_nom_emp")
-                    nuevo_rol = st.selectbox("Modificar Rol:", lista_roles_disponibles, index=lista_roles_disponibles.index(roles_empleados.get(emp_mod, lista_roles_disponibles[0])) if roles_empleados.get(emp_mod) in lista_roles_disponibles else 0, key="mod_rol_emp")
-                    c_mod1, c_mod2, c_mod3 = st.columns(3)
-                    
-                    if c_mod1.button("GUARDAR", key="btn_save_emp"):
-                        nn = nuevo_nombre_mod.strip()
-                        if nn and nn != emp_mod:
-                            if any(e.lower() == nn.lower() for e in lista_empleados):
-                                st.error("Nombre en uso.")
-                            else:
-                                try:
-                                    supabase.table("empleados").update({"nombre": nn, "rol": nuevo_rol}).eq("nombre", emp_mod).execute()
-                                    try: supabase.table("ajustes_puntos").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("ajustes_puntos").update({"autor": nn}).eq("autor", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("salidas_pendientes").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("salidas_pendientes").update({"autor": nn}).eq("autor", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("correcciones_pendientes").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("reportes").update({"emisor": nn}).eq("emisor", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("reportes").update({"implicado": nn}).eq("implicado", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("alertas_ingreso").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("mensajes").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("sueldos_historico").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("cierres_caja").update({"cajero": nn}).eq("cajero", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("planificacion_turnos").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("asistencia").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("tareas_log").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                    except: pass
-                                    try: supabase.table("tareas_individuales").update({"empleado": nn}).eq("empleado", emp_mod).execute()
-                                    except: pass
-                                    
-                                    st.success(f"Nombre actualizado a {nn} en toda la base de datos.")
-                                    recargar_app()
-                                except Exception as e: show_db_error(e, "actualizando empleado")
-                        else:
-                            try:
-                                supabase.table("empleados").update({"rol": nuevo_rol}).eq("nombre", emp_mod).execute()
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "actualizando rol")
-                        
-                    if c_mod2.button("LIBERAR TERMINAL", key="btn_lib_term") and emp_mod in dispositivos_vinculados:
-                        try:
-                            supabase.table("empleados").update({"dispositivo_id": ""}).eq("nombre", emp_mod).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "liberando celular")
-                    if c_mod3.button("BORRAR PERFIL", key="btn_del_emp"):
-                        try:
-                            supabase.table("empleados").delete().eq("nombre", emp_mod).execute()
-                            try: supabase.table("tareas_individuales").delete().eq("empleado", emp_mod).execute()
-                            except: pass
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "borrando empleado")
-                        
-            with col_s2:
-                st.subheader("ASIGNACIÓN OPERATIVA")
-                tipo_asig = st.radio("Destino:", ["Rol General", "Personal"], key="radio_tipo_asig")
-                obj_tarea = st.selectbox("Elegir:", lista_roles_disponibles if tipo_asig == "Rol General" else sorted(lista_empleados), key="sel_obj_tarea")
-                n_tarea, p_tarea = st.text_input("Operación:", key="input_n_tarea"), st.number_input("Puntos:", value=5, min_value=1, key="input_p_tarea")
+                st.markdown("**EDICIÓN DE PERSONAL**")
+                emp_mod = st.selectbox("Seleccionar:", sorted(lista_empleados), key="mod_sel_emp")
+                nuevo_nombre_mod = st.text_input("Corregir Nombre:", value=emp_mod, key="mod_nom_emp")
+                nuevo_rol = st.selectbox("Modificar Rol:", lista_roles_disponibles, index=lista_roles_disponibles.index(roles_empleados.get(emp_mod, lista_roles_disponibles[0])) if roles_empleados.get(emp_mod) in lista_roles_disponibles else 0, key="mod_rol_emp")
+                c_mod1, c_mod2, c_mod3 = st.columns(3)
                 
-                if st.button("ASIGNAR", key="btn_asignar_t") and n_tarea:
+                if c_mod1.button("GUARDAR", key="btn_save_emp"):
+                    nn = nuevo_nombre_mod.strip()
+                    if nn and nn != emp_mod:
+                        if any(e.lower() == nn.lower() for e in lista_empleados):
+                            st.error("Nombre en uso.")
+                        else:
+                            try:
+                                supabase.table("empleados").update({"nombre": nn, "rol": nuevo_rol}).eq("nombre", emp_mod).execute()
+                                try: supabase.table("ajustes_puntos").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("ajustes_puntos").update({"autor": nn}).eq("autor", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("salidas_pendientes").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("salidas_pendientes").update({"autor": nn}).eq("autor", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("correcciones_pendientes").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("reportes").update({"emisor": nn}).eq("emisor", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("reportes").update({"implicado": nn}).eq("implicado", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("alertas_ingreso").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("mensajes").update({"destinatario": nn}).eq("destinatario", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("sueldos_historico").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("cierres_caja").update({"cajero": nn}).eq("cajero", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("planificacion_turnos").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("asistencia").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("tareas_log").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                except: pass
+                                try: supabase.table("tareas_individuales").update({"empleado": nn}).eq("empleado", emp_mod).execute()
+                                except: pass
+                                
+                                st.success(f"Nombre actualizado a {nn} en toda la base de datos.")
+                                recargar_app()
+                            except Exception as e: show_db_error(e, "actualizando empleado")
+                    else:
+                        try:
+                            supabase.table("empleados").update({"rol": nuevo_rol}).eq("nombre", emp_mod).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "actualizando rol")
+                    
+                if c_mod2.button("LIBERAR TERMINAL", key="btn_lib_term") and emp_mod in dispositivos_vinculados:
                     try:
-                        if tipo_asig == "Rol General":
-                            supabase.table("tareas_roles").insert({"rol": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
-                        else:
-                            supabase.table("tareas_individuales").insert({"empleado": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
+                        supabase.table("empleados").update({"dispositivo_id": ""}).eq("nombre", emp_mod).execute()
                         recargar_app()
-                    except Exception as e: show_db_error(e, "asignando tarea")
+                    except Exception as e: show_db_error(e, "liberando celular")
+                if c_mod3.button("BORRAR PERFIL", key="btn_del_emp"):
+                    try:
+                        supabase.table("empleados").delete().eq("nombre", emp_mod).execute()
+                        try: supabase.table("tareas_individuales").delete().eq("empleado", emp_mod).execute()
+                        except: pass
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "borrando empleado")
                     
-                ver_t_tipo = st.radio("Ver operativas de:", ["Roles", "Personales"], key="radio_ver_t")
-                diccionario_ver = tareas_roles if ver_t_tipo == "Roles" else tareas_individuales
-                for clave, tareas in diccionario_ver.items():
-                    if tareas:
-                        with st.expander(f"{clave}"):
-                            for t in tareas:
-                                t_id = t.get("id")
-                                c_t1, c_t2 = st.columns([3,1])
-                                c_t1.write(f"- {t.get('tarea')} (+{t.get('puntos')})")
-                                if c_t2.button("ELIMINAR", key=f"del_t_mod_{t_id}"):
-                                    try:
-                                        supabase.table("tareas_roles" if ver_t_tipo == "Roles" else "tareas_individuales").delete().eq("id", t_id).execute()
-                                        recargar_app()
-                                    except Exception as e: show_db_error(e, "eliminando tarea")
-
-        with tab_tiendas:
-            col_l1, col_l2 = st.columns(2)
-            with col_l1:
-                st.subheader("LOCACIONES")
-                for loc, d_loc in lista_locales.items(): 
-                    st.write(f"- **{loc}** | IP: `{d_loc.get('ip', 'Ninguna')}` | Lat: {d_loc.get('lat')} | Lon: {d_loc.get('lon')}")
-                st.markdown("---")
-                ip_gerencia = st.session_state.get('client_ip')
-                if not ip_gerencia:
-                    ip_eval = streamlit_js_eval(js_expressions="fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')", want_output=True, key="ip_manager_tiendas")
-                    if ip_eval:
-                        st.session_state['client_ip'] = ip_eval
-                        ip_gerencia = ip_eval
-                if ip_gerencia and ip_gerencia != 'Error':
-                    st.info(f"IP LOCAL ACTUAL: `{ip_gerencia}`")
-                else: st.info("Sondeando IP local...")
+        with col_s2:
+            st.subheader("ASIGNACIÓN OPERATIVA")
+            tipo_asig = st.radio("Destino:", ["Rol General", "Personal"], key="radio_tipo_asig")
+            obj_tarea = st.selectbox("Elegir:", lista_roles_disponibles if tipo_asig == "Rol General" else sorted(lista_empleados), key="sel_obj_tarea")
+            n_tarea, p_tarea = st.text_input("Operación:", key="input_n_tarea"), st.number_input("Puntos:", value=5, min_value=1, key="input_p_tarea")
+            
+            if st.button("ASIGNAR", key="btn_asignar_t") and n_tarea:
+                try:
+                    if tipo_asig == "Rol General":
+                        supabase.table("tareas_roles").insert({"rol": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
+                    else:
+                        supabase.table("tareas_individuales").insert({"empleado": obj_tarea, "tarea": n_tarea, "puntos": p_tarea}).execute()
+                    recargar_app()
+                except Exception as e: show_db_error(e, "asignando tarea")
                 
-                with st.expander("ALTA DE LOCACIÓN", expanded=False):
-                    n_loc = st.text_input("Designación:", key="input_alta_loc")
-                    lat_loc = st.number_input("Latitud:", format="%.6f", key="input_lat_loc")
-                    lon_loc = st.number_input("Longitud:", format="%.6f", key="input_lon_loc")
-                    ip_loc = st.text_input("IP (Red Oficial):", key="input_ip_loc")
-                    if st.button("REGISTRAR LOCACIÓN", key="btn_reg_loc") and n_loc:
-                        try:
-                            supabase.table("locales").insert({"nombre": n_loc, "lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "creando tienda")
-                        
-                st.markdown("---")
-                st.markdown("**EDICIÓN DE LOCACIÓN**")
-                loc_mod = st.selectbox("Seleccionar:", ["Seleccionar..."] + list(lista_locales.keys()), key="sel_mod_loc")
-                if loc_mod != "Seleccionar...":
-                    n_loc_mod = st.text_input("Modificar Designación:", value=loc_mod, key="mod_n_loc")
-                    lat_mod = st.number_input("Modificar Lat:", value=float(lista_locales[loc_mod].get("lat", 0.0)), format="%.6f", key="mod_lat_loc")
-                    lon_mod = st.number_input("Modificar Lon:", value=float(lista_locales[loc_mod].get("lon", 0.0)), format="%.6f", key="mod_lon_loc")
-                    ip_mod = st.text_input("Modificar IP:", value=lista_locales[loc_mod].get("ip", ""), key="mod_ip_loc")
-                    
-                    if st.button("GUARDAR CAMBIOS", key="btn_save_loc"):
-                        nuevo_nombre = n_loc_mod.strip()
-                        if nuevo_nombre and nuevo_nombre != loc_mod:
-                            if nuevo_nombre not in lista_locales:
+            ver_t_tipo = st.radio("Ver operativas de:", ["Roles", "Personales"], key="radio_ver_t")
+            diccionario_ver = tareas_roles if ver_t_tipo == "Roles" else tareas_individuales
+            for clave, tareas in diccionario_ver.items():
+                if tareas:
+                    with st.expander(f"{clave}"):
+                        for t in tareas:
+                            t_id = t.get("id")
+                            c_t1, c_t2 = st.columns([3,1])
+                            c_t1.write(f"- {t.get('tarea')} (+{t.get('puntos')})")
+                            if c_t2.button("ELIMINAR", key=f"del_t_mod_{t_id}"):
                                 try:
-                                    supabase.table("locales").update({"nombre": nuevo_nombre, "lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
-                                    try: supabase.table("planificacion_turnos").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
-                                    except: pass
-                                    try: supabase.table("asistencia").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
-                                    except: pass
-                                    try: supabase.table("cierres_caja").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
-                                    except: pass
+                                    supabase.table("tareas_roles" if ver_t_tipo == "Roles" else "tareas_individuales").delete().eq("id", t_id).execute()
                                     recargar_app()
-                                except Exception as e: show_db_error(e, "actualizando tienda")
-                            else:
-                                st.warning("Designación en uso.")
-                        else:
+                                except Exception as e: show_db_error(e, "eliminando tarea")
+
+    with tab_tiendas:
+        col_l1, col_l2 = st.columns(2)
+        with col_l1:
+            st.subheader("LOCACIONES")
+            for loc, d_loc in lista_locales.items(): 
+                st.write(f"- **{loc}** | IP: `{d_loc.get('ip', 'Ninguna')}` | Lat: {d_loc.get('lat')} | Lon: {d_loc.get('lon')}")
+            st.markdown("---")
+            ip_gerencia = st.session_state.get('client_ip')
+            if not ip_gerencia:
+                ip_eval = streamlit_js_eval(js_expressions="fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip).catch(e => 'Error')", want_output=True, key="ip_manager_tiendas")
+                if ip_eval:
+                    st.session_state['client_ip'] = ip_eval
+                    ip_gerencia = ip_eval
+            if ip_gerencia and ip_gerencia != 'Error':
+                st.info(f"IP LOCAL ACTUAL: `{ip_gerencia}`")
+            else: st.info("Sondeando IP local...")
+            
+            with st.expander("ALTA DE LOCACIÓN", expanded=False):
+                n_loc = st.text_input("Designación:", key="input_alta_loc")
+                lat_loc = st.number_input("Latitud:", format="%.6f", key="input_lat_loc")
+                lon_loc = st.number_input("Longitud:", format="%.6f", key="input_lon_loc")
+                ip_loc = st.text_input("IP (Red Oficial):", key="input_ip_loc")
+                if st.button("REGISTRAR LOCACIÓN", key="btn_reg_loc") and n_loc:
+                    try:
+                        supabase.table("locales").insert({"nombre": n_loc, "lat": lat_loc, "lon": lon_loc, "ip": ip_loc.strip()}).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "creando tienda")
+                    
+            st.markdown("---")
+            st.markdown("**EDICIÓN DE LOCACIÓN**")
+            loc_mod = st.selectbox("Seleccionar:", ["Seleccionar..."] + list(lista_locales.keys()), key="sel_mod_loc")
+            if loc_mod != "Seleccionar...":
+                n_loc_mod = st.text_input("Modificar Designación:", value=loc_mod, key="mod_n_loc")
+                lat_mod = st.number_input("Modificar Lat:", value=float(lista_locales[loc_mod].get("lat", 0.0)), format="%.6f", key="mod_lat_loc")
+                lon_mod = st.number_input("Modificar Lon:", value=float(lista_locales[loc_mod].get("lon", 0.0)), format="%.6f", key="mod_lon_loc")
+                ip_mod = st.text_input("Modificar IP:", value=lista_locales[loc_mod].get("ip", ""), key="mod_ip_loc")
+                
+                if st.button("GUARDAR CAMBIOS", key="btn_save_loc"):
+                    nuevo_nombre = n_loc_mod.strip()
+                    if nuevo_nombre and nuevo_nombre != loc_mod:
+                        if nuevo_nombre not in lista_locales:
                             try:
-                                supabase.table("locales").update({"lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
+                                supabase.table("locales").update({"nombre": nuevo_nombre, "lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
+                                try: supabase.table("planificacion_turnos").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
+                                except: pass
+                                try: supabase.table("asistencia").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
+                                except: pass
+                                try: supabase.table("cierres_caja").update({"sucursal": nuevo_nombre}).eq("sucursal", loc_mod).execute()
+                                except: pass
                                 recargar_app()
                             except Exception as e: show_db_error(e, "actualizando tienda")
-
-                st.markdown("---")
-                borrar_loc = st.selectbox("Dar de baja locación:", ["Seleccionar..."] + list(lista_locales.keys()), key="sel_del_loc")
-                if st.button("ELIMINAR", key="btn_del_loc") and borrar_loc != "Seleccionar...":
-                    try:
-                        supabase.table("locales").delete().eq("nombre", borrar_loc).execute()
-                        recargar_app()
-                    except Exception as e: show_db_error(e, "eliminando tienda")
-                    
-            with col_l2:
-                st.subheader("BLOQUES HORARIOS")
-                for turno, horas in lista_turnos.items(): st.write(f"- **{turno}** | {horas.get('ingreso')} - {horas.get('salida')}")
-                
-                with st.expander("NUEVO BLOQUE", expanded=False):
-                    n_turno = st.text_input("Designación:", key="alta_n_turno")
-                    c_h1, c_h2 = st.columns(2)
-                    h_ingreso, h_salida = c_h1.time_input("Ingreso:", key="alta_h_ing"), c_h2.time_input("Salida:", key="alta_h_sal")
-                    if st.button("CREAR", key="btn_crear_tur") and n_turno:
-                        try:
-                            supabase.table("turnos").insert({"nombre": n_turno, "ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "creando horario")
-                        
-                st.markdown("---")
-                st.markdown("**EDICIÓN DE BLOQUES**")
-                turno_mod = st.selectbox("Seleccionar:", ["Seleccionar..."] + list(lista_turnos.keys()), key="sel_mod_tur")
-                if turno_mod != "Seleccionar...":
-                    n_turno_mod = st.text_input("Renombrar:", value=turno_mod, key="mod_n_tur")
-                    try:
-                        time_ing_def = datetime.datetime.strptime(lista_turnos[turno_mod].get('ingreso'), "%I:%M %p").time()
-                        time_sal_def = datetime.datetime.strptime(lista_turnos[turno_mod].get('salida'), "%I:%M %p").time()
-                    except:
-                        time_ing_def, time_sal_def = ahora.time(), ahora.time()
-                        
-                    c_hm1, c_hm2 = st.columns(2)
-                    hm_ingreso = c_hm1.time_input("Ajustar Ingreso:", value=time_ing_def, key="mod_h_ing")
-                    hm_salida = c_hm2.time_input("Ajustar Salida:", value=time_sal_def, key="mod_h_sal")
-                    
-                    if st.button("GUARDAR", key="btn_save_tur"):
-                        nuevo_nombre_t = n_turno_mod.strip()
-                        if nuevo_nombre_t and nuevo_nombre_t != turno_mod:
-                            if nuevo_nombre_t not in lista_turnos:
-                                try:
-                                    supabase.table("turnos").update({"nombre": nuevo_nombre_t, "ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
-                                    try: supabase.table("planificacion_turnos").update({"turno": nuevo_nombre_t}).eq("turno", turno_mod).execute()
-                                    except: pass
-                                    recargar_app()
-                                except Exception as e: show_db_error(e, "actualizando horario")
-                            else:
-                                st.warning("Designación en uso.")
                         else:
+                            st.warning("Designación en uso.")
+                    else:
+                        try:
+                            supabase.table("locales").update({"lat": lat_mod, "lon": lon_mod, "ip": ip_mod.strip()}).eq("nombre", loc_mod).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "actualizando tienda")
+
+            st.markdown("---")
+            borrar_loc = st.selectbox("Dar de baja locación:", ["Seleccionar..."] + list(lista_locales.keys()), key="sel_del_loc")
+            if st.button("ELIMINAR", key="btn_del_loc") and borrar_loc != "Seleccionar...":
+                try:
+                    supabase.table("locales").delete().eq("nombre", borrar_loc).execute()
+                    recargar_app()
+                except Exception as e: show_db_error(e, "eliminando tienda")
+                
+        with col_l2:
+            st.subheader("BLOQUES HORARIOS")
+            for turno, horas in lista_turnos.items(): st.write(f"- **{turno}** | {horas.get('ingreso')} - {horas.get('salida')}")
+            
+            with st.expander("NUEVO BLOQUE", expanded=False):
+                n_turno = st.text_input("Designación:", key="alta_n_turno")
+                c_h1, c_h2 = st.columns(2)
+                h_ingreso, h_salida = c_h1.time_input("Ingreso:", key="alta_h_ing"), c_h2.time_input("Salida:", key="alta_h_sal")
+                if st.button("CREAR", key="btn_crear_tur") and n_turno:
+                    try:
+                        supabase.table("turnos").insert({"nombre": n_turno, "ingreso": h_ingreso.strftime("%I:%M %p"), "salida": h_salida.strftime("%I:%M %p")}).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "creando horario")
+                    
+            st.markdown("---")
+            st.markdown("**EDICIÓN DE BLOQUES**")
+            turno_mod = st.selectbox("Seleccionar:", ["Seleccionar..."] + list(lista_turnos.keys()), key="sel_mod_tur")
+            if turno_mod != "Seleccionar...":
+                n_turno_mod = st.text_input("Renombrar:", value=turno_mod, key="mod_n_tur")
+                try:
+                    time_ing_def = datetime.datetime.strptime(lista_turnos[turno_mod].get('ingreso'), "%I:%M %p").time()
+                    time_sal_def = datetime.datetime.strptime(lista_turnos[turno_mod].get('salida'), "%I:%M %p").time()
+                except:
+                    time_ing_def, time_sal_def = ahora.time(), ahora.time()
+                    
+                c_hm1, c_hm2 = st.columns(2)
+                hm_ingreso = c_hm1.time_input("Ajustar Ingreso:", value=time_ing_def, key="mod_h_ing")
+                hm_salida = c_hm2.time_input("Ajustar Salida:", value=time_sal_def, key="mod_h_sal")
+                
+                if st.button("GUARDAR", key="btn_save_tur"):
+                    nuevo_nombre_t = n_turno_mod.strip()
+                    if nuevo_nombre_t and nuevo_nombre_t != turno_mod:
+                        if nuevo_nombre_t not in lista_turnos:
                             try:
-                                supabase.table("turnos").update({"ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
+                                supabase.table("turnos").update({"nombre": nuevo_nombre_t, "ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
+                                try: supabase.table("planificacion_turnos").update({"turno": nuevo_nombre_t}).eq("turno", turno_mod).execute()
+                                except: pass
                                 recargar_app()
                             except Exception as e: show_db_error(e, "actualizando horario")
-
-                st.markdown("---")
-                borrar_turno = st.selectbox("Dar de baja bloque:", ["Seleccionar..."] + list(lista_turnos.keys()), key="sel_del_tur")
-                if st.button("ELIMINAR BLOQUE", key="btn_del_tur") and borrar_turno != "Seleccionar...":
-                    try:
-                        supabase.table("turnos").delete().eq("nombre", borrar_turno).execute()
-                        recargar_app()
-                    except Exception as e: show_db_error(e, "eliminando turno")
-
-        with tab_comunicados:
-            col_m1, col_m2 = st.columns(2)
-            with col_m1:
-                st.subheader("ALERTA DE RECEPCIÓN")
-                with st.form("form_alertas"):
-                    dest_ing = st.selectbox("Destino:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="al_dest")
-                    txt_alerta = st.text_area("Contenido:", key="al_txt")
-                    if st.form_submit_button("EMITIR ALERTA") and txt_alerta:
+                        else:
+                            st.warning("Designación en uso.")
+                    else:
                         try:
-                            supabase.table("alertas_ingreso").insert({"destinatario": dest_ing, "texto": txt_alerta}).execute()
+                            supabase.table("turnos").update({"ingreso": hm_ingreso.strftime("%I:%M %p"), "salida": hm_salida.strftime("%I:%M %p")}).eq("nombre", turno_mod).execute()
                             recargar_app()
-                        except Exception as e: show_db_error(e, "creando alerta")
-                for a in alertas_ingreso:
-                    a_id = a.get("id")
-                    with st.expander(f"PARA {a.get('destinatario', a.get('Destinatario')).upper()}: {a.get('texto', a.get('Texto'))[:20]}..."):
-                        if st.button("ELIMINAR", key=f"del_al_{a_id}"):
-                            try:
-                                supabase.table("alertas_ingreso").delete().eq("id", a_id).execute()
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "eliminando alerta")
-                            
-            with col_m2:
-                st.subheader("ANUNCIO PERMANENTE")
-                with st.form("form_fijo"):
-                    dest_fijo = st.selectbox("Destino:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="fijo_dest")
-                    txt_fijo = st.text_area("Contenido:", key="fijo_txt")
-                    if st.form_submit_button("FIJAR ANUNCIO") and txt_fijo:
-                        try:
-                            supabase.table("mensajes").insert({"destinatario": dest_fijo, "texto": txt_fijo}).execute()
-                            recargar_app()
-                        except Exception as e: show_db_error(e, "creando anuncio")
-                for m in lista_mensajes:
-                    m_id = m.get("id")
-                    with st.expander(f"PARA {m.get('destinatario', 'Todos').upper()}: {m.get('texto', '')[:20]}..."):
-                        st.write(m.get('texto', ''))
-                        if st.button("ELIMINAR", key=f"del_msg_{m_id}"):
-                            try:
-                                supabase.table("mensajes").delete().eq("id", m_id).execute()
-                                recargar_app()
-                            except Exception as e: show_db_error(e, "eliminando anuncio")
+                        except Exception as e: show_db_error(e, "actualizando horario")
 
-        with tab_config:
-            st.subheader("PARÁMETROS DEL SISTEMA")
-            with st.form("form_config"):
-                st.markdown("### FUNDAMENTOS")
-                c_conf1, c_conf2 = st.columns(2)
-                nuevo_titulo = c_conf1.text_input("IDENTIFICADOR DEL PORTAL", value=config_app.get("titulo_portal", "PORTAL CORPORATIVO"), key="cfg_tit")
-                nueva_pass = c_conf2.text_input("CLAVE GERENCIAL", value=config_app.get("admin_password", "1234"), type="password", key="cfg_pass")
-                
-                c_conf3, c_conf4 = st.columns(2)
-                nueva_tol = c_conf3.number_input("TOLERANCIA (MIN)", value=int(config_app.get("tolerancia_minutos", 10)), key="cfg_tol")
-                rad_metros = c_conf4.number_input("RANGO GPS (M)", value=int(config_app.get("radio_metros", 150)), key="cfg_rad")
-                
-                nuevo_msg_dia = st.text_area("MANTRA / MENSAJE DEL DÍA", value=config_app.get("mensaje_dia", ""), key="cfg_msg")
-                msg_tarde = st.text_input("ADVERTENCIA DE TARDANZA", value=config_app.get("mensaje_llegada_tarde", "Llegada fuera de parámetro."), key="cfg_tar")
-                
-                c_conf5, c_conf6 = st.columns(2)
-                rec_cajero = c_conf5.number_input("BONO AUDITORÍA (PTS)", value=int(config_app.get("recompensa_auditoria_cajero", 10)), key="cfg_rec")
-                d_semana = c_conf6.selectbox("INICIO DE CICLO", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")), key="cfg_dia")
-                
+            st.markdown("---")
+            borrar_turno = st.selectbox("Dar de baja bloque:", ["Seleccionar..."] + list(lista_turnos.keys()), key="sel_del_tur")
+            if st.button("ELIMINAR BLOQUE", key="btn_del_tur") and borrar_turno != "Seleccionar...":
                 try:
-                    f_pts_def = datetime.datetime.strptime(config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d")), "%Y-%m-%d").date()
-                except:
-                    f_pts_def = ahora.date().replace(day=1)
-                n_fecha_pts = st.date_input("INICIO DE LIGA ACTUAL", value=f_pts_def, key="cfg_fpts")
+                    supabase.table("turnos").delete().eq("nombre", borrar_turno).execute()
+                    recargar_app()
+                except Exception as e: show_db_error(e, "eliminando turno")
 
-                st.markdown("### PROTOCOLOS DE SEGURIDAD")
-                col_op1, col_op2 = st.columns(2)
-                with col_op1:
-                    n_gps = st.checkbox("AUTORIZACIÓN SATELITAL (GPS)", value=get_bool_config("verificar_gps", True), key="cfg_gps")
-                    n_wifi = st.checkbox("AUTORIZACIÓN RED LOCAL (WI-FI)", value=get_bool_config("verificar_wifi", False), key="cfg_wifi")
-                    n_auto = st.checkbox("PERMITIR ONBOARDING MANUAL DE PERSONAL", value=get_bool_config("autoregistro", False), key="cfg_aut")
-                    n_sal_estricta = st.checkbox("CIERRE ESTRICTO (EXIGE RED/GPS PARA SALIR)", value=get_bool_config("salida_estricta", False), key="cfg_se")
-                    n_sal_manual = st.checkbox("INHABILITAR CIERRE AUTOMÁTICO", value=get_bool_config("exigir_salida_manual", False), key="cfg_sm")
-                with col_op2:
-                    n_desc_tarde = st.checkbox("COMPUTAR DESCUENTO POR TARDANZA", value=get_bool_config("desc_tarde", True), key="cfg_dt")
-                    n_desc_temp = st.checkbox("COMPUTAR DESCUENTO POR RETIRO ANTICIPADO", value=get_bool_config("desc_temp", True), key="cfg_dtemp")
-                    n_perdon_tol = st.checkbox("ABSORBER TOLERANCIA EN CÓMPUTO", value=get_bool_config("perdonar_tolerancia", True), key="cfg_pt")
-                    n_mostrar_hs = st.checkbox("VISIBILIDAD DE HORAS PARA EL OPERARIO", value=get_bool_config("mostrar_horas_empleado", False), key="cfg_mh")
-                    n_estricto_plan = st.checkbox("BLOQUEO DE INGRESO FUERA DE PLANIFICACIÓN", value=get_bool_config("fichaje_estricto_plan", False), key="cfg_fep")
-                
-                if st.form_submit_button("APLICAR CONFIGURACIÓN"):
-                    config_app["titulo_portal"] = nuevo_titulo
-                    config_app["admin_password"] = nueva_pass
-                    config_app["tolerancia_minutos"] = nueva_tol
-                    config_app["mensaje_dia"] = nuevo_msg_dia
-                    config_app["mensaje_llegada_tarde"] = msg_tarde
-                    config_app["radio_metros"] = rad_metros
-                    config_app["recompensa_auditoria_cajero"] = rec_cajero
-                    config_app["dia_inicio_semana"] = d_semana
-                    config_app["fecha_inicio_puntos"] = n_fecha_pts.strftime("%Y-%m-%d")
-                    config_app["verificar_gps"] = n_gps
-                    config_app["verificar_wifi"] = n_wifi
-                    config_app["autoregistro"] = n_auto
-                    config_app["salida_estricta"] = n_sal_estricta
-                    config_app["exigir_salida_manual"] = n_sal_manual
-                    config_app["desc_tarde"] = n_desc_tarde
-                    config_app["desc_temp"] = n_desc_temp
-                    config_app["perdonar_tolerancia"] = n_perdon_tol
-                    config_app["mostrar_horas_empleado"] = n_mostrar_hs
-                    config_app["fichaje_estricto_plan"] = n_estricto_plan
-                    save_json("config", config_app)
-                    st.success("Configuración del sistema actualizada.")
-                    recargar_app()
-                    
-            with st.form("form_rankings"):
-                st.markdown("### LIGAS DE RENDIMIENTO")
-                rankings = config_app.get("rankings_muro", [])
-                edited_rankings = []
-                for i, r in enumerate(rankings):
-                    st.markdown(f"**LIGA: {r['nombre']}**")
-                    c1, c2 = st.columns(2)
-                    r_nom = c1.text_input("DESIGNACIÓN", value=r['nombre'], key=f"rn_{i}")
-                    r_mp = c2.checkbox("VISIBILIDAD DE PUNTUACIÓN", value=r.get("mostrar_puntos", True), key=f"rmp_{i}")
-                    
-                    c3, c4 = st.columns(2)
-                    r_comp = c3.multiselect("COMPETIDORES:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=r.get('competidores', ["Todos"]), key=f"rc_{i}")
-                    r_esp = c4.multiselect("ESPECTADORES:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=r.get('espectadores', ["Todos"]), key=f"re_{i}")
-                    
-                    borrar = st.checkbox(f"ELIMINAR LIGA", key=f"rdel_{i}")
-                    if not borrar:
-                        edited_rankings.append({"nombre": r_nom, "competidores": r_comp, "espectadores": r_esp, "mostrar_puntos": r_mp})
-                    st.write("---")
-                
-                st.markdown("**NUEVA LIGA DE RENDIMIENTO**")
-                n_nom = st.text_input("Designación:", key="new_rn")
-                c_n1, c_n2 = st.columns(2)
-                n_mp = c_n1.checkbox("Visibilidad de Puntuación", value=True, key="new_rmp")
-                c_n3, c_n4 = st.columns(2)
-                n_comp = c_n3.multiselect("Competidores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"], key="new_rc")
-                n_esp = c_n4.multiselect("Espectadores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"], key="new_re")
-                
-                if st.form_submit_button("ACTUALIZAR LIGAS"):
-                    if n_nom.strip():
-                        edited_rankings.append({"nombre": n_nom.strip(), "competidores": n_comp, "espectadores": n_esp, "mostrar_puntos": n_mp})
-                    config_app["rankings_muro"] = edited_rankings
-                    save_json("config", config_app)
-                    st.success("Ligas procesadas.")
-                    recargar_app()
-                    
-        with tab_limpieza:
-            st.subheader("PURGA DE DATOS")
-            
-            c_limp1, c_limp2, c_limp3 = st.columns(3)
-            tabla_a_limpiar = c_limp1.selectbox("TABLA:", ["Asistencia (Fichajes)", "Cierres de Caja", "Tareas y Puntos", "Reportes y Avisos"], key="limp_tab")
-            fecha_in_limp = c_limp2.date_input("DESDE:", value=ahora.date() - datetime.timedelta(days=365), key="limp_in")
-            fecha_fi_limp = c_limp3.date_input("HASTA:", value=ahora.date() - datetime.timedelta(days=30), key="limp_fi")
-            
-            st.warning("ACCIÓN DEPURATIVA: Los registros eliminados no podrán ser recuperados.")
-            confirmar_borrado = st.checkbox("AUTORIZO LA ELIMINACIÓN PERMANENTE.", key="limp_chk")
-            
-            if st.button("PURGAR REGISTROS", type="primary", key="limp_btn"):
-                if not confirmar_borrado:
-                    st.error("Requiere autorización.")
-                else:
+    with tab_comunicados:
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.subheader("ALERTA DE RECEPCIÓN")
+            with st.form("form_alertas"):
+                dest_ing = st.selectbox("Destino:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="al_dest")
+                txt_alerta = st.text_area("Contenido:", key="al_txt")
+                if st.form_submit_button("EMITIR ALERTA") and txt_alerta:
                     try:
-                        f_in_str = fecha_in_limp.strftime("%Y-%m-%d")
-                        f_fi_str = fecha_fi_limp.strftime("%Y-%m-%d")
-                        
-                        if tabla_a_limpiar == "Asistencia (Fichajes)":
-                            try: supabase.table("asistencia").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("asistencia").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-                        elif tabla_a_limpiar == "Cierres de Caja":
-                            try: supabase.table("cierres_caja").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("cierres_caja").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-                        elif tabla_a_limpiar == "Tareas y Puntos":
-                            try: supabase.table("tareas_log").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("tareas_log").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("ajustes_puntos").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("ajustes_puntos").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-                        elif tabla_a_limpiar == "Reportes y Avisos":
-                            try: supabase.table("reportes").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
-                            except: pass
-                            try: supabase.table("reportes").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
-                            except: pass
-
-                        st.success(f"Purga ejecutada en la tabla {tabla_a_limpiar}.")
+                        supabase.table("alertas_ingreso").insert({"destinatario": dest_ing, "texto": txt_alerta}).execute()
                         recargar_app()
-                    except Exception as e:
-                        show_db_error(e, "eliminando datos históricos")
+                    except Exception as e: show_db_error(e, "creando alerta")
+            for a in alertas_ingreso:
+                a_id = a.get("id")
+                with st.expander(f"PARA {a.get('destinatario', a.get('Destinatario')).upper()}: {a.get('texto', a.get('Texto'))[:20]}..."):
+                    if st.button("ELIMINAR", key=f"del_al_{a_id}"):
+                        try:
+                            supabase.table("alertas_ingreso").delete().eq("id", a_id).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "eliminando alerta")
+                        
+        with col_m2:
+            st.subheader("ANUNCIO PERMANENTE")
+            with st.form("form_fijo"):
+                dest_fijo = st.selectbox("Destino:", ["Todos"] + lista_roles_disponibles + sorted(lista_empleados), key="fijo_dest")
+                txt_fijo = st.text_area("Contenido:", key="fijo_txt")
+                if st.form_submit_button("FIJAR ANUNCIO") and txt_fijo:
+                    try:
+                        supabase.table("mensajes").insert({"destinatario": dest_fijo, "texto": txt_fijo}).execute()
+                        recargar_app()
+                    except Exception as e: show_db_error(e, "creando anuncio")
+            for m in lista_mensajes:
+                m_id = m.get("id")
+                with st.expander(f"PARA {m.get('destinatario', 'Todos').upper()}: {m.get('texto', '')[:20]}..."):
+                    st.write(m.get('texto', ''))
+                    if st.button("ELIMINAR", key=f"del_msg_{m_id}"):
+                        try:
+                            supabase.table("mensajes").delete().eq("id", m_id).execute()
+                            recargar_app()
+                        except Exception as e: show_db_error(e, "eliminando anuncio")
+
+    with tab_config:
+        st.subheader("PARÁMETROS DEL SISTEMA")
+        with st.form("form_config"):
+            st.markdown("### FUNDAMENTOS")
+            c_conf1, c_conf2 = st.columns(2)
+            nuevo_titulo = c_conf1.text_input("IDENTIFICADOR DEL PORTAL", value=config_app.get("titulo_portal", "PORTAL CORPORATIVO"), key="cfg_tit")
+            nueva_pass = c_conf2.text_input("CLAVE GERENCIAL", value=config_app.get("admin_password", "1234"), type="password", key="cfg_pass")
+            
+            c_conf3, c_conf4 = st.columns(2)
+            nueva_tol = c_conf3.number_input("TOLERANCIA (MIN)", value=int(config_app.get("tolerancia_minutos", 10)), key="cfg_tol")
+            rad_metros = c_conf4.number_input("RANGO GPS (M)", value=int(config_app.get("radio_metros", 150)), key="cfg_rad")
+            
+            nuevo_msg_dia = st.text_area("MANTRA / MENSAJE DEL DÍA", value=config_app.get("mensaje_dia", ""), key="cfg_msg")
+            msg_tarde = st.text_input("ADVERTENCIA DE TARDANZA", value=config_app.get("mensaje_llegada_tarde", "Llegada fuera de parámetro."), key="cfg_tar")
+            
+            c_conf5, c_conf6 = st.columns(2)
+            rec_cajero = c_conf5.number_input("BONO AUDITORÍA (PTS)", value=int(config_app.get("recompensa_auditoria_cajero", 10)), key="cfg_rec")
+            d_semana = c_conf6.selectbox("INICIO DE CICLO", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], index=["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"].index(config_app.get("dia_inicio_semana", "Lunes")), key="cfg_dia")
+            
+            try:
+                f_pts_def = datetime.datetime.strptime(config_app.get("fecha_inicio_puntos", ahora.date().replace(day=1).strftime("%Y-%m-%d")), "%Y-%m-%d").date()
+            except:
+                f_pts_def = ahora.date().replace(day=1)
+            n_fecha_pts = st.date_input("INICIO DE LIGA ACTUAL", value=f_pts_def, key="cfg_fpts")
+
+            st.markdown("### PROTOCOLOS DE SEGURIDAD")
+            col_op1, col_op2 = st.columns(2)
+            with col_op1:
+                n_gps = st.checkbox("AUTORIZACIÓN SATELITAL (GPS)", value=get_bool_config("verificar_gps", True), key="cfg_gps")
+                n_wifi = st.checkbox("AUTORIZACIÓN RED LOCAL (WI-FI)", value=get_bool_config("verificar_wifi", False), key="cfg_wifi")
+                n_auto = st.checkbox("PERMITIR ONBOARDING MANUAL DE PERSONAL", value=get_bool_config("autoregistro", False), key="cfg_aut")
+                n_sal_estricta = st.checkbox("CIERRE ESTRICTO (EXIGE RED/GPS PARA SALIR)", value=get_bool_config("salida_estricta", False), key="cfg_se")
+                n_sal_manual = st.checkbox("INHABILITAR CIERRE AUTOMÁTICO", value=get_bool_config("exigir_salida_manual", False), key="cfg_sm")
+            with col_op2:
+                n_desc_tarde = st.checkbox("COMPUTAR DESCUENTO POR TARDANZA", value=get_bool_config("desc_tarde", True), key="cfg_dt")
+                n_desc_temp = st.checkbox("COMPUTAR DESCUENTO POR RETIRO ANTICIPADO", value=get_bool_config("desc_temp", True), key="cfg_dtemp")
+                n_perdon_tol = st.checkbox("ABSORBER TOLERANCIA EN CÓMPUTO", value=get_bool_config("perdonar_tolerancia", True), key="cfg_pt")
+                n_mostrar_hs = st.checkbox("VISIBILIDAD DE HORAS PARA EL OPERARIO", value=get_bool_config("mostrar_horas_empleado", False), key="cfg_mh")
+                n_estricto_plan = st.checkbox("BLOQUEO DE INGRESO FUERA DE PLANIFICACIÓN", value=get_bool_config("fichaje_estricto_plan", False), key="cfg_fep")
+            
+            if st.form_submit_button("APLICAR CONFIGURACIÓN"):
+                config_app["titulo_portal"] = nuevo_titulo
+                config_app["admin_password"] = nueva_pass
+                config_app["tolerancia_minutos"] = nueva_tol
+                config_app["mensaje_dia"] = nuevo_msg_dia
+                config_app["mensaje_llegada_tarde"] = msg_tarde
+                config_app["radio_metros"] = rad_metros
+                config_app["recompensa_auditoria_cajero"] = rec_cajero
+                config_app["dia_inicio_semana"] = d_semana
+                config_app["fecha_inicio_puntos"] = n_fecha_pts.strftime("%Y-%m-%d")
+                config_app["verificar_gps"] = n_gps
+                config_app["verificar_wifi"] = n_wifi
+                config_app["autoregistro"] = n_auto
+                config_app["salida_estricta"] = n_sal_estricta
+                config_app["exigir_salida_manual"] = n_sal_manual
+                config_app["desc_tarde"] = n_desc_tarde
+                config_app["desc_temp"] = n_desc_temp
+                config_app["perdonar_tolerancia"] = n_perdon_tol
+                config_app["mostrar_horas_empleado"] = n_mostrar_hs
+                config_app["fichaje_estricto_plan"] = n_estricto_plan
+                save_json("config", config_app)
+                st.success("Configuración del sistema actualizada.")
+                recargar_app()
+                
+        with st.form("form_rankings"):
+            st.markdown("### LIGAS DE RENDIMIENTO")
+            rankings = config_app.get("rankings_muro", [])
+            edited_rankings = []
+            for i, r in enumerate(rankings):
+                st.markdown(f"**LIGA: {r['nombre']}**")
+                c1, c2 = st.columns(2)
+                r_nom = c1.text_input("DESIGNACIÓN", value=r['nombre'], key=f"rn_{i}")
+                r_mp = c2.checkbox("VISIBILIDAD DE PUNTUACIÓN", value=r.get("mostrar_puntos", True), key=f"rmp_{i}")
+                
+                c3, c4 = st.columns(2)
+                r_comp = c3.multiselect("COMPETIDORES:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=r.get('competidores', ["Todos"]), key=f"rc_{i}")
+                r_esp = c4.multiselect("ESPECTADORES:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=r.get('espectadores', ["Todos"]), key=f"re_{i}")
+                
+                borrar = st.checkbox(f"ELIMINAR LIGA", key=f"rdel_{i}")
+                if not borrar:
+                    edited_rankings.append({"nombre": r_nom, "competidores": r_comp, "espectadores": r_esp, "mostrar_puntos": r_mp})
+                st.write("---")
+            
+            st.markdown("**NUEVA LIGA DE RENDIMIENTO**")
+            n_nom = st.text_input("Designación:", key="new_rn")
+            c_n1, c_n2 = st.columns(2)
+            n_mp = c_n1.checkbox("Visibilidad de Puntuación", value=True, key="new_rmp")
+            c_n3, c_n4 = st.columns(2)
+            n_comp = c_n3.multiselect("Competidores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"], key="new_rc")
+            n_esp = c_n4.multiselect("Espectadores:", ["Todos"] + lista_roles_disponibles + lista_empleados, default=["Todos"], key="new_re")
+            
+            if st.form_submit_button("ACTUALIZAR LIGAS"):
+                if n_nom.strip():
+                    edited_rankings.append({"nombre": n_nom.strip(), "competidores": n_comp, "espectadores": n_esp, "mostrar_puntos": n_mp})
+                config_app["rankings_muro"] = edited_rankings
+                save_json("config", config_app)
+                st.success("Ligas procesadas.")
+                recargar_app()
+                
+    with tab_limpieza:
+        st.subheader("PURGA DE DATOS")
+        
+        c_limp1, c_limp2, c_limp3 = st.columns(3)
+        tabla_a_limpiar = c_limp1.selectbox("TABLA:", ["Asistencia (Fichajes)", "Cierres de Caja", "Tareas y Puntos", "Reportes y Avisos"], key="limp_tab")
+        fecha_in_limp = c_limp2.date_input("DESDE:", value=ahora.date() - datetime.timedelta(days=365), key="limp_in")
+        fecha_fi_limp = c_limp3.date_input("HASTA:", value=ahora.date() - datetime.timedelta(days=30), key="limp_fi")
+        
+        st.warning("ACCIÓN DEPURATIVA: Los registros eliminados no podrán ser recuperados.")
+        confirmar_borrado = st.checkbox("AUTORIZO LA ELIMINACIÓN PERMANENTE.", key="limp_chk")
+        
+        if st.button("PURGAR REGISTROS", type="primary", key="limp_btn"):
+            if not confirmar_borrado:
+                st.error("Requiere autorización.")
+            else:
+                try:
+                    f_in_str = fecha_in_limp.strftime("%Y-%m-%d")
+                    f_fi_str = fecha_fi_limp.strftime("%Y-%m-%d")
+                    
+                    if tabla_a_limpiar == "Asistencia (Fichajes)":
+                        try: supabase.table("asistencia").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                        except: pass
+                        try: supabase.table("asistencia").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                        except: pass
+                    elif tabla_a_limpiar == "Cierres de Caja":
+                        try: supabase.table("cierres_caja").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                        except: pass
+                        try: supabase.table("cierres_caja").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                        except: pass
+                    elif tabla_a_limpiar == "Tareas y Puntos":
+                        try: supabase.table("tareas_log").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                        except: pass
+                        try: supabase.table("tareas_log").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                        except: pass
+                        try: supabase.table("ajustes_puntos").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                        except: pass
+                        try: supabase.table("ajustes_puntos").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                        except: pass
+                    elif tabla_a_limpiar == "Reportes y Avisos":
+                        try: supabase.table("reportes").delete().gte("fecha", f_in_str).lte("fecha", f_fi_str).execute()
+                        except: pass
+                        try: supabase.table("reportes").delete().gte("Fecha", f_in_str).lte("Fecha", f_fi_str).execute()
+                        except: pass
+
+                    st.success(f"Purga ejecutada en la tabla {tabla_a_limpiar}.")
+                    recargar_app()
+                except Exception as e:
+                    show_db_error(e, "eliminando datos históricos")
 
 # ==========================================
 # 7. PANEL DEL DUEÑO DEL SOFTWARE (OWNER)
